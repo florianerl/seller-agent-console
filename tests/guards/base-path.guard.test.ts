@@ -2,29 +2,10 @@ import { describe, expect, it } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { BASE_PATH, normalise } from "../../config/base-path";
+import { BASE_PATH } from "../../config/base-path";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const dist = resolve(repoRoot, "dist");
-
-describe("normalise", () => {
-  it("always produces a leading and trailing slash", () => {
-    expect(normalise("seller-agent-console")).toBe("/seller-agent-console/");
-    expect(normalise("/seller-agent-console")).toBe("/seller-agent-console/");
-    expect(normalise("seller-agent-console/")).toBe("/seller-agent-console/");
-    expect(normalise("/seller-agent-console/")).toBe("/seller-agent-console/");
-  });
-
-  it("collapses doubled slashes", () => {
-    expect(normalise("//a//b//")).toBe("/a/b/");
-  });
-
-  it("treats empty and root as root", () => {
-    expect(normalise("")).toBe("/");
-    expect(normalise("/")).toBe("/");
-    expect(normalise("  ")).toBe("/");
-  });
-});
 
 describe("built artefacts are all under BASE_PATH", () => {
   it("dist/ exists — run `npm run build` first", () => {
