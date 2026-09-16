@@ -1,0 +1,10 @@
+// Fixture for the read-only guard's own test. Deliberately violating; the .txt
+// extension keeps it out of the build and out of tsconfig.
+export async function bad() {
+  await fetch("https://example.com");
+  navigator.sendBeacon("https://example.com", "x");
+  const xhr = new XMLHttpRequest();
+  const ws = new WebSocket("wss://example.com");
+  const es = new EventSource("https://example.com/stream");
+  return { xhr, ws, es };
+}
