@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
@@ -8,6 +8,12 @@ import { Router } from "../../src/shell/router";
 import { theme } from "../../src/theme/theme";
 import { SCREENS } from "../../src/shell/screens";
 import { setViewport } from "../setup/dom";
+
+// HashRouter reads window.location, which persists across tests in a file.
+// Without this the suite passes or fails depending on execution order.
+beforeEach(() => {
+  window.location.hash = "#/";
+});
 
 function renderApp() {
   return render(
@@ -73,8 +79,10 @@ describe("shell navigation", () => {
 
     await user.click(await screen.findByRole("link", { name: "Orders" }));
 
-    // The lazy screen has to resolve before the assertion means anything.
-    await screen.findByText(/not built yet/i);
+    // Every placeholder screen renders the same body text, so waiting on that
+    // matches the screen we are navigating AWAY from and races the lazy chunk.
+    // Wait for the destination itself.
+    await screen.findByRole("heading", { name: "Orders" });
     expect(document.querySelector('[data-screen="orders"]')).toBeTruthy();
     expect(screen.getByRole("link", { name: "Orders" })).toHaveAttribute(
       "aria-current",
@@ -133,6 +141,8 @@ describe("accessibility", () => {
       window.location.hash = `#${path}`;
       const { container } = renderApp();
       await screen.findByRole("navigation", { name: /console sections/i });
+      // Let the lazy screen resolve, or axe inspects only the spinner.
+      await screen.findByRole("heading", { level: 2 });
 
       expect(await axeViolations(container)).toEqual([]);
     },

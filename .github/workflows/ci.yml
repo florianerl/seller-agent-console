@@ -28,8 +28,10 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # Shuffled so order dependence between tests surfaces here rather than
+      # intermittently. Vitest prints the seed on failure for reproduction.
       - name: Unit and integration tests
-        run: npm test
+        run: npx vitest run --project unit --sequence.shuffle
 
       # Guards inspect dist/, so the build has to happen first. BASE_PATH is
       # not set here: the default in config/base-path.ts is what the guards
