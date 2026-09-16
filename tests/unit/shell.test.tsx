@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { ThemeProvider } from "@mui/material/styles";
 import CssBaseline from "@mui/material/CssBaseline";
+import { CredentialProvider } from "../../src/credentials/context";
 import { Router } from "../../src/shell/router";
 import { theme } from "../../src/theme/theme";
 import { SCREENS } from "../../src/shell/screens";
@@ -19,7 +20,9 @@ function renderApp() {
   return render(
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Router />
+      <CredentialProvider>
+        <Router />
+      </CredentialProvider>
     </ThemeProvider>,
   );
 }

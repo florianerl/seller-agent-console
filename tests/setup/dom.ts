@@ -1,4 +1,7 @@
 import "@testing-library/jest-dom/vitest";
+// The credential provider reads IndexedDB on mount, so every test that
+// renders the app needs a working implementation.
+import "fake-indexeddb/auto";
 import { afterEach } from "vitest";
 import { cleanup } from "@testing-library/react";
 
