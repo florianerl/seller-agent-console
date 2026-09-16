@@ -17,6 +17,9 @@
     "test:watch": "vitest --project unit"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/material": "^7.3.11",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
