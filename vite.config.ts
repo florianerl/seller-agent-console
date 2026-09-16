@@ -3,7 +3,15 @@ import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 import { BASE_PATH } from "./config/base-path";
 
+const BUILD_ID = new Date().toISOString();
+
 export default defineConfig({
+  define: {
+    // Surfaced in the DOM so an operator reporting a problem can say which
+    // build they are on. Pages caps update propagation at ten minutes, so
+    // "did you reload?" is a question support will actually need to ask.
+    __BUILD_ID__: JSON.stringify(BUILD_ID),
+  },
   base: BASE_PATH,
   plugins: [
     react(),
