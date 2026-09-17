@@ -13,8 +13,8 @@ export function ScreenSection({
   children: ReactNode;
 }) {
   return (
-    <Box component="section" sx={{ mb: 4 }}>
-      <Typography variant="h3" sx={{ mb: caption ? 0.5 : 1.5 }}>
+    <Box component="section" sx={{ mb: 5 }}>
+      <Typography variant="h3" sx={{ mb: caption ? 0.75 : 2, fontSize: 18, fontWeight: 700 }}>
         {title}
       </Typography>
       {caption && (

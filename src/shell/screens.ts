@@ -31,3 +31,16 @@ export const SCREENS: readonly Screen[] = [
 ];
 
 export const BUILT_SCREENS = SCREENS.filter((s) => !s.soon);
+
+/**
+ * Sidebar grouping only. Order of `SCREENS` is still the source of "which
+ * screens exist"; this table must list every id or the shell test fails.
+ */
+export const NAV_GROUPS: ReadonlyArray<{ label: string; ids: readonly string[] }> = [
+  { label: "Overview", ids: ["setup", "inbox", "events"] },
+  { label: "Pipeline", ids: ["orders", "deals", "negotiation"] },
+  { label: "Inventory", ids: ["catalog", "media-kit", "change-requests", "curators"] },
+  { label: "Network", ids: ["reporting", "agents"] },
+];
+
+export const NAV_GROUP_IDS = NAV_GROUPS.flatMap((group) => group.ids);

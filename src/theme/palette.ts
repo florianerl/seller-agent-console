@@ -67,10 +67,10 @@ export const CONTRAST_CONTRACT: ReadonlyArray<{
   { name: "overline on ground", fg: palette.brandRedText, bg: palette.ground, min: "body" },
   { name: "contained button label", fg: palette.paper, bg: palette.brandRedText, min: "body" },
   { name: "heading on paper", fg: palette.brandBlack, bg: palette.paper, min: "body" },
-  { name: "heading on ground", fg: palette.brandBlack, bg: palette.ground, min: "body" },
-  { name: "wordmark on app bar", fg: palette.paper, bg: palette.brandBlack, min: "body" },
-  { name: "app-bar connection text", fg: palette.paper, bg: palette.brandBlack, min: "body" },
-  { name: "brand rule on app bar", fg: palette.brandRed, bg: palette.brandBlack, min: "ui" },
+  { name: "table header on ground", fg: palette.brandBlack, bg: palette.ground, min: "body" },
+  { name: "header actions on paper", fg: palette.brandBlack, bg: palette.paper, min: "body" },
+  { name: "header secondary on paper", fg: palette.textSecondary, bg: palette.paper, min: "body" },
+  { name: "brand mark on paper", fg: palette.brandRed, bg: palette.paper, min: "ui" },
   { name: "ok status text on paper", fg: palette.ok, bg: palette.paper, min: "body" },
   { name: "error status text on paper", fg: palette.error, bg: palette.paper, min: "body" },
   { name: "error text on error background", fg: palette.error, bg: palette.errorBg, min: "body" },
@@ -85,9 +85,13 @@ export const CONTRAST_CONTRACT: ReadonlyArray<{
   { name: "soon nav label on ground", fg: palette.textSecondary, bg: palette.ground, min: "body" },
   // Kept for genuinely disabled controls, where the exemption does hold.
   { name: "disabled control on ground", fg: palette.disabled, bg: palette.ground, min: "ui" },
+  { name: "freshness dot empty on paper", fg: palette.disabled, bg: palette.paper, min: "ui" },
+  { name: "freshness dot live on paper", fg: palette.ok, bg: palette.paper, min: "ui" },
+  { name: "freshness dot blocked on paper", fg: palette.error, bg: palette.paper, min: "ui" },
   { name: "warning fill on paper", fg: palette.warning, bg: palette.paper, min: "ui" },
-  // The writes chip carries text, on an amber fill, on the black app bar. The
-  // label is what has to be readable, so it is held to the body bar.
+  // The writes chip carries text on an amber fill. The label is what has to
+  // be readable, so it is held to the body bar. The fill no longer sits on
+  // the black bar; it sits on the paper header, and amber-on-white is a
+  // hint, not a text pairing.
   { name: "writes chip label on attention", fg: palette.brandBlack, bg: palette.attention, min: "body" },
-  { name: "writes chip fill on app bar", fg: palette.attention, bg: palette.brandBlack, min: "ui" },
 ];

@@ -1,10 +1,8 @@
 import { Suspense, useState } from "react";
-import AppBar from "@mui/material/AppBar";
 import Box from "@mui/material/Box";
 import CircularProgress from "@mui/material/CircularProgress";
 import Drawer from "@mui/material/Drawer";
 import IconButton from "@mui/material/IconButton";
-import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { useTheme } from "@mui/material/styles";
@@ -31,51 +29,19 @@ export function Shell() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <Box sx={{ display: "flex", minHeight: "100dvh" }}>
-      <AppBar
-        position="fixed"
-        elevation={0}
-        sx={{
-          backgroundColor: palette.brandBlack,
-          zIndex: (t) => t.zIndex.drawer + 1,
-          borderBottom: `3px solid ${palette.brandRed}`,
-          // apple-mobile-web-app-status-bar-style: black-translucent draws the
-          // app under the status bar, and MUI does not inset for it.
-          pt: "env(safe-area-inset-top)",
-        }}
-      >
-        <Toolbar>
-          {!isDesktop && (
-            <IconButton
-              edge="start"
-              color="inherit"
-              aria-label="Open navigation"
-              aria-expanded={mobileOpen}
-              onClick={() => setMobileOpen(true)}
-              sx={{ mr: 1 }}
-            >
-              <MenuIcon />
-            </IconButton>
-          )}
-          <Typography variant="h1" sx={{ flexGrow: 1 }}>
-            Seller Agent Console
-          </Typography>
-          <WritesChip />
-          <InstallButton />
-          <ConnectionMenu />
-        </Toolbar>
-      </AppBar>
-
+    <Box sx={{ display: "flex", minHeight: "100dvh", backgroundColor: palette.ground }}>
       {isDesktop ? (
         <Drawer
           variant="permanent"
           sx={{
             width: DRAWER_WIDTH,
             flexShrink: 0,
-            "& .MuiDrawer-paper": drawerPaper,
+            "& .MuiDrawer-paper": {
+              ...drawerPaper,
+              pt: "env(safe-area-inset-top)",
+            },
           }}
         >
-          <Toolbar sx={{ pt: "env(safe-area-inset-top)", minHeight: { xs: 59, sm: 67 } }} />
           <Sidebar />
         </Drawer>
       ) : (
@@ -87,12 +53,12 @@ export function Shell() {
           sx={{
             "& .MuiDrawer-paper": {
               ...drawerPaper,
+              pt: "env(safe-area-inset-top)",
               pb: "env(safe-area-inset-bottom)",
             },
           }}
         >
-          <Toolbar />
-          <Sidebar onNavigate={() => setMobileOpen(false)} />
+          <Sidebar asHeading={false} onNavigate={() => setMobileOpen(false)} />
         </Drawer>
       )}
 
@@ -100,23 +66,71 @@ export function Shell() {
         component="main"
         sx={{
           flexGrow: 1,
-          p: { xs: 2, md: 3 },
-          pb: "calc(env(safe-area-inset-bottom) + 24px)",
           minWidth: 0,
+          display: "flex",
+          flexDirection: "column",
         }}
       >
-        <Toolbar sx={{ pt: "env(safe-area-inset-top)", minHeight: { xs: 59, sm: 67 } }} />
-        <Box sx={{ maxWidth: CONTENT_MAX_WIDTH }}>
-          <ConnectivityBanner />
-          <Suspense
-            fallback={
-              <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
-                <CircularProgress aria-label="Loading screen" size={28} />
-              </Box>
-            }
-          >
-            <Outlet />
-          </Suspense>
+        <Box
+          component="header"
+          sx={{
+            position: "sticky",
+            top: 0,
+            zIndex: (t) => t.zIndex.appBar,
+            display: "flex",
+            alignItems: "center",
+            gap: 1.5,
+            px: { xs: 2, md: 4 },
+            py: 1.25,
+            pt: "calc(env(safe-area-inset-top) + 10px)",
+            backgroundColor: palette.paper,
+            borderBottom: `1px solid ${palette.line}`,
+            color: palette.brandBlack,
+          }}
+        >
+          {!isDesktop && (
+            <IconButton
+              edge="start"
+              color="inherit"
+              aria-label="Open navigation"
+              aria-expanded={mobileOpen}
+              onClick={() => setMobileOpen(true)}
+            >
+              <MenuIcon />
+            </IconButton>
+          )}
+          {!isDesktop && (
+            <Typography variant="h1" sx={{ flexGrow: 1, minWidth: 0 }}>
+              Seller Agent Console
+            </Typography>
+          )}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, ml: "auto" }}>
+            <WritesChip />
+            <InstallButton />
+            <ConnectionMenu />
+          </Box>
+        </Box>
+
+        <Box
+          sx={{
+            flexGrow: 1,
+            px: { xs: 2.5, md: 4 },
+            py: { xs: 3, md: 4 },
+            pb: "calc(env(safe-area-inset-bottom) + 32px)",
+          }}
+        >
+          <Box sx={{ maxWidth: CONTENT_MAX_WIDTH }}>
+            <ConnectivityBanner />
+            <Suspense
+              fallback={
+                <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
+                  <CircularProgress aria-label="Loading screen" size={28} />
+                </Box>
+              }
+            >
+              <Outlet />
+            </Suspense>
+          </Box>
         </Box>
       </Box>
     </Box>

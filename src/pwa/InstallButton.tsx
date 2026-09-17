@@ -93,10 +93,9 @@ export function InstallButton() {
     return (
       <>
         <Button
-          color="inherit"
           size="small"
           data-action="open-in-app"
-          sx={{ fontSize: 13, fontWeight: 600, mr: 0.5 }}
+          sx={{ fontSize: 13, fontWeight: 600 }}
           onClick={() => setHelp("open")}
         >
           Open in app
@@ -114,11 +113,10 @@ export function InstallButton() {
 
   return (
     <>
-      <Button
-        color="inherit"
+        <Button
         size="small"
         data-action="install"
-          sx={{ fontSize: 13, fontWeight: 600, mr: 0.5 }}
+          sx={{ fontSize: 13, fontWeight: 600 }}
         onClick={() => {
           if (ios) {
             setHelp("ios");

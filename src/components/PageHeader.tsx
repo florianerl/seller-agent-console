@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
+import { palette } from "../theme/palette";
 
 /** The shared page title block. Screens stop restyling h2 themselves. */
 export function PageHeader({
@@ -21,7 +22,9 @@ export function PageHeader({
         alignItems: { xs: "flex-start", sm: "flex-end" },
         justifyContent: "space-between",
         gap: 2,
-        mb: 3,
+        mb: 3.5,
+        pb: 3.5,
+        borderBottom: `1px solid ${palette.line}`,
         flexWrap: "wrap",
       }}
     >

@@ -19,7 +19,7 @@ const RULE = {
   live: palette.ok,
   stale: palette.warning,
   blocked: palette.error,
-  empty: palette.line,
+  empty: palette.disabled,
 } as const;
 
 export function StatusCard<T>({
@@ -41,16 +41,28 @@ export function StatusCard<T>({
       data-card={testId}
       data-state={freshness}
       sx={{
-        p: 2.5,
-        borderTop: `3px solid ${RULE[freshness]}`,
+        p: 3,
         height: "100%",
         display: "flex",
         flexDirection: "column",
+        borderRadius: 4,
       }}
     >
-      <Typography variant="overline" component="h3" sx={{ mb: 1.25 }}>
-        {title}
-      </Typography>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
+        <Box
+          aria-hidden
+          sx={{
+            width: 8,
+            height: 8,
+            borderRadius: "50%",
+            backgroundColor: RULE[freshness],
+            flexShrink: 0,
+          }}
+        />
+        <Typography variant="h3" component="h3">
+          {title}
+        </Typography>
+      </Box>
 
       <Box sx={{ flex: 1 }}>
         {loading && !data && freshness !== "blocked" ? (

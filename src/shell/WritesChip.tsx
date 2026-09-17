@@ -22,7 +22,7 @@ export function WritesChip() {
       label="Writes on"
       data-writes="on"
       sx={{
-        mr: 1.5,
+        mr: 0,
         height: 28,
         fontSize: 12,
         fontWeight: 700,

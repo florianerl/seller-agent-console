@@ -37,13 +37,17 @@ export function ConnectionMenu() {
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
         <Typography
           component="span"
-          sx={{ fontSize: 13, display: { xs: "none", sm: "inline" }, color: palette.paper }}
+          sx={{
+            fontSize: 13,
+            display: { xs: "none", sm: "inline" },
+            color: palette.textSecondary,
+          }}
           data-connection="summary"
         >
           {credential.baseUrl} · {credential.role}
         </Typography>
         <FormControlLabel
-          sx={{ mr: 0, "& .MuiFormControlLabel-label": { fontSize: 13, color: palette.paper } }}
+          sx={{ mr: 0, "& .MuiFormControlLabel-label": { fontSize: 13, color: palette.brandBlack } }}
           label="Writes"
           control={
             <Switch
@@ -68,12 +72,7 @@ export function ConnectionMenu() {
             />
           }
         />
-        <Button
-          color="inherit"
-          size="small"
-          onClick={() => setConfirming(true)}
-          sx={{ fontSize: 13, fontWeight: 600 }}
-        >
+        <Button size="small" onClick={() => setConfirming(true)} sx={{ fontSize: 13, fontWeight: 600 }}>
           Sign out
         </Button>
       </Box>

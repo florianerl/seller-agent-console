@@ -7,7 +7,7 @@ import CssBaseline from "@mui/material/CssBaseline";
 import { CredentialProvider } from "../../src/credentials/context";
 import { Router } from "../../src/shell/router";
 import { theme } from "../../src/theme/theme";
-import { SCREENS } from "../../src/shell/screens";
+import { NAV_GROUP_IDS, SCREENS } from "../../src/shell/screens";
 import { setViewport } from "../setup/dom";
 
 // HashRouter reads window.location, which persists across tests in a file.
@@ -46,6 +46,10 @@ describe("shell navigation", () => {
     for (const s of SCREENS) {
       expect(within(nav).getByText(s.label)).toBeInTheDocument();
     }
+  });
+
+  it("places every screen in a nav group", () => {
+    expect([...NAV_GROUP_IDS].sort()).toEqual([...SCREENS.map((s) => s.id)].sort());
   });
 
   it("renders built screens as links and unbuilt ones as non-interactive", async () => {

@@ -36,24 +36,24 @@ export const theme = createTheme({
     fontFamily,
     h1: {
       fontFamily,
-      fontSize: 18,
+      fontSize: 16,
       fontWeight: 700,
-      letterSpacing: -0.3,
-      lineHeight: 1.25,
-      color: palette.paper,
+      letterSpacing: -0.4,
+      lineHeight: 1.2,
+      color: palette.brandBlack,
     },
     h2: {
       fontFamily,
-      fontSize: 28,
+      fontSize: 32,
       fontWeight: 700,
-      letterSpacing: -0.5,
-      lineHeight: 1.2,
+      letterSpacing: -0.7,
+      lineHeight: 1.15,
       color: palette.brandBlack,
     },
     h3: {
       fontFamily,
-      fontSize: 16,
-      fontWeight: 700,
+      fontSize: 15,
+      fontWeight: 600,
       letterSpacing: -0.2,
       lineHeight: 1.3,
       color: palette.brandBlack,
@@ -86,7 +86,7 @@ export const theme = createTheme({
     },
   },
 
-  shape: { borderRadius: 10 },
+  shape: { borderRadius: 12 },
 
   components: {
     MuiButton: {
@@ -95,8 +95,9 @@ export const theme = createTheme({
       },
       styleOverrides: {
         root: {
-          minHeight: 40,
-          paddingInline: 16,
+          minHeight: 44,
+          paddingInline: 18,
+          borderRadius: 12,
         },
         sizeSmall: {
           minHeight: 36,
@@ -127,13 +128,14 @@ export const theme = createTheme({
       styleOverrides: {
         outlined: {
           borderColor: palette.line,
+          borderRadius: 16,
         },
       },
     },
     MuiAlert: {
       styleOverrides: {
         root: {
-          borderRadius: 10,
+          borderRadius: 12,
         },
         outlined: {
           backgroundColor: palette.paper,
@@ -144,6 +146,7 @@ export const theme = createTheme({
       styleOverrides: {
         root: {
           fontWeight: 600,
+          borderRadius: 8,
         },
       },
     },
@@ -152,11 +155,23 @@ export const theme = createTheme({
         root: {
           fontSize: 14,
           borderColor: palette.line,
+          padding: "14px 16px",
+        },
+        sizeSmall: {
+          padding: "12px 16px",
         },
         head: {
-          fontWeight: 700,
+          fontWeight: 600,
           color: palette.brandBlack,
-          backgroundColor: palette.paper,
+          backgroundColor: palette.ground,
+          borderBottom: `1px solid ${palette.line}`,
+        },
+      },
+    },
+    MuiTableRow: {
+      styleOverrides: {
+        root: {
+          "&:last-of-type td": { borderBottom: 0 },
         },
       },
     },

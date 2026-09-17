@@ -52,7 +52,7 @@ export function HealthCards() {
       sx={{
         display: "grid",
         gap: 2.5,
-        gridTemplateColumns: { xs: "1fr", md: "1fr 1fr", xl: "repeat(4, 1fr)" },
+        gridTemplateColumns: { xs: "1fr", md: "1fr 1fr", xl: "repeat(3, 1fr)" },
       }}
     >
       <StatusCard title="Agent" testId="agent" resource={agent}>
