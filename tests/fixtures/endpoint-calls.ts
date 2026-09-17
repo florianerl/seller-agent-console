@@ -79,6 +79,10 @@ export const ENDPOINT_CALLS: Record<string, CallSpec> = {
   gamOrders: { method: "GET", args: [] },
   gamDeliveryReport: { method: "GET", args: [{ order_ids: "ORD-1" }] },
 
+  // --- writes. Each one is refused at the seam while the switch is off.
+  decideApproval: { method: "POST", args: ["A-1", { decision: "approve" as const }] },
+  resumeApproval: { method: "POST", args: ["A-1"] },
+
   // --- the five query-shaped POSTs: unsafe by method, safe by semantics.
   // Exempted by exact path in src/api/policy.ts; ADR 12 says what that costs.
   discovery: { method: "POST", args: [{ query: "sports inventory" }] },

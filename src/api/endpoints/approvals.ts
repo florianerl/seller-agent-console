@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { get, type Connection } from "../http";
+import { get, request, type Connection } from "../http";
 import type { Result } from "../errors";
 
 const PATHS = {
@@ -68,5 +68,71 @@ export const approvalById = (
 ): Promise<Result<ApprovalDetail>> =>
   get(c, `${PATHS.approvals}/${encodeURIComponent(approvalId)}`, {
     schema: ApprovalDetail,
+    signal,
+  });
+
+// --- writes -----------------------------------------------------------------
+
+/**
+ * The first mutations this console carries, and the table ADR 11 requires for
+ * each one — the client answers none of this generically.
+ *
+ * | Call    | Idempotent on retry?                        | Confirm? | A failure leaves behind |
+ * |---------|---------------------------------------------|----------|-------------------------|
+ * | decide  | No. The agent records the first decision and | Yes      | Either the decision was recorded or it was not. There is no partial decision: the flow resumes or it stays gated. |
+ * |         | rejects a second, so a retry after an         |          | |
+ * |         | unclear failure can answer 409 rather than    |          | |
+ * |         | duplicating. Retrying is safe; assuming the   |          | |
+ * |         | retry's answer describes *this* attempt is not.|         | |
+ * | resume  | Yes, in effect. Resuming a flow already       | Yes      | The flow either advanced or did not. Resuming twice is not two advances. |
+ * |         | running is a no-op upstream.                  |          | |
+ *
+ * Both are refused before they are sent while the write switch is off
+ * (src/api/policy.ts, ADR 12).
+ */
+
+/**
+ * `decided_by` is free text the agent stores without checking — it is a label,
+ * not attribution, and the detail view already says so. It is sent anyway
+ * because the agent defaults it to the literal "anonymous", which is worse
+ * than saying who was at the keyboard.
+ */
+export type ApprovalDecisionInput = {
+  readonly decision: "approve" | "reject";
+  readonly decided_by?: string;
+  readonly reason?: string;
+  readonly modifications?: Record<string, unknown>;
+};
+
+/**
+ * The response body carries no schema upstream, so nothing is asserted about
+ * it: what matters to a caller is that the decision was accepted, and the
+ * approval is re-read afterwards rather than patched from this.
+ */
+export const DecisionAck = z.looseObject({});
+export type DecisionAck = z.infer<typeof DecisionAck>;
+
+export const decideApproval = (
+  c: Connection,
+  approvalId: string,
+  body: ApprovalDecisionInput,
+  signal?: AbortSignal,
+): Promise<Result<DecisionAck>> =>
+  request(c, `${PATHS.approvals}/${encodeURIComponent(approvalId)}/decide`, {
+    schema: DecisionAck,
+    method: "POST",
+    body,
+    signal,
+  });
+
+/** Resumes the flow an approval gated. Takes no body. */
+export const resumeApproval = (
+  c: Connection,
+  approvalId: string,
+  signal?: AbortSignal,
+): Promise<Result<DecisionAck>> =>
+  request(c, `${PATHS.approvals}/${encodeURIComponent(approvalId)}/resume`, {
+    schema: DecisionAck,
+    method: "POST",
     signal,
   });

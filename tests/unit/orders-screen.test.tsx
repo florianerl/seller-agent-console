@@ -29,9 +29,10 @@ const ORDERS = [
   },
 ];
 
-const HISTORY = {
+const AUDIT = {
   order_id: "ORD-ABC123",
   current_status: "pending_approval",
+  created_at: "2026-09-15T09:00:00Z",
   transition_count: 2,
   transitions: [
     {
@@ -51,6 +52,8 @@ const HISTORY = {
       transition_id: "t2",
     },
   ],
+  change_requests: [],
+  change_request_count: 0,
 };
 
 function renderScreen() {
@@ -82,7 +85,7 @@ describe("the orders screen", () => {
       http.get(`${API}/api/v1/orders`, () =>
         HttpResponse.json({ orders: ORDERS, count: ORDERS.length }),
       ),
-      http.get(`${API}/api/v1/orders/ORD-ABC123/history`, () => HttpResponse.json(HISTORY)),
+      http.get(`${API}/api/v1/orders/ORD-ABC123/audit`, () => HttpResponse.json(AUDIT)),
     );
   });
 
@@ -156,8 +159,8 @@ describe("the orders screen", () => {
 
   it("says an order has no transitions rather than showing an error", async () => {
     server.use(
-      http.get(`${API}/api/v1/orders/ORD-ABC123/history`, () =>
-        HttpResponse.json({ ...HISTORY, transitions: [], transition_count: 0 }),
+      http.get(`${API}/api/v1/orders/ORD-ABC123/audit`, () =>
+        HttpResponse.json({ ...AUDIT, transitions: [], transition_count: 0 }),
       ),
     );
 
@@ -171,6 +174,7 @@ describe("the orders screen", () => {
     await waitFor(() =>
       expect(document.querySelector('[data-state="no-transitions"]')).toBeTruthy(),
     );
+    expect(document.querySelector('[data-state="no-change-requests"]')).toBeTruthy();
   });
 
   it("degrades the list without crashing when a field changes upstream", async () => {

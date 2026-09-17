@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { ThemeProvider } from "@mui/material/styles";
 import { SWRConfig } from "swr";
@@ -184,5 +185,128 @@ describe("the catalog screen", () => {
 
     const row = screen.getByText("Banded package").closest("tr")!;
     expect(row.textContent).toContain("$5-$10 CPM");
+  });
+
+  /**
+   * Every product in the environment this was written against 404s on the
+   * override route. That means "none set", not that the agent is down.
+   */
+  it("treats a 404 inventory-type override as absent, not an error", async () => {
+    server.use(
+      http.get(`${API}/products/prod-console-demo-1`, () => HttpResponse.json(PRODUCTS[0])),
+      http.get(`${API}/api/v1/products/prod-console-demo-1/inventory-type`, () =>
+        HttpResponse.json({ detail: { error: "no_override" } }, { status: 404 }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+    await waitFor(() => expect(screen.getByText("Premium Display - Homepage")).toBeInTheDocument());
+
+    const row = screen.getByText("Premium Display - Homepage").closest("tr")!;
+    await user.click(within(row).getByRole("button", { name: "Details" }));
+
+    await waitFor(() =>
+      expect(document.querySelector('[data-state="no-override"]')?.textContent).toMatch(
+        /no inventory type override/i,
+      ),
+    );
+    expect(document.body.textContent).not.toMatch(/the agent returned 404/i);
+  });
+
+  it("does not discover until the operator submits a brief", async () => {
+    let calls = 0;
+    server.use(
+      http.post(`${API}/discovery`, () => {
+        calls += 1;
+        return HttpResponse.json({ access_tier: "public", catalog: [] });
+      }),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+    await waitFor(() => expect(screen.getByText("Premium Display - Homepage")).toBeInTheDocument());
+
+    await user.type(screen.getByLabelText("Brief"), "sports");
+    expect(calls).toBe(0);
+  });
+
+  it("discovers against the submitted brief", async () => {
+    let seenBody: unknown;
+    server.use(
+      http.post(`${API}/discovery`, async ({ request }) => {
+        seenBody = await request.json();
+        return HttpResponse.json({
+          access_tier: "public",
+          tier_config: { tier: "public", tier_name: "Public" },
+          catalog: [
+            {
+              product_id: "prod-console-demo-1",
+              name: "Premium Display - Homepage",
+              description: null,
+              inventory_type: "display",
+              deal_types: ["preferred_deal"],
+              price_range: "$10-$20",
+            },
+          ],
+        });
+      }),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+    await waitFor(() => expect(screen.getByText("Premium Display - Homepage")).toBeInTheDocument());
+
+    await user.type(screen.getByLabelText("Brief"), "homepage");
+    await user.click(screen.getByRole("button", { name: "Discover" }));
+
+    await waitFor(() => expect(document.querySelector('[data-row="discovery"]')).toBeTruthy());
+    expect(seenBody).toEqual({ query: "homepage" });
+  });
+
+  it("quotes a product and shows the agent's rationale verbatim", async () => {
+    server.use(
+      http.post(`${API}/pricing`, () =>
+        HttpResponse.json({
+          product_id: "prod-console-demo-1",
+          base_price: 12,
+          final_price: 10.5,
+          currency: "USD",
+          tier_discount: 0.1,
+          volume_discount: 0.05,
+          rationale: "seat tier plus volume band 1m",
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+    await waitFor(() => expect(screen.getByText("Premium Display - Homepage")).toBeInTheDocument());
+
+    const pricing = document.querySelector('[data-block="pricing"]') as HTMLElement;
+    await user.type(within(pricing).getByLabelText("Product id"), "prod-console-demo-1");
+    await user.click(screen.getByRole("button", { name: "Quote" }));
+
+    await waitFor(() =>
+      expect(document.querySelector('[data-field="rationale"]')?.textContent).toBe(
+        "seat tier plus volume band 1m",
+      ),
+    );
+  });
+
+  it("says an unknown product is a typo, not an outage", async () => {
+    server.use(
+      http.post(`${API}/pricing`, () =>
+        HttpResponse.json({ detail: "Product not found" }, { status: 404 }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+    await waitFor(() => expect(screen.getByText("Premium Display - Homepage")).toBeInTheDocument());
+
+    const pricing = document.querySelector('[data-block="pricing"]') as HTMLElement;
+    await user.type(within(pricing).getByLabelText("Product id"), "no-such");
+    await user.click(screen.getByRole("button", { name: "Quote" }));
+
+    await waitFor(() =>
+      expect(document.querySelector('[data-state="unknown-product"]')?.textContent).toMatch(/typo/i),
+    );
+    expect(document.body.textContent).not.toMatch(/the agent returned 404/i);
   });
 });

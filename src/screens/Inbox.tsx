@@ -8,17 +8,175 @@ import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
+import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { approvalById, approvals } from "../api/endpoints";
+import {
+  approvalById,
+  approvals,
+  decideApproval,
+  resumeApproval,
+  type ApprovalDecisionInput,
+} from "../api/endpoints";
 import { describe } from "../api/errors";
+import { ConfirmAction } from "../components/ConfirmAction";
 import { Field, FieldGrid } from "../components/Field";
 import { GatedNotice } from "../components/GatedNotice";
+import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { StatusChip } from "../components/StatusChip";
 import { WritesNotice } from "../components/WritesNotice";
+import { useCredential } from "../credentials/context";
 import { plural, stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
+import { useMutation } from "../query/useMutation";
 import { useResource } from "../query/useResource";
 import { palette } from "../theme/palette";
+
+/**
+ * The approve/reject controls.
+ *
+ * Rendered disabled rather than hidden while writes are off: a control you
+ * cannot find is worse than one you cannot press, and the notice above says
+ * where the switch is. The form is deliberately plain — one reason field, one
+ * name — because the agent stores both verbatim and neither is verified.
+ */
+function DecisionControls({
+  approvalId,
+  status,
+  onDecided,
+}: {
+  approvalId: string;
+  status: string;
+  onDecided: () => void;
+}) {
+  const { writesEnabled } = useCredential();
+  const [reason, setReason] = useState("");
+  const [name, setName] = useState("");
+  const [pendingDecision, setPendingDecision] = useState<"approve" | "reject" | undefined>();
+
+  const decide = useMutation<{ id: string; body: ApprovalDecisionInput }, unknown>(
+    (c, args) => decideApproval(c, args.id, args.body),
+    // The queue and this gate's own detail both describe a decided approval
+    // wrongly the moment it is decided.
+    { invalidates: ["approvals", `approval:${approvalId}`] },
+  );
+
+  const resume = useMutation<{ id: string }, unknown>(
+    (c, args) => resumeApproval(c, args.id),
+    { invalidates: ["approvals", `approval:${approvalId}`] },
+  );
+
+  // A gate the agent has already answered, or let expire, is not ours to
+  // decide. The control stays visible so the row does not change shape.
+  const decidable = status === "pending";
+  const blocked = !writesEnabled || !decidable;
+
+  const outcome = decide.last ?? resume.last;
+
+  return (
+    <Box sx={{ mt: 2 }} data-block="approval-controls">
+      <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 1 }}>Decide this gate</Typography>
+
+      <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", alignItems: "flex-start", mb: 1.5 }}>
+        <TextField
+          size="small"
+          label="Reason"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          disabled={blocked}
+          sx={{ minWidth: 240 }}
+        />
+        <TextField
+          size="small"
+          label="Your name"
+          // Sent because the agent's own default is the literal "anonymous",
+          // which is a worse record than a name nobody checked.
+          helperText="Stored as given; the agent does not verify it"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          disabled={blocked}
+          sx={{ minWidth: 200 }}
+        />
+      </Box>
+
+      <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+        <Button
+          size="small"
+          variant="contained"
+          data-action="approve"
+          disabled={blocked || decide.pending}
+          onClick={() => setPendingDecision("approve")}
+        >
+          Approve
+        </Button>
+        <Button
+          size="small"
+          variant="outlined"
+          data-action="reject"
+          disabled={blocked || decide.pending}
+          onClick={() => setPendingDecision("reject")}
+        >
+          Reject
+        </Button>
+        <Button
+          size="small"
+          data-action="resume"
+          disabled={!writesEnabled || resume.pending}
+          onClick={() => {
+            void resume.run({ id: approvalId }).then(onDecided);
+          }}
+        >
+          {resume.pending ? "Resuming…" : "Resume flow"}
+        </Button>
+      </Box>
+
+      {!decidable && writesEnabled && (
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }} data-state="not-pending">
+          This gate is {status.replace(/_/g, " ")} — only a pending gate can be decided.
+        </Typography>
+      )}
+
+      {outcome && outcome.kind !== "ok" && (
+        <Typography variant="body2" sx={{ mt: 1, color: palette.error }} data-state="write-failed">
+          {describe(outcome)}
+        </Typography>
+      )}
+
+      <ConfirmAction
+        open={pendingDecision !== undefined}
+        title={pendingDecision === "reject" ? "Reject this gate?" : "Approve this gate?"}
+        confirmLabel={pendingDecision === "reject" ? "Reject" : "Approve"}
+        pending={decide.pending}
+        onCancel={() => setPendingDecision(undefined)}
+        consequence={
+          <>
+            {/* What a failure leaves behind, said plainly, because the agent
+                records the first decision and refuses a second: a retry after
+                an unclear failure may answer about the earlier attempt. */}
+            The agent records this decision and resumes the gated flow. It keeps
+            the first decision it receives and refuses later ones, so if this
+            fails without a clear answer, re-read the gate before trying again
+            rather than deciding twice.
+          </>
+        }
+        onConfirm={() => {
+          const decision = pendingDecision;
+          setPendingDecision(undefined);
+          if (!decision) return;
+          void decide
+            .run({
+              id: approvalId,
+              body: {
+                decision,
+                ...(reason ? { reason } : {}),
+                ...(name ? { decided_by: name } : {}),
+              },
+            })
+            .then(onDecided);
+        }}
+      />
+    </Box>
+  );
+}
 
 function Decision({ approvalId }: { approvalId: string }) {
   const detail = useResource(`approval:${approvalId}`, (c, signal) =>
@@ -35,6 +193,7 @@ function Decision({ approvalId }: { approvalId: string }) {
   }
 
   const { request, response } = detail.data;
+  const decided = response !== null;
 
   return (
     <Box sx={{ py: 1 }}>
@@ -75,12 +234,21 @@ function Decision({ approvalId }: { approvalId: string }) {
           </FieldGrid>
         )}
       </Box>
+
+      {!decided && (
+        <DecisionControls
+          approvalId={approvalId}
+          status={request.status}
+          onDecided={detail.refresh}
+        />
+      )}
     </Box>
   );
 }
 
 export default function InboxScreen() {
   const [open, setOpen] = useState<string | undefined>();
+  const { writesEnabled } = useCredential();
 
   const list = useResource("approvals", approvals, { refreshInterval: CADENCE.orders });
   const rows = list.data?.approvals ?? [];
@@ -95,8 +263,7 @@ export default function InboxScreen() {
           would leave someone waiting for an approve control that is not
           coming. */}
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Pending approval gates. This is a monitoring view — approve and reject
-        are writes, so they happen in the agent, not here.
+        Pending approval gates, and the controls to decide them.
       </Typography>
 
       {list.freshness === "blocked" ? (
@@ -104,6 +271,7 @@ export default function InboxScreen() {
       ) : (
         <>
           <WritesNotice what="Listing approvals marks any gate past its expiry as timed out and saves that." />
+          {!writesEnabled && <ReadOnlyNotice what="Deciding a gate" />}
 
           <Box
             data-freshness={list.freshness}

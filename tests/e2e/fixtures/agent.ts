@@ -183,10 +183,11 @@ export async function mockAgent(
                 replacements: [],
                 chain_length: 1,
               }
-            : /^\/api\/v1\/orders\/[^/]+\/history$/.test(path)
+            : /^\/api\/v1\/orders\/[^/]+\/audit$/.test(path)
               ? {
                   order_id: "ORD-8ECAA495B7EF",
                   current_status: "approved",
+                  created_at: "2026-09-17T05:12:15.838064Z",
                   transition_count: 1,
                   transitions: [
                     {
@@ -198,6 +199,8 @@ export async function mockAgent(
                       transition_id: "t1",
                     },
                   ],
+                  change_requests: [],
+                  change_request_count: 0,
                 }
               : undefined;
 

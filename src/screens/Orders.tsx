@@ -12,8 +12,9 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { orderHistory, orders } from "../api/endpoints";
+import { orderAudit, orders } from "../api/endpoints";
 import { describe } from "../api/errors";
+import { GatedNotice } from "../components/GatedNotice";
 import { StatusChip } from "../components/StatusChip";
 import { plural, stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
@@ -30,61 +31,142 @@ const STATUSES = [
   "cancelled",
 ];
 
+/**
+ * A change request's per-entry shape has never been observed on the wire —
+ * the local store has none, so `orderAudit`'s schema types each entry as a
+ * loose, unvalidated object (see orders.ts). `cr_id` is the id field the
+ * sibling `/change-requests` endpoint uses; check for it and a couple of
+ * generic fallbacks before giving up and keying by position.
+ */
+function changeRequestKey(entry: Record<string, unknown>, index: number): string {
+  const candidate = entry["cr_id"] ?? entry["id"] ?? entry["change_request_id"];
+  return typeof candidate === "string" || typeof candidate === "number"
+    ? String(candidate)
+    : `${index}`;
+}
+
 function Timeline({ orderId }: { orderId: string }) {
-  const history = useResource(
-    `order-history:${orderId}`,
-    (connection, signal) => orderHistory(connection, orderId, signal),
+  const audit = useResource(
+    `order-audit:${orderId}`,
+    (connection, signal) => orderAudit(connection, orderId, {}, signal),
   );
 
-  if (history.loading && !history.data) return <Skeleton height={24} />;
+  if (audit.freshness === "blocked") {
+    return <GatedNotice what="Order audit trail" result={audit.result} />;
+  }
 
-  if (!history.data) {
+  if (audit.loading && !audit.data) return <Skeleton height={24} />;
+
+  if (!audit.data) {
     return (
       <Typography variant="body2" color="text.secondary">
-        {history.result ? describe(history.result) : "no history"}
+        {audit.result ? describe(audit.result) : "no history"}
       </Typography>
     );
   }
 
-  const { transitions } = history.data;
-
-  if (transitions.length === 0) {
-    return (
-      <Typography variant="body2" color="text.secondary" data-state="no-transitions">
-        No transitions recorded yet.
-      </Typography>
-    );
-  }
+  const { transitions, change_requests, change_request_count, created_at } = audit.data;
 
   return (
-    <Box component="ol" sx={{ m: 0, pl: 0, listStyle: "none" }} data-list="transitions">
-      {transitions.map((t, index) => (
-        <Box
-          component="li"
-          key={t.transition_id ?? `${t.timestamp}-${index}`}
-          sx={{
-            display: "flex",
-            gap: 1.5,
-            alignItems: "baseline",
-            py: 0.75,
-            borderTop: index === 0 ? "none" : `1px solid ${palette.line}`,
-          }}
-        >
-          <Box sx={{ fontSize: 12, color: palette.textSecondary, minWidth: 130 }}>
-            {stamp(t.timestamp)}
-          </Box>
-          <Box sx={{ fontSize: 13 }}>
-            {t.from_status.replace(/_/g, " ")} → <strong>{t.to_status.replace(/_/g, " ")}</strong>
-          </Box>
-          <Box sx={{ fontSize: 12, color: palette.textSecondary }}>
-            {/* The actor is whatever the caller claimed; the API does not
-                verify it, so it is shown as a label, not as attribution. */}
-            by {t.actor}
-            {t.reason ? ` — ${t.reason}` : ""}
-          </Box>
+    <Stack spacing={1.5}>
+      <Box sx={{ fontSize: 12, color: palette.textSecondary }}>Created {stamp(created_at)}</Box>
+
+      {transitions.length === 0 ? (
+        <Typography variant="body2" color="text.secondary" data-state="no-transitions">
+          No transitions recorded yet.
+        </Typography>
+      ) : (
+        <Box component="ol" sx={{ m: 0, pl: 0, listStyle: "none" }} data-list="transitions">
+          {transitions.map((t, index) => (
+            <Box
+              component="li"
+              key={t.transition_id ?? `${t.timestamp}-${index}`}
+              sx={{
+                display: "flex",
+                gap: 1.5,
+                alignItems: "baseline",
+                py: 0.75,
+                borderTop: index === 0 ? "none" : `1px solid ${palette.line}`,
+              }}
+            >
+              <Box sx={{ fontSize: 12, color: palette.textSecondary, minWidth: 130 }}>
+                {stamp(t.timestamp)}
+              </Box>
+              <Box sx={{ fontSize: 13 }}>
+                {t.from_status.replace(/_/g, " ")} →{" "}
+                <strong>{t.to_status.replace(/_/g, " ")}</strong>
+              </Box>
+              <Box sx={{ fontSize: 12, color: palette.textSecondary }}>
+                {/* The actor is whatever the caller claimed; the API does not
+                    verify it, so it is shown as a label, not as attribution. */}
+                by {t.actor}
+                {t.reason ? ` — ${t.reason}` : ""}
+              </Box>
+            </Box>
+          ))}
         </Box>
-      ))}
-    </Box>
+      )}
+
+      <Box>
+        <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 0.5 }}>
+          {plural(change_request_count, "change request")}
+        </Typography>
+        {change_requests.length === 0 ? (
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            data-state="no-change-requests"
+          >
+            No change requests recorded yet.
+          </Typography>
+        ) : (
+          <Box
+            component="ol"
+            sx={{ m: 0, pl: 0, listStyle: "none" }}
+            data-list="change-requests"
+          >
+            {change_requests.map((entry, index) => (
+              <Box
+                component="li"
+                key={changeRequestKey(entry, index)}
+                sx={{
+                  py: 0.75,
+                  borderTop: index === 0 ? "none" : `1px solid ${palette.line}`,
+                }}
+              >
+                {/* The shape was never confirmed against a populated order
+                    (see orders.ts), so nothing beyond "it is an object" is
+                    assumed — shown raw rather than mapped into fields that
+                    might not exist. */}
+                <Box
+                  component="pre"
+                  sx={{
+                    m: 0,
+                    fontSize: 12,
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-word",
+                  }}
+                >
+                  {JSON.stringify(entry, null, 2)}
+                </Box>
+              </Box>
+            ))}
+          </Box>
+        )}
+      </Box>
+
+      <Typography
+        variant="caption"
+        component="p"
+        data-freshness={audit.freshness}
+        sx={{ color: audit.freshness === "stale" ? palette.warningText : palette.textSecondary }}
+      >
+        {audit.freshness === "live" &&
+          audit.asOf !== undefined &&
+          `as of ${stamp(new Date(audit.asOf).toISOString())}`}
+        {audit.freshness === "stale" && "couldn't refresh — showing the last audit received"}
+      </Typography>
+    </Stack>
   );
 }
 

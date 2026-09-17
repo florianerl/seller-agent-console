@@ -73,9 +73,10 @@ lifted it: the seam had no write verb, an AST guard enforced that, and an MSW
 trap failed any test run issuing a non-`GET`. The latter two are gone. The
 operator key this app holds carries full write authority — minting keys,
 transitioning orders, rewriting the rate card — so a mistaken call site is now a
-real mutation. Every endpoint in `src/api/endpoints/` is still a read; a write
-added there needs its own answer on confirmation, idempotency and what a partial
-failure leaves behind, because the client answers none of that generically.
+real mutation. A write added in `src/api/endpoints/` needs its own answer on
+confirmation, idempotency and what a partial failure leaves behind, because the
+client answers none of that generically. Approvals (`decide` / `resume`) are the
+first mutations; the table lives next to those calls.
 
 **Results are values, never exceptions.** `src/api/errors.ts` defines
 `Result<T>` = `ok` | `rejected` (401/403 only) | `unavailable` (timeout,

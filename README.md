@@ -116,13 +116,17 @@ differently, because they send you to different places.
 
 | Screen | Reads | Notes |
 |---|---|---|
-| Setup and health | `/`, `/health`, `/auth/api-keys`, `/api/v1/inventory-sync/status`, `/events?limit=1` | One card per resource; each degrades on its own |
+| Setup and health | `/`, `/health`, `/auth/api-keys`, `/api/v1/inventory-sync/status`, `/events?limit=1`, `/api/v1/supply-chain`, `/.well-known/agent.json` | One card per resource; each degrades on its own. The advertised agent `url` is never presented as the address this console is talking to |
 | Events | `/events`, `/events/{id}` | Operator-only. A tail, not a log — the API offers no cursor, so there is no way to page backwards |
-| Orders | `/api/v1/orders`, `/{id}/history` | Transition timeline. The actor is shown as a label, not as attribution: the API records whatever the caller claimed and does not verify it |
+| Orders | `/api/v1/orders`, `/{id}/audit` | Transition timeline plus change requests. The actor is shown as a label, not as attribution: the API records whatever the caller claimed and does not verify it |
 | Deals | `/api/v1/deals`, `/{id}/performance`, `/{id}/lineage` | Operator-only, unpaginated, so it never polls. Delivery figures are **placeholders** upstream and are labelled as not measured |
-| Inbox | `/approvals`, `/approvals/{id}` | A monitoring view — approving is a write, so it says so rather than implying a dead button. A decision's verified principal and its unverified free-text name are shown as separate fields |
+| Inbox | `/approvals`, `/approvals/{id}`; writes `/{id}/decide`, `/{id}/resume` | Deciding a gate is a write: the controls stay visible while the switch is off, disabled, with the notice that says where the switch is. A decision's verified principal and its unverified free-text name are shown as separate fields |
 | Negotiation | `/sessions`, `/sessions/{id}` | Discloses that listing writes, **and** that the upstream routes declare no authentication at all, so the list is not scoped to this key |
-| Catalog | `/products`, `/api/v1/rate-card`, `/packages` | Packages are labelled "as seen by this key" — that route alone changes content by credential. A rate card the agent invented is flagged as not the publisher's pricing |
+| Catalog | `/products`, `/products/{id}`, `/api/v1/products/{id}/inventory-type`, `/api/v1/rate-card`, `/packages`; query POSTs `/discovery`, `/products/avails`, `/pricing` | Packages are labelled "as seen by this key". A rate card the agent invented is flagged as not the publisher's pricing. The three POSTs are queries — they run with writes off |
+| Media kit | `/media-kit`, `/media-kit/packages`, `/media-kit/packages/{id}`; query POST `/media-kit/search` | Search is a POST that stores nothing, so it runs with writes off |
+| Change requests | `/api/v1/change-requests`, `/api/v1/change-requests/{id}` | Per-entry shape is shown as stored; deciding one is a write this screen does not issue |
+| Curators | `/api/v1/curators`, `/api/v1/curators/{id}` | |
+| Reporting | `/api/v1/orders/report`, `/gam/orders`, `/gam/report` | Does not poll. Two panels proxy an external ad server; the delivery report waits for an operator to name the orders. Payloads are rendered verbatim |
 | Agents | `/registry/agents` | Trust status (this operator's decision) and registry verification (an external registry's claim) are separate columns |
 
 ### Freshness
