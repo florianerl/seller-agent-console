@@ -23,6 +23,7 @@ export const PATHS = {
   rateCard: "/api/v1/rate-card",
   orders: "/api/v1/orders",
   dealsExport: "/api/v1/deals/export",
+  deals: "/api/v1/deals",
 } as const;
 
 // --- root -------------------------------------------------------------------
@@ -223,5 +224,184 @@ export const orderHistory = (
     schema: OrderHistory,
     // Audit trails scan storage and can be large.
     timeoutMs: TIMEOUTS.heavy,
+    signal,
+  });
+
+// --- deals -------------------------------------------------------------------
+
+/**
+ * The list and the detail route do NOT speak the same vocabulary, and this is
+ * the trap on this screen.
+ *
+ * `export?format=generic` returns the *raw stored* deal dicts
+ * (deal_service.export_deals), so `status` is the internal value and prices are
+ * floats in dollars. `GET /api/v1/deals/{id}` runs them through
+ * contract_mappers.internal_deal_to_response first, which translates the status
+ * to the shared wire enum (`confirmed` → `booked`, `deprecated` → `cancelled`)
+ * and re-denominates money into micros. The same deal therefore reads
+ * "confirmed" in the table and "booked" in its detail. The UI labels which
+ * vocabulary it is showing rather than pretending they agree.
+ */
+export const DealSummary = z
+  .object({
+    deal_id: z.string(),
+    status: z.string().catch("unknown"),
+    deal_type: z.string().nullable().catch(null),
+    actual_price_cpm: z.number().nullable().catch(null),
+    pricing: z
+      .object({
+        final_cpm: z.number().nullable().catch(null),
+        currency: z.string().catch("USD"),
+      })
+      .loose()
+      .nullable()
+      .catch(null),
+    created_at: z.string().nullable().catch(null),
+    expires_at: z.string().nullable().catch(null),
+  })
+  .loose();
+export type DealSummary = z.infer<typeof DealSummary>;
+
+export const DealExport = z
+  .object({
+    format: z.string().catch("generic"),
+    deals: z.array(DealSummary),
+    count: z.number().catch(0),
+  })
+  .loose();
+export type DealExport = z.infer<typeof DealExport>;
+
+/**
+ * An unpaginated full scan of every deal in storage, so it gets the heavy
+ * timeout and never polls. `status` filters on the *internal* vocabulary,
+ * because this route reads storage directly.
+ */
+export const dealsExport = (
+  c: Connection,
+  query: { status?: string } = {},
+  signal?: AbortSignal,
+): Promise<Result<DealExport>> =>
+  get(c, PATHS.dealsExport, {
+    schema: DealExport,
+    query: { format: "generic", ...query },
+    timeoutMs: TIMEOUTS.heavy,
+    signal,
+  });
+
+/** Shared Money: an integer count of millionths, not a float. */
+export const Money = z
+  .object({ amount_micros: z.number(), currency: z.string().catch("USD") })
+  .loose();
+export type Money = z.infer<typeof Money>;
+
+export const DealDetail = z
+  .object({
+    deal: z
+      .object({
+        deal_id: z.string(),
+        deal_type: z.string().catch("unknown"),
+        status: z.string().catch("unknown"),
+        quote_id: z.string().nullable().catch(null),
+        product: z
+          .object({ product_id: z.string().catch(""), name: z.string().catch("") })
+          .loose()
+          .nullable()
+          .catch(null),
+        pricing: z
+          .object({
+            final_cpm: Money.nullable().catch(null),
+            pricing_model: z.string().catch("cpm"),
+          })
+          .loose()
+          .nullable()
+          .catch(null),
+        terms: z
+          .object({
+            impressions: z.number().nullable().catch(null),
+            flight_start: z.string().nullable().catch(null),
+            flight_end: z.string().nullable().catch(null),
+            guaranteed: z.boolean().catch(false),
+          })
+          .loose()
+          .nullable()
+          .catch(null),
+        buyer_tier: z.string().catch("public"),
+        expires_at: z.string().nullable().catch(null),
+        created_at: z.string().nullable().catch(null),
+      })
+      .loose(),
+  })
+  .loose();
+export type DealDetail = z.infer<typeof DealDetail>;
+
+/**
+ * Reading one deal makes the agent write: the handler performs a lazy expiry
+ * check on deals still in `proposed` and persists the result. This console
+ * issues no unsafe methods, but this GET is not side-effect free and the screen
+ * says so.
+ */
+export const dealById = (
+  c: Connection,
+  dealId: string,
+  signal?: AbortSignal,
+): Promise<Result<DealDetail>> =>
+  get(c, `${PATHS.deals}/${encodeURIComponent(dealId)}`, { schema: DealDetail, signal });
+
+/**
+ * Upstream returns placeholder figures here — the docstring says real ad-server
+ * integration comes later — so the screen labels these as not measured rather
+ * than rendering them as delivery truth.
+ */
+export const DealPerformance = z
+  .object({
+    deal_id: z.string(),
+    impressions_available: z.number().catch(0),
+    impressions_served: z.number().catch(0),
+    fill_rate: z.number().catch(0),
+    win_rate: z.number().catch(0),
+    avg_cpm_actual: z.number().catch(0),
+    delivery_pacing: z.string().catch("not_started"),
+    last_updated: z.string().nullable().catch(null),
+  })
+  .loose();
+export type DealPerformance = z.infer<typeof DealPerformance>;
+
+export const dealPerformance = (
+  c: Connection,
+  dealId: string,
+  signal?: AbortSignal,
+): Promise<Result<DealPerformance>> =>
+  get(c, `${PATHS.deals}/${encodeURIComponent(dealId)}/performance`, {
+    schema: DealPerformance,
+    signal,
+  });
+
+export const LineageLink = z
+  .object({
+    deal_id: z.string(),
+    status: z.string().catch("unknown"),
+    reason: z.string().nullable().catch(null),
+  })
+  .loose();
+export type LineageLink = z.infer<typeof LineageLink>;
+
+export const DealLineage = z
+  .object({
+    deal_id: z.string(),
+    status: z.string().catch("unknown"),
+    parents: z.array(LineageLink).catch([]),
+    replacements: z.array(LineageLink).catch([]),
+    chain_length: z.number().catch(1),
+  })
+  .loose();
+export type DealLineage = z.infer<typeof DealLineage>;
+
+export const dealLineage = (
+  c: Connection,
+  dealId: string,
+  signal?: AbortSignal,
+): Promise<Result<DealLineage>> =>
+  get(c, `${PATHS.deals}/${encodeURIComponent(dealId)}/lineage`, {
+    schema: DealLineage,
     signal,
   });

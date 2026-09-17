@@ -23,12 +23,19 @@ const EXTRA_ARGS: Record<string, unknown[]> = {
   eventById: ["e1"],
   orderById: ["ORD-1"],
   orderHistory: ["ORD-1"],
+  dealById: ["D-1"],
+  dealPerformance: ["D-1"],
+  dealLineage: ["D-1"],
 };
 
 describe("read-only: layer 2, every endpoint issues GET", () => {
   it("discovered every exported endpoint", () => {
     expect(callers.map(([name]) => name).sort()).toEqual([
       "apiKeys",
+      "dealById",
+      "dealLineage",
+      "dealPerformance",
+      "dealsExport",
       "eventById",
       "events",
       "health",

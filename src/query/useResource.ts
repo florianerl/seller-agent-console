@@ -6,6 +6,13 @@ import { useCredential } from "../credentials/context";
 import { derive, sameResult, type Resource } from "./freshness";
 import { reportResult } from "./reachability";
 
+export type ResourceHandle<T> = Resource<T> & {
+  /** True while a fetch is in flight, including a refresh over existing data. */
+  readonly validating: boolean;
+  /** Revalidate now. */
+  readonly refresh: () => void;
+};
+
 /**
  * One SWR entry per resource, which is what makes each card degrade on its own:
  * independent key, independent failure, independent timestamp.
@@ -17,7 +24,7 @@ export function useResource<T>(
   name: string,
   fetcher: (connection: Connection, signal?: AbortSignal) => Promise<Result<T>>,
   options: { refreshInterval?: number } = {},
-): Resource<T> {
+): ResourceHandle<T> {
   const { credential, connection } = useCredential();
   const lastGood = useRef<{ data: T; at: number } | undefined>(undefined);
 
@@ -30,7 +37,12 @@ export function useResource<T>(
 
   const key = connection && credential ? [credential.credId, name] : null;
 
-  const { data: result, isLoading } = useSWR<Result<T>>(
+  const {
+    data: result,
+    isLoading,
+    isValidating,
+    mutate,
+  } = useSWR<Result<T>>(
     key,
     () => fetcher(connection as Connection),
     {
@@ -56,5 +68,14 @@ export function useResource<T>(
     }
   }, [result, name]);
 
-  return derive(result, lastGood.current, isLoading);
+  return {
+    ...derive(result, lastGood.current, isLoading),
+    validating: isValidating,
+    // Exposed for resources that deliberately do not poll: the deals export is
+    // an unpaginated full scan, so refreshing it has to be the operator's
+    // decision rather than a timer's.
+    refresh: () => {
+      void mutate();
+    },
+  };
 }
