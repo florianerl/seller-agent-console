@@ -25,11 +25,15 @@ Deployed to GitHub Pages from `main`.
 > Use a dedicated key, rotate it, revoke it when a device is lost. The durable
 > fix is upstream: a read-only operator role and per-key origin scoping.
 >
-> **This console is no longer read-only.** It previously issued no unsafe HTTP
-> method — not as a restriction the key carried, but because the client had no
-> function capable of one. That restriction was lifted deliberately
-> ([ADR 11](docs/adr/0011-writes-permitted.md)). Nothing replaced it, so a bug
-> in this bundle can now mutate what the key is authorised to mutate.
+> **This console can write, when you let it.** It previously issued no unsafe
+> HTTP method — not as a restriction the key carried, but because the client had
+> no function capable of one. That restriction was lifted deliberately
+> ([ADR 11](docs/adr/0011-writes-permitted.md)). What replaces it is a switch
+> you control ([ADR 12](docs/adr/0012-writes-behind-a-runtime-switch.md)):
+> **writes are off until you turn them on**, per key, and off again when you
+> sign out. With the switch off, an unsafe request is refused before it is sent.
+> With it on, a bug in this bundle can mutate whatever the key is authorised to
+> mutate — so turn it off when you are done reading.
 
 Separately, and unchanged by any of that: three of the agent's `GET` routes
 modify storage when you read them, so even a pure read is not side-effect free.
@@ -55,6 +59,26 @@ Gone: the seam-shape assertions (it exports `request`, which takes a method)
 and the MSW trap that failed any run issuing a non-`GET`. Every endpoint in the
 table is still a read, and a test asserts that, but it is a description of
 today's table rather than a boundary.
+
+### The write switch
+
+`src/api/policy.ts` holds one flag, and `request()` consults it before issuing
+anything that is not a `GET`. With it off the request is refused as
+`writes-disabled` and nothing leaves the browser. The flag is stored on the
+credential, so it applies to the key you connected with, resets when you connect
+another, and disappears when you sign out. Turning it on asks first and puts a
+**Writes on** chip in the app bar; turning it off takes effect immediately.
+
+Five `POST` routes are exempt because they are queries the agent could not fit
+in a URL — `/discovery`, `/pricing`, `/products/avails`, `/media-kit/search`,
+`/agentic-audience/match`. They read and change nothing. That exemption is a
+judgement rather than a mechanical property, which is why the list is exact,
+justified in `policy.ts`, and asserted by
+`tests/unit/writes-policy.test.ts` — the same test that sweeps every endpoint
+with the switch off and checks on the wire that no unsafe method was sent.
+
+None of this binds an attacker: script in this origin holds the key regardless.
+It bounds what a bug in this console, or a misclick, can do.
 
 ---
 

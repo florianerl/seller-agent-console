@@ -12,6 +12,7 @@ import { Outlet } from "react-router";
 import { DRAWER_WIDTH, Sidebar } from "./Sidebar";
 import { ConnectivityBanner } from "./ConnectivityBanner";
 import { ConnectionMenu } from "./ConnectionMenu";
+import { WritesChip } from "./WritesChip";
 import { InstallButton } from "../pwa/InstallButton";
 import { MenuIcon } from "../components/MenuIcon";
 import { palette } from "../theme/palette";
@@ -53,6 +54,7 @@ export function Shell() {
           >
             Seller Agent Console
           </Typography>
+          <WritesChip />
           <InstallButton />
           <ConnectionMenu />
         </Toolbar>

@@ -16,6 +16,23 @@ export const API = "https://agent.test";
  */
 export const fallthrough = http.all("*", () => HttpResponse.json({ unhandled: true }));
 
+/**
+ * Opt-in version of the trap the read-only design used to run globally. It is
+ * no longer a policy — a write in a test is ordinary now — but a test that
+ * asserts *nothing* was sent still needs something watching the wire, and
+ * asserting on a recorded list beats asserting on the absence of a mock call.
+ */
+export function recordRequests(): { readonly seen: string[] } {
+  const seen: string[] = [];
+  server.use(
+    http.all("*", ({ request }) => {
+      seen.push(`${request.method} ${request.url}`);
+      return HttpResponse.json({});
+    }),
+  );
+  return { seen };
+}
+
 beforeAll(() => {
   // Nothing in the suite may reach the real network by accident.
   server.listen({ onUnhandledRequest: "error" });

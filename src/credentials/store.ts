@@ -16,6 +16,16 @@ export type Credential = {
   readonly reportedVersion: string;
   readonly validatedAt: number;
   readonly credId: string;
+  /**
+   * Whether this console may issue state-changing requests with this key.
+   *
+   * It lives on the credential rather than in a settings store of its own
+   * because it authorises *this* key: connecting a different one starts from
+   * off, and sign-out — which deletes the whole database — takes it with it.
+   * Records written before this field existed read as off, which is the
+   * answer we want for anything we are unsure about.
+   */
+  readonly writesEnabled: boolean;
 };
 
 export { DB_NAME };
@@ -23,7 +33,10 @@ const RECORD_KEY = "active";
 
 export async function loadCredential(): Promise<Credential | undefined> {
   try {
-    return await idbGet<Credential>(STORES.credentials, RECORD_KEY);
+    const stored = await idbGet<Credential>(STORES.credentials, RECORD_KEY);
+    // A record from a build before the switch existed has no flag. Default it
+    // here rather than at every read, so `undefined` never reaches the policy.
+    return stored ? { ...stored, writesEnabled: stored.writesEnabled === true } : undefined;
   } catch {
     // Private browsing, blocked storage, or a corrupt database. Treat as
     // "not configured" rather than failing to boot.
@@ -32,13 +45,16 @@ export async function loadCredential(): Promise<Credential | undefined> {
 }
 
 export async function saveCredential(
-  credential: Omit<Credential, "credId" | "validatedAt"> &
-    Partial<Pick<Credential, "credId" | "validatedAt">>,
+  credential: Omit<Credential, "credId" | "validatedAt" | "writesEnabled"> &
+    Partial<Pick<Credential, "credId" | "validatedAt" | "writesEnabled">>,
 ): Promise<Credential> {
   const record: Credential = {
     ...credential,
     credId: credential.credId ?? crypto.randomUUID(),
     validatedAt: credential.validatedAt ?? Date.now(),
+    // Sign-in never turns writes on. Enabling them is a separate, deliberate
+    // act with its own confirmation.
+    writesEnabled: credential.writesEnabled ?? false,
   };
   await idbSet(STORES.credentials, RECORD_KEY, record);
   return record;

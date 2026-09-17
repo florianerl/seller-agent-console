@@ -28,6 +28,12 @@ export const palette = {
   warning: "#B7791F",
   /** Darkened for warning *text*. */
   warningText: "#8A5A13",
+  /**
+   * The writes-enabled chip. Amber rather than red: the console being able to
+   * write is a mode, not a fault, and red here would compete with the error
+   * colour on the same screen. 8.78:1 under brandBlack text.
+   */
+  attention: "#F0B429",
   error: "#B3261E",
   errorBg: "#fdecea",
 } as const;
@@ -66,4 +72,8 @@ export const CONTRAST_CONTRACT: ReadonlyArray<{
   // Kept for genuinely disabled controls, where the exemption does hold.
   { name: "disabled control on ground", fg: palette.disabled, bg: palette.ground, min: "ui" },
   { name: "warning fill on paper", fg: palette.warning, bg: palette.paper, min: "ui" },
+  // The writes chip carries text, on an amber fill, on the black app bar. The
+  // label is what has to be readable, so it is held to the body bar.
+  { name: "writes chip label on attention", fg: palette.brandBlack, bg: palette.attention, min: "body" },
+  { name: "writes chip fill on app bar", fg: palette.attention, bg: palette.brandBlack, min: "ui" },
 ];

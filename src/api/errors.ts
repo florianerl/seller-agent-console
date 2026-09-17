@@ -24,7 +24,17 @@ export type UnavailableReason =
   /** A 2xx whose body is not JSON — typically a proxy's HTML error page. */
   | "content-type"
   /** Valid JSON that does not match the schema, or a malformed JSON body. */
-  | "shape";
+  | "shape"
+  /**
+   * The request would have changed something and this console is read-only.
+   * Nothing was sent. See src/api/policy.ts and ADR 12.
+   */
+  | "writes-disabled"
+  /**
+   * The same mutation is already in flight, so this attempt was not sent.
+   * Client-side only: see src/query/useMutation.ts.
+   */
+  | "busy";
 
 export type Result<T> =
   | { kind: "ok"; data: T; fetchedAt: number }
@@ -70,6 +80,10 @@ export function describe(r: Result<unknown>): string {
           return "the agent returned something that was not JSON";
         case "shape":
           return "unexpected response shape";
+        case "writes-disabled":
+          return "this console is read-only; nothing was sent";
+        case "busy":
+          return "the previous attempt has not finished";
       }
   }
 }

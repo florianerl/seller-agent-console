@@ -1,5 +1,6 @@
 import type { ZodType } from "zod";
 import type { Result, UnavailableReason } from "./errors";
+import { isQueryShaped, writesEnabled } from "./policy";
 
 /**
  * The only module in this repository permitted to call fetch.
@@ -115,6 +116,15 @@ export async function request<T>(
 
   if (method === "GET" && requestBody !== undefined) {
     throw new TypeError("a GET request cannot carry a body");
+  }
+
+  // The one place a write is refused. Refusing here rather than at the call
+  // sites is the whole design: a call site that forgot to check is still
+  // refused, and the refusal is a Result the caller already renders rather
+  // than an exception it would have to learn about. Nothing is sent — no
+  // request, no preflight, no timer.
+  if (method !== "GET" && !writesEnabled() && !isQueryShaped(path)) {
+    return unavailable("writes-disabled", fetchedAt);
   }
 
   const timeout = AbortSignal.timeout(timeoutMs);

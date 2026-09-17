@@ -20,3 +20,4 @@ part worth reading.
 | [0009](0009-prompted-updates.md) | Updates are prompted, never automatic | Accepted |
 | [0010](0010-no-analytics.md) | No analytics, and none planned | Accepted |
 | [0011](0011-writes-permitted.md) | Writes are permitted; the seam takes a method | Accepted |
+| [0012](0012-writes-behind-a-runtime-switch.md) | Writes are gated by a runtime switch | Accepted |

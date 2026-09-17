@@ -55,7 +55,19 @@ Per-route-class timeouts live there as `TIMEOUTS`. Redirects are refused with
 an outage; requests go out `credentials: "omit"`, `cache: "no-store"`. A 204/205
 parses `undefined` through the caller's schema.
 
-**Writes are permitted, and nothing catches a careless one.** The console was
+**Writes are permitted, and a runtime switch decides whether they go out.**
+`src/api/policy.ts` holds one flag; `request()` refuses any non-`GET` while it
+is off, returning `unavailable / "writes-disabled"` without sending anything.
+The flag is stored on the `Credential` record (so it is per key, and sign-out
+takes it), pushed into the policy module by `CredentialProvider`, toggled in
+`ConnectionMenu` behind a confirmation, and shown as a chip in the app bar.
+Five query-shaped POSTs are exempt by exact path — see `QUERY_SHAPED_PATHS`,
+and ADR 12 for why that exemption makes "read-only" a judgement rather than a
+checkable property. `tests/unit/writes-policy.test.ts` sweeps the whole endpoint
+table with the switch off and asserts on recorded wire traffic; add a write
+endpoint and it is that test, not a type, that will notice.
+
+**Writes still need thought per endpoint; the switch does not supply it.** The console was
 read-only by construction until [ADR 11](docs/adr/0011-writes-permitted.md)
 lifted it: the seam had no write verb, an AST guard enforced that, and an MSW
 trap failed any test run issuing a non-`GET`. The latter two are gone. The
