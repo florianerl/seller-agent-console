@@ -211,6 +211,16 @@ routing means the origin only ever sees one path. The cost is uglier URLs.
 
 ---
 
+## Running it next to the agent instead
+
+The Pages deploy is not the only option: the app also builds into a container
+that serves it at the origin root, which is how you would run it beside the
+agent in `infra/docker/docker-compose.yml`. That buys real response headers and
+control over `Cache-Control` — removing the ten-minute update floor Pages
+imposes — at the cost of hosting it yourself. See
+[docs/running-as-a-container.md](docs/running-as-a-container.md), which also
+covers the three ways it can go wrong.
+
 ## Known limitations
 
 1. **An operator key in a browser is an operator key in a browser.** No

@@ -67,3 +67,67 @@ jobs:
       # before anything deploys.
       - name: Lighthouse budgets
         run: npm run test:lighthouse
+
+  # The Pages deploy serves the app under a repository prefix; the container
+  # serves it at the origin root. Those are different builds, and the root one
+  # is the only place a wrong prefix cannot hide — every asset URL, the
+  # manifest scope and the worker scope all resolve at "/" by accident.
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build for the origin root
+        run: npm run build
+        env:
+          BASE_PATH: "/"
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: End-to-end tests against the root build
+        run: npx playwright test tests/e2e/shell.spec.ts tests/e2e/installable.spec.ts tests/e2e/offline.spec.ts
+        env:
+          BASE_PATH: "/"
+
+      # Builds the image the compose service uses. Without this the Dockerfile
+      # is an untested file that only fails when someone tries to deploy it.
+      - name: Build the container image
+        run: docker build -t seller-agent-console:ci .
+
+      - name: Smoke-test the running container
+        run: |
+          docker run -d --name console -p 8080:8080 seller-agent-console:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8080/index.html >/dev/null; then break; fi
+            sleep 1
+          done
+
+          echo "--- the page is served ---"
+          curl -fsS http://localhost:8080/index.html | grep -q '<div id="root">'
+
+          echo "--- the manifest has the right content type, or the app is silently not installable ---"
+          curl -fsSI http://localhost:8080/manifest.webmanifest | grep -i '^content-type:' | grep -q 'application/manifest+json'
+
+          echo "--- index.html and sw.js are never cached, which is the point of leaving Pages ---"
+          curl -fsSI http://localhost:8080/index.html | grep -i '^cache-control:' | grep -q 'no-cache'
+          curl -fsSI http://localhost:8080/sw.js | grep -i '^cache-control:' | grep -q 'no-cache'
+
+          echo "--- hashed assets are immutable ---"
+          ASSET=$(curl -fsS http://localhost:8080/index.html | grep -oE '/assets/[^"]+\.js' | head -1)
+          curl -fsSI "http://localhost:8080$ASSET" | grep -i '^cache-control:' | grep -q 'immutable'
+
+          echo "--- real headers a meta tag cannot express ---"
+          curl -fsSI http://localhost:8080/index.html | grep -i '^content-security-policy:' | grep -q "frame-ancestors 'none'"
+
+          echo "--- a missing chunk is a 404, never a 200 of index.html ---"
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/assets/does-not-exist.js)" = "404"
+
+          docker rm -f console

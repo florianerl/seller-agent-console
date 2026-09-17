@@ -19,6 +19,10 @@ export default tseslint.config(
       "playwright-report",
       "test-results",
       "node_modules",
+      // Other sessions keep their own git worktrees here. They are copies of
+      // this repo, so linting them double-reports every finding and, worse,
+      // reports findings for code that is not on this branch.
+      ".claude/**",
       // Both are plain config files outside any tsconfig project, and
       // type-aware linting has nothing to say about them.
       "eslint.config.js",
