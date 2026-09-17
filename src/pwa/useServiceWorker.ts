@@ -21,12 +21,30 @@ export function useServiceWorker(): { updateReady: boolean; applyUpdate: () => v
 
     let cleanup: (() => void) | undefined;
 
+    // Own the reload rather than relying on the plugin's implicit one, which
+    // was observed not to fire: the new worker activated and took control
+    // while the page kept running the previous build — new worker, old page,
+    // and the prompt still on screen.
+    //
+    // Only reload when this page was ALREADY controlled when we registered.
+    // On a first install clientsClaim() also fires controllerchange, and
+    // reloading there would restart the app under someone's first visit for
+    // no reason.
+    const wasControlled = Boolean(navigator.serviceWorker.controller);
+    let reloading = false;
+
+    const onControllerChange = () => {
+      if (!wasControlled || reloading) return;
+      reloading = true;
+      window.location.reload();
+    };
+    navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
+
     const updateSW = registerSW({
       onNeedRefresh() {
         setUpdateReady(true);
-        // Messages the waiting worker to skip waiting; workbox-window then
-        // reloads the page once it takes control, guarded by its own isUpdate
-        // flag so the reload happens exactly once. The function's boolean
+        // Messages the waiting worker to skip waiting. The reload is handled
+        // by the controllerchange listener above. The function's boolean
         // parameter has been ignored since plugin 0.13.2, so it is not passed.
         setUpdate({ run: () => updateSW() });
       },
@@ -51,7 +69,10 @@ export function useServiceWorker(): { updateReady: boolean; applyUpdate: () => v
       },
     });
 
-    return () => cleanup?.();
+    return () => {
+      navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
+      cleanup?.();
+    };
   }, []);
 
   return {
