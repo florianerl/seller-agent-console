@@ -119,6 +119,23 @@ export const events = (
 ): Promise<Result<EventsPage>> =>
   get(c, PATHS.events, { schema: EventsPage, query, signal });
 
+/**
+ * Detail for one event. The list response already carries everything the
+ * table shows, so this exists for the fields it does not — payloads differ per
+ * event type, so the body is kept unknown and rendered as formatted JSON.
+ */
+export const EventDetail = z.looseObject({});
+
+export const eventById = (
+  c: Connection,
+  eventId: string,
+  signal?: AbortSignal,
+): Promise<Result<Record<string, unknown>>> =>
+  get(c, `${PATHS.events}/${encodeURIComponent(eventId)}`, {
+    schema: EventDetail,
+    signal,
+  }) as Promise<Result<Record<string, unknown>>>;
+
 // --- api keys (operator only; used as the role probe) -----------------------
 
 export const ApiKeySummary = z
