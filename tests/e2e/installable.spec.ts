@@ -108,6 +108,20 @@ test("the iOS install metadata is present", async ({ page }) => {
   expect(viewport).toContain("viewport-fit=cover");
 });
 
+/**
+ * Chrome's own verdict, rather than ours. Page.getAppManifest reports every
+ * parse and installability error it found; an empty list is the browser saying
+ * it would offer the install. This is what replaces the installability audits
+ * Lighthouse 12 deleted.
+ */
+test("Chrome reports no manifest errors", async ({ page }) => {
+  const client = await page.context().newCDPSession(page);
+  await page.goto(server.appUrl);
+  const manifest = await client.send("Page.getAppManifest");
+  expect(manifest.errors).toEqual([]);
+  expect(manifest.url).toContain("manifest.webmanifest");
+});
+
 test("the start_url is controlled by the service worker", async ({ page }) => {
   await connect(page, server, unhandled);
   await awaitController(page);

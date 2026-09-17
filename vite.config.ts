@@ -52,6 +52,40 @@ export default defineConfig({
         lang: "en",
         dir: "ltr",
         categories: ["business", "productivity"],
+        // Not an installability requirement, but what upgrades Chrome's
+        // desktop install dialog from the bare one to the rich one with a
+        // preview. The images come from the end-to-end fixtures, never from a
+        // real deployment: an install dialog is shown to whoever installs it,
+        // so it must not carry someone's actual deals.
+        screenshots: [
+          {
+            src: "screenshots/wide-setup.png",
+            sizes: "1280x800",
+            type: "image/png",
+            form_factor: "wide",
+            label: "Agent health at a glance",
+          },
+          {
+            src: "screenshots/wide-deals.png",
+            sizes: "1280x800",
+            type: "image/png",
+            form_factor: "wide",
+            label: "Booked and proposed deals",
+          },
+          {
+            src: "screenshots/narrow-setup.png",
+            sizes: "720x1280",
+            type: "image/png",
+            form_factor: "narrow",
+            label: "Agent health on a phone",
+          },
+        ],
+        // Lets the page ask the browser whether this very app is already
+        // installed, via navigator.getInstalledRelatedApps().
+        related_applications: [
+          { platform: "webapp", url: `${BASE_PATH}manifest.webmanifest` },
+        ],
+        prefer_related_applications: false,
         icons: [
           { src: "icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
           { src: "icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },

@@ -116,6 +116,30 @@ at once is the signal that actually correlates with the agent being down.
 
 ---
 
+## Installing
+
+The console is a real installable app: Chrome shows an install icon in the
+omnibox, and there is an **Install** button in the app's own header for anyone
+who does not notice it. Installed, it runs in `display: standalone` — its own
+window, no address bar.
+
+Three cases, because they need different things said:
+
+- **Chrome, Edge, Android:** the button prompts for real. Declining hides it;
+  the omnibox icon stays for anyone who changes their mind.
+- **iOS:** no page can start an install there, so the button explains where the
+  control is — Share, then Add to Home Screen. A button that silently did
+  nothing would be worse than the sentence.
+- **Already installed, viewed in a tab:** the button says so and points at the
+  browser's own "Open in app". **No web API can launch an installed app from a
+  page**, and pretending otherwise would be a control that does nothing.
+
+The manifest ships `screenshots` so Chrome's desktop install dialog gets its
+rich preview rather than the bare confirm. They are captured from the
+end-to-end fixtures — never a real deployment — because an install dialog is
+shown to whoever installs the app and must not carry someone's actual deals.
+Regenerate with `npm run screenshots` after a visual change; never in CI.
+
 ## Offline and updates
 
 The service worker precaches the app shell and registers your agent's origin as

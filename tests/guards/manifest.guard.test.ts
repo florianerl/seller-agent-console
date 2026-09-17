@@ -18,6 +18,9 @@ type Manifest = {
   background_color?: string;
   theme_color?: string;
   icons?: Icon[];
+  screenshots?: (Icon & { form_factor?: string; label?: string })[];
+  related_applications?: { platform: string; url?: string }[];
+  prefer_related_applications?: boolean;
 };
 
 const swSource = (): string => readFileSync(resolve(repoRoot, "src/sw.ts"), "utf8");
@@ -147,5 +150,57 @@ describe("the service worker", () => {
     // And that one site must be inside the SKIP_WAITING message handler.
     const index = source.indexOf("skipWaiting()");
     expect(source.slice(Math.max(0, index - 400), index)).toContain("SKIP_WAITING");
+  });
+});
+
+describe("the install dialog has something to show", () => {
+  /**
+   * Not an installability requirement — Chrome installs the app without these.
+   * They are what upgrades the desktop install dialog from a bare confirm to
+   * the rich one with a preview, which is free and was simply missing.
+   */
+  it("ships a wide screenshot and a narrow one", () => {
+    const shots = manifest().screenshots ?? [];
+    expect(shots.length).toBeGreaterThan(0);
+    expect(shots.some((shot) => shot.form_factor === "wide")).toBe(true);
+    expect(shots.some((shot) => shot.form_factor === "narrow")).toBe(true);
+  });
+
+  it("matches every declared screenshot size to the decoded pixel dimensions", () => {
+    for (const shot of manifest().screenshots ?? []) {
+      const file = resolve(dist, shot.src);
+      expect(existsSync(file), `${shot.src} is missing`).toBe(true);
+      const [declaredWidth, declaredHeight] = shot.sizes.split("x").map(Number);
+      const actual = pngSize(file);
+      expect(actual.width, `${shot.src} width`).toBe(declaredWidth);
+      expect(actual.height, `${shot.src} height`).toBe(declaredHeight);
+    }
+  });
+
+  it("labels every screenshot, since the dialog renders the text", () => {
+    for (const shot of manifest().screenshots ?? []) {
+      expect(shot.label, `${shot.src} has no label`).toBeTruthy();
+    }
+  });
+});
+
+describe("asking the browser whether we are already installed", () => {
+  /**
+   * navigator.getInstalledRelatedApps only answers about applications the
+   * manifest claims a relationship with, so a self-referencing entry is how a
+   * page asks about its own installation. Without it the "already installed"
+   * branch of the install button can never be reached.
+   */
+  it("declares itself as a related application", () => {
+    const related = manifest().related_applications ?? [];
+    const self = related.find((app) => app.platform === "webapp");
+    expect(self, "no self-referencing webapp entry").toBeTruthy();
+    expect(self!.url).toBe(`${BASE_PATH}manifest.webmanifest`);
+  });
+
+  it("does not prefer a related application over itself", () => {
+    // True here would tell the browser to offer some other app instead of
+    // installing this one, which is the opposite of the intent.
+    expect(manifest().prefer_related_applications ?? false).toBe(false);
   });
 });

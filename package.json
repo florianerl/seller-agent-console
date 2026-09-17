@@ -16,7 +16,8 @@
     "test:guards": "vitest run --project guards",
     "test:watch": "vitest --project unit",
     "test:e2e": "playwright test",
-    "test:lighthouse": "lhci autorun --config=lighthouserc.cjs"
+    "test:lighthouse": "lhci autorun --config=lighthouserc.cjs",
+    "screenshots": "playwright test --config playwright.capture.config.ts"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

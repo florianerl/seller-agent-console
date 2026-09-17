@@ -7,6 +7,9 @@ import { defineConfig, devices } from "@playwright/test";
  */
 export default defineConfig({
   testDir: "./tests/e2e",
+  // The screenshot capture writes assets into public/ instead of asserting
+  // anything, so it is not part of the suite. `npm run screenshots` runs it.
+  testIgnore: /capture-.*\.spec\.ts$/,
   // Service-worker tests install and take over a worker per context. Running
   // them concurrently in one browser makes registration order the variable,
   // and the failures are unreadable.
