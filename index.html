@@ -2,6 +2,37 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+
+    <!--
+      GitHub Pages sets no response headers, so a real CSP is impossible: only
+      <meta http-equiv> is available, and it silently ignores frame-ancestors
+      and reporting. Do not describe this as "we have a CSP" without that
+      caveat.
+
+      style-src needs 'unsafe-inline' because Emotion injects style tags at
+      runtime. That is a real, permanent weakening caused by choosing MUI, not
+      an oversight.
+
+      connect-src allows https: plus loopback. Loopback is there because the
+      hosted console is expected to be pointed at a local agent during
+      development, which the browser permits as a potentially-trustworthy
+      origin; without it the CSP would forbid what the mixed-content rules
+      allow. This is defence-in-depth against an XSS in our own bundle, not a
+      boundary against a careless operator.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none';
+               script-src 'self';
+               style-src 'self' 'unsafe-inline';
+               img-src 'self' data:;
+               font-src 'self';
+               manifest-src 'self';
+               worker-src 'self';
+               connect-src https: http://localhost:* http://127.0.0.1:*;
+               base-uri 'none';
+               form-action 'none'"
+    />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#221F1F" />
     <meta name="description" content="Read-only operator console for the IAB Tech Lab seller agent." />

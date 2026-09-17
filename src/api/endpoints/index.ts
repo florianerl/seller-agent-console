@@ -3,6 +3,22 @@ import { get, TIMEOUTS, type Connection } from "../http";
 import type { Result } from "../errors";
 
 /**
+ * Zod compiles validators with `new Function` when it can, and detects whether
+ * it can by calling it inside a try/catch. Under this app's CSP —
+ * `script-src 'self'`, no `'unsafe-eval'` — that call is blocked, the catch
+ * fires, and Zod silently falls back. Functionally harmless, but it reports a
+ * content-security-policy violation to the browser on every single load, which
+ * puts a permanent entry in the issues panel and fails the Lighthouse
+ * `inspector-issues` budget. Worse, it trains anyone looking at that panel to
+ * ignore it.
+ *
+ * Telling Zod not to try is better than loosening the policy to permit eval.
+ * The schemas here are small and parsed a few times a second at most; the
+ * interpreted path costs nothing that matters.
+ */
+z.config({ jitless: true });
+
+/**
  * Narrow schemas: only the fields the UI renders, and `.loose()` throughout so
  * upstream additions never fail a parse. Generated from openapi.json was not an
  * option — 39 of its 44 GET responses carry an empty schema and its
