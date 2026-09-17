@@ -37,6 +37,28 @@ function allHealthy() {
         events: [{ event_type: "deal.created", timestamp: "2026-09-16T12:00:00Z" }],
       }),
     ),
+    http.get(`${API}/api/v1/supply-chain`, () =>
+      HttpResponse.json({
+        seller_id: "seller-001",
+        seller_name: "Seller",
+        seller_type: "PUBLISHER",
+        domain: "seller.test",
+        is_direct: true,
+        supported_deal_types: [],
+        contact_email: null,
+        schain: [{ asi: "seller.test", sid: "seller-001", name: "Seller", is_direct: true }],
+        version: "1.0",
+      }),
+    ),
+    http.get(`${API}/.well-known/agent.json`, () =>
+      HttpResponse.json({
+        name: "Ad Seller Agent",
+        url: "http://localhost:8000",
+        version: "2.4.2",
+        capabilities: { protocols: ["opendirect21"], streaming: false, push_notifications: false },
+        skills: [{ id: "discovery", name: "Inventory Discovery" }],
+      }),
+    ),
   ];
 }
 
@@ -81,7 +103,7 @@ describe("the four health cards", () => {
     renderCards();
     await waitForCards();
 
-    for (const name of ["agent", "access", "sync", "events"]) {
+    for (const name of ["agent", "access", "sync", "events", "supply-chain", "agent-card"]) {
       await waitFor(() => expect(stateOf(name)).toBe("live"));
     }
   });
@@ -172,11 +194,29 @@ describe("the four health cards", () => {
     );
   });
 
+  /**
+   * The agent's own claim about its address, hardcoded to localhost in a
+   * proxied deployment. Shown as this console's connection, it would send an
+   * operator chasing a host they cannot reach.
+   */
+  it("labels the advertised address as a claim, not as the connection", async () => {
+    renderCards();
+    await waitFor(() => expect(stateOf("agent-card")).toBe("live"));
+    expect(card("agent-card").textContent).toContain("claims http://localhost:8000");
+  });
+
+  it("says whether this seller declares itself direct, and how long its chain is", async () => {
+    renderCards();
+    await waitFor(() => expect(stateOf("supply-chain")).toBe("live"));
+    expect(card("supply-chain").textContent).toContain("Direct seller");
+    expect(card("supply-chain").textContent).toContain("1 node declared");
+  });
+
   it("does not render a value without a timestamp", async () => {
     renderCards();
     await waitForCards();
 
-    for (const name of ["agent", "access", "sync", "events"]) {
+    for (const name of ["agent", "access", "sync", "events", "supply-chain", "agent-card"]) {
       const caption = card(name).querySelector("[data-freshness]");
       expect(caption?.textContent ?? "", `${name} rendered without a caption`).not.toBe("");
     }

@@ -23,6 +23,10 @@ export const SCREENS: readonly Screen[] = [
   { id: "deals", path: "/deals", label: "Deals" },
   { id: "negotiation", path: "/negotiation", label: "Negotiation" },
   { id: "catalog", path: "/catalog", label: "Catalog" },
+  { id: "media-kit", path: "/media-kit", label: "Media kit" },
+  { id: "change-requests", path: "/change-requests", label: "Change requests" },
+  { id: "curators", path: "/curators", label: "Curators" },
+  { id: "reporting", path: "/reporting", label: "Reporting", operatorOnly: true },
   { id: "agents", path: "/agents", label: "Agents" },
 ];
 

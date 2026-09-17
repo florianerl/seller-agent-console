@@ -69,6 +69,48 @@ const OK = {
   "/products": { products: [], total_count: 0, limit: 50, offset: 0 },
   "/api/v1/rate-card": { entries: [], updated_at: null, source: "stored" },
   "/packages": { packages: [] },
+  "/api/v1/supply-chain": {
+    seller_id: "console-demo-001",
+    seller_name: "Console Demo",
+    seller_type: "PUBLISHER",
+    domain: "console.demo",
+    is_direct: true,
+    supported_deal_types: ["preferred_deal"],
+    contact_email: null,
+    schain: [
+      {
+        asi: "console.demo",
+        sid: "console-demo-001",
+        name: "Console Demo",
+        domain: "console.demo",
+        seller_type: "PUBLISHER",
+        is_direct: true,
+        comment: null,
+      },
+    ],
+    version: "1.0",
+  },
+  "/.well-known/agent.json": {
+    name: "Ad Seller Agent",
+    description: "Console demo agent",
+    url: "http://localhost:8000",
+    version: "2.4.2",
+    provider: { name: "Console Demo", url: "http://localhost:8000", description: null },
+    capabilities: { protocols: ["opendirect21"], streaming: false, push_notifications: false },
+    skills: [{ id: "discovery", name: "Inventory Discovery", description: null, tags: [] }],
+  },
+  "/media-kit": { total_packages: 0, featured_count: 0, featured: [], all_packages: [] },
+  "/media-kit/packages": { packages: [] },
+  "/api/v1/change-requests": { change_requests: [], count: 0 },
+  "/api/v1/curators": { curators: [], count: 0 },
+  "/api/v1/orders/report": {
+    total_orders: 1,
+    status_counts: { approved: 1 },
+    total_transitions: 3,
+    avg_transitions_per_order: 3,
+    actor_type_counts: { operator: 1, agent: 1, system: 1 },
+    change_requests: { total: 0, by_status: {} },
+  },
 } as const;
 
 /**
@@ -110,7 +152,10 @@ export async function mockAgent(
     }
 
     if (request.method() !== "GET") {
-      // Belt to the unit suite's braces: the console must never issue one.
+      // The console can write now (ADR 11), but only with the write switch on
+      // (ADR 12), and these tests never turn it on. An unsafe method reaching
+      // here therefore means the switch leaked — which is worth failing a test
+      // over, so it is recorded rather than answered.
       unhandled.push(`${request.method()} ${path}`);
       await route.fulfill({ status: 405, body: "read-only" });
       return;

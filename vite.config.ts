@@ -149,6 +149,16 @@ export default defineConfig({
           environment: "jsdom",
           include: ["src/**/*.test.{ts,tsx}", "tests/unit/**/*.test.{ts,tsx}"],
           setupFiles: ["./tests/setup/dom.ts", "./tests/setup/msw.ts"],
+          /**
+           * These are jsdom renders of a full MUI tree with MSW in front of
+           * them — CPU-bound, not IO-bound. Given a fork per core they starve
+           * each other, and a starved worker fails a `waitFor` that was only
+           * ever waiting on its own event loop: the suite then reports a
+           * different two or three "failures" per run, none of them real.
+           * Capping the workers costs a few seconds and buys a signal that
+           * means something.
+           */
+          maxWorkers: 4,
         },
       },
       {

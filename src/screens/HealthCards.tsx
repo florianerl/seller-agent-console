@@ -1,6 +1,14 @@
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import { apiKeys, events, health, inventorySyncStatus, root } from "../api/endpoints";
+import {
+  agentCard,
+  apiKeys,
+  events,
+  health,
+  inventorySyncStatus,
+  root,
+  supplyChain,
+} from "../api/endpoints";
 import { StatusCard } from "../components/StatusCard";
 import { stamp } from "../lib/time";
 import { useCredential } from "../credentials/context";
@@ -21,6 +29,10 @@ export function HealthCards() {
   const sync = useResource("inventory-sync", inventorySyncStatus, {
     refreshInterval: CADENCE.inventorySync,
   });
+  const chain = useResource("supply-chain", supplyChain, {
+    refreshInterval: CADENCE.supplyChain,
+  });
+  const card = useResource("agent-card", agentCard, { refreshInterval: CADENCE.agentCard });
   const lastEvent = useResource(
     "last-event",
     (connection, signal) => events(connection, { limit: 1 }, signal),
@@ -78,6 +90,47 @@ export function HealthCards() {
             <Typography variant="body2" color="text.secondary">
               {data.sync_count} run{data.sync_count === 1 ? "" : "s"}
               {data.task_running ? " · running now" : ""}
+            </Typography>
+          </>
+        )}
+      </StatusCard>
+
+      <StatusCard title="Supply chain" testId="supply-chain" resource={chain}>
+        {(data) => (
+          <>
+            <Typography sx={{ fontSize: 15, fontWeight: 600 }}>
+              {data.is_direct ? "Direct seller" : "Intermediary"}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {data.seller_id}
+              {data.domain ? ` · ${data.domain}` : ""}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {/* The chain is what a buyer verifies against sellers.json. A
+                  count with no length is the one number worth showing here;
+                  the nodes themselves belong on a screen with room. */}
+              {data.schain.length} node{data.schain.length === 1 ? "" : "s"} declared
+            </Typography>
+          </>
+        )}
+      </StatusCard>
+
+      <StatusCard title="Advertised card" testId="agent-card" resource={card}>
+        {(data) => (
+          <>
+            <Typography sx={{ fontSize: 15, fontWeight: 600 }}>{data.name}</Typography>
+            <Typography variant="body2" color="text.secondary">
+              {/* What the agent tells other agents about itself, which is
+                  routinely wrong behind a proxy — it hardcodes localhost in the
+                  deployment this was written against. Never presented as the
+                  address this console is talking to. */}
+              claims {data.url ?? "no address"}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {data.skills.length} skill{data.skills.length === 1 ? "" : "s"}
+              {data.capabilities?.protocols.length
+                ? ` · ${data.capabilities.protocols.join(", ")}`
+                : ""}
             </Typography>
           </>
         )}
