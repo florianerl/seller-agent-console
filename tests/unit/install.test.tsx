@@ -155,6 +155,14 @@ describe("when the app is installed but viewed in a tab", () => {
     });
   });
 
+  // vi.restoreAllMocks does not undo defineProperty, so without this the
+  // stub leaks onto every test that happens to run afterwards — which under
+  // --sequence.shuffle means "sometimes". It made the install-prompt test
+  // fail in CI and pass locally, on ordering alone.
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, "getInstalledRelatedApps");
+  });
+
   /**
    * No web API can launch an installed app from a page. A button that claimed
    * to and did nothing would be worse than the sentence that explains where

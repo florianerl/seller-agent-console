@@ -18,12 +18,6 @@ RUN npm run build
 
 FROM nginx:1.27-alpine AS serve
 
-# nginx's bundled mime.types has no entry for .webmanifest, and a manifest
-# served as the wrong type is ignored — the app silently stops being
-# installable, with nothing in the console to say why.
-RUN printf 'types { application/manifest+json webmanifest; }\n' \
-      > /etc/nginx/conf.d/webmanifest.types
-
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /src/dist /usr/share/nginx/html
 
