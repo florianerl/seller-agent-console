@@ -13,6 +13,8 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { agents } from "../api/endpoints";
 import { describe } from "../api/errors";
+import { DataPanel, FreshnessNote } from "../components/DataPanel";
+import { PageHeader } from "../components/PageHeader";
 import { StatusChip } from "../components/StatusChip";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { useCredential } from "../credentials/context";
@@ -45,12 +47,10 @@ export default function AgentsScreen() {
 
   return (
     <section data-screen="agents">
-      <Typography variant="h2" sx={{ fontSize: 20, fontWeight: 600, mb: 0.5 }}>
-        Agents
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Buyer and partner agents this seller has seen. Trust changes are writes.
-      </Typography>
+      <PageHeader
+        title="Agents"
+        subtitle="Buyer and partner agents this seller has seen. Trust changes are writes."
+      />
 
       {!writesEnabled && <ReadOnlyNotice what="Discovering or changing trust" />}
       <Panel title="Registry writes">
@@ -58,7 +58,7 @@ export default function AgentsScreen() {
         <AgentDetailLookup />
       </Panel>
 
-      <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+      <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }}>
         <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>
           <TextField
             select
@@ -91,21 +91,14 @@ export default function AgentsScreen() {
         </Stack>
       </Paper>
 
-      <Box
-        data-freshness={list.freshness}
-        sx={{
-          mb: 1,
-          fontSize: 12,
-          color: list.freshness === "stale" ? palette.warningText : palette.textSecondary,
-        }}
-      >
+      <FreshnessNote freshness={list.freshness}>
         {list.freshness === "live" && plural(list.data?.total ?? rows.length, "agent")}
         {list.freshness === "stale" && "couldn't refresh — showing the last list received"}
         {list.freshness === "empty" &&
           (list.loading ? "loading…" : list.result ? describe(list.result) : "")}
-      </Box>
+      </FreshnessNote>
 
-      <Paper variant="outlined">
+      <DataPanel>
         {list.loading && rows.length === 0 ? (
           <Box sx={{ p: 2 }}>
             <Skeleton height={28} />
@@ -190,7 +183,7 @@ export default function AgentsScreen() {
             </TableBody>
           </Table>
         )}
-      </Paper>
+      </DataPanel>
     </section>
   );
 }

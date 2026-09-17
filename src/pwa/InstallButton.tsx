@@ -52,9 +52,9 @@ export function InstallButton() {
     <Dialog open={help !== undefined} onClose={() => setHelp(undefined)}>
       {help === "ios" ? (
         <>
-          <DialogTitle sx={{ fontSize: 16, fontWeight: 600 }}>Add to your home screen</DialogTitle>
+          <DialogTitle>Add to your home screen</DialogTitle>
           <DialogContent>
-            <DialogContentText sx={{ fontSize: 14 }} data-help="ios-install">
+            <DialogContentText data-help="ios-install">
               iOS does not let a page start an install. Open the Share menu, then
               choose <strong>Add to Home Screen</strong>. The console then opens
               in its own window and keeps working offline for what it has
@@ -64,14 +64,12 @@ export function InstallButton() {
         </>
       ) : (
         <>
-          <DialogTitle sx={{ fontSize: 16, fontWeight: 600 }}>
-            This console is already installed
-          </DialogTitle>
+          <DialogTitle>This console is already installed</DialogTitle>
           <DialogContent>
             {/* Said rather than faked. A page cannot launch its own installed
                 app — no API exists — and a button that silently did nothing
                 would be worse than this sentence. */}
-            <DialogContentText sx={{ fontSize: 14 }} data-help="open-in-app">
+            <DialogContentText data-help="open-in-app">
               A page cannot open an installed app, so this has to be done from
               the browser. In Chrome, use the <strong>Open in app</strong> item
               in the menu at the end of the address bar — or launch the console
@@ -98,7 +96,7 @@ export function InstallButton() {
           color="inherit"
           size="small"
           data-action="open-in-app"
-          sx={{ fontSize: 12, mr: 0.5 }}
+          sx={{ fontSize: 13, fontWeight: 600, mr: 0.5 }}
           onClick={() => setHelp("open")}
         >
           Open in app
@@ -120,7 +118,7 @@ export function InstallButton() {
         color="inherit"
         size="small"
         data-action="install"
-        sx={{ fontSize: 12, mr: 0.5 }}
+          sx={{ fontSize: 13, fontWeight: 600, mr: 0.5 }}
         onClick={() => {
           if (ios) {
             setHelp("ios");

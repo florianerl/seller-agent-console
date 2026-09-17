@@ -11,6 +11,7 @@ import FormControlLabel from "@mui/material/FormControlLabel";
 import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
 import { useCredential } from "../credentials/context";
+import { palette } from "../theme/palette";
 
 /**
  * Who this console is connected as, and the way out.
@@ -36,13 +37,13 @@ export function ConnectionMenu() {
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
         <Typography
           component="span"
-          sx={{ fontSize: 12, opacity: 0.85, display: { xs: "none", sm: "inline" } }}
+          sx={{ fontSize: 13, display: { xs: "none", sm: "inline" }, color: palette.paper }}
           data-connection="summary"
         >
           {credential.baseUrl} · {credential.role}
         </Typography>
         <FormControlLabel
-          sx={{ mr: 0, "& .MuiFormControlLabel-label": { fontSize: 12 } }}
+          sx={{ mr: 0, "& .MuiFormControlLabel-label": { fontSize: 13, color: palette.paper } }}
           label="Writes"
           control={
             <Switch
@@ -71,18 +72,16 @@ export function ConnectionMenu() {
           color="inherit"
           size="small"
           onClick={() => setConfirming(true)}
-          sx={{ fontSize: 12 }}
+          sx={{ fontSize: 13, fontWeight: 600 }}
         >
           Sign out
         </Button>
       </Box>
 
       <Dialog open={confirmingWrites} onClose={() => setConfirmingWrites(false)}>
-        <DialogTitle sx={{ fontSize: 16, fontWeight: 600 }}>
-          Enable writes with this key?
-        </DialogTitle>
+        <DialogTitle>Enable writes with this key?</DialogTitle>
         <DialogContent>
-          <DialogContentText sx={{ fontSize: 14 }}>
+          <DialogContentText>
             {/* The blast radius, in the words ADR 11 used for it. An operator
                 deciding this deserves the real number, not a reassurance. */}
             This console will be able to change what the agent holds — deciding
@@ -108,9 +107,9 @@ export function ConnectionMenu() {
       </Dialog>
 
       <Dialog open={confirming} onClose={() => setConfirming(false)}>
-        <DialogTitle sx={{ fontSize: 16, fontWeight: 600 }}>Sign out of this agent?</DialogTitle>
+        <DialogTitle>Sign out of this agent?</DialogTitle>
         <DialogContent>
-          <DialogContentText sx={{ fontSize: 14 }}>
+          <DialogContentText>
             {/* Said plainly, because the second half is the part people do not
                 expect and the first half is the part they might rely on. */}
             This removes the stored key and every cached value from this browser.

@@ -7,18 +7,18 @@ import { NavLink, useLocation } from "react-router";
 import { SCREENS } from "./screens";
 import { palette } from "../theme/palette";
 
-export const DRAWER_WIDTH = 240;
+export const DRAWER_WIDTH = 248;
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { pathname } = useLocation();
 
   return (
     <nav aria-label="Console sections">
-      <List sx={{ py: 1 }}>
+      <List sx={{ py: 2, px: 1 }}>
         {SCREENS.map((screen) => {
           if (screen.soon) {
             return (
-              <ListItem key={screen.id} data-nav={screen.id} data-state="soon">
+              <ListItem key={screen.id} data-nav={screen.id} data-state="soon" sx={{ px: 1 }}>
                 {/* Not a control: a disabled button would be a focus stop that
                     does nothing, and announcing it as a button would lie.
                     Which is also why these are held to the 4.5:1 text bar and
@@ -36,7 +36,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                   label="soon"
                   size="small"
                   sx={{
-                    height: 20,
+                    height: 22,
                     fontSize: 11,
                     color: palette.textSecondary,
                     borderColor: palette.line,
@@ -50,7 +50,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           const active = pathname === screen.path;
 
           return (
-            <ListItem key={screen.id} disablePadding data-nav={screen.id}>
+            <ListItem key={screen.id} disablePadding data-nav={screen.id} sx={{ mb: 0.25 }}>
               <ListItemButton
                 component={NavLink}
                 to={screen.path}
@@ -59,11 +59,14 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                 aria-current={active ? "page" : undefined}
                 data-state={active ? "active" : "idle"}
                 sx={{
+                  borderRadius: 1.5,
+                  py: 1,
                   "&.active": {
                     color: palette.brandRedText,
-                    fontWeight: 600,
-                    backgroundColor: "transparent",
+                    fontWeight: 700,
+                    backgroundColor: palette.navActiveWash,
                     borderLeft: `3px solid ${palette.brandRed}`,
+                    pl: "13px",
                   },
                 }}
               >

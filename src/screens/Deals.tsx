@@ -15,8 +15,10 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { dealLineage, dealPerformance, deals, type Money } from "../api/endpoints";
 import { describe } from "../api/errors";
+import { DataPanel, FreshnessNote } from "../components/DataPanel";
 import { Field, FieldGrid } from "../components/Field";
 import { GatedNotice } from "../components/GatedNotice";
+import { PageHeader } from "../components/PageHeader";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { StatusChip } from "../components/StatusChip";
 import { day, plural, stamp } from "../lib/time";
@@ -166,12 +168,7 @@ export default function DealsScreen() {
 
   return (
     <section data-screen="deals">
-      <Typography variant="h2" sx={{ fontSize: 20, fontWeight: 600, mb: 0.5 }}>
-        Deals
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Every buyer's deals, as the agent has them stored.
-      </Typography>
+      <PageHeader title="Deals" subtitle="Every buyer's deals, as the agent has them stored." />
 
       {!writesEnabled && <ReadOnlyNotice what="Booking, pushing, or migrating a deal" />}
       <Panel title="Deal writes">
@@ -182,7 +179,7 @@ export default function DealsScreen() {
         <GatedNotice what="The deal ledger" result={list.result} />
       ) : (
         <>
-          <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+          <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }}>
             <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" useFlexGap>
               <TextField
                 select
@@ -223,14 +220,7 @@ export default function DealsScreen() {
             </Alert>
           )}
 
-          <Box
-            data-freshness={list.freshness}
-            sx={{
-              mb: 1,
-              fontSize: 12,
-              color: list.freshness === "stale" ? palette.warningText : palette.textSecondary,
-            }}
-          >
+          <FreshnessNote freshness={list.freshness}>
             {list.validating && rows.length === 0 && (
               <span data-state="slow">Reading every deal — this can take a while.</span>
             )}
@@ -243,9 +233,9 @@ export default function DealsScreen() {
             {!list.validating &&
               list.freshness === "empty" &&
               (list.result ? describe(list.result) : "")}
-          </Box>
+          </FreshnessNote>
 
-          <Paper variant="outlined">
+          <DataPanel>
             {list.loading && rows.length === 0 ? (
               <Box sx={{ p: 2 }}>
                 <Skeleton height={28} />
@@ -321,7 +311,7 @@ export default function DealsScreen() {
                 </TableBody>
               </Table>
             )}
-          </Paper>
+          </DataPanel>
         </>
       )}
     </section>

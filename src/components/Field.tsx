@@ -6,10 +6,18 @@ import { palette } from "../theme/palette";
 export function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <Box>
-      <Box sx={{ fontSize: 11, color: palette.textSecondary, textTransform: "uppercase" }}>
+      <Box
+        sx={{
+          fontSize: 11,
+          fontWeight: 700,
+          letterSpacing: 0.8,
+          color: palette.textSecondary,
+          textTransform: "uppercase",
+        }}
+      >
         {label}
       </Box>
-      <Box sx={{ fontSize: 13 }}>{children}</Box>
+      <Box sx={{ fontSize: 14, mt: 0.25 }}>{children}</Box>
     </Box>
   );
 }

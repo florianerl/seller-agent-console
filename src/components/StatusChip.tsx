@@ -25,7 +25,7 @@ export function StatusChip({ status }: { status: string }) {
       size="small"
       variant="outlined"
       data-status={status}
-      sx={{ fontSize: 12, color: colour, borderColor: colour }}
+      sx={{ color: colour, borderColor: colour }}
     />
   );
 }

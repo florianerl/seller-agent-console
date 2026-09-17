@@ -1,7 +1,6 @@
 import { Fragment, useState } from "react";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import Paper from "@mui/material/Paper";
 import Skeleton from "@mui/material/Skeleton";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
@@ -19,8 +18,10 @@ import {
 } from "../api/endpoints";
 import { describe, type Result } from "../api/errors";
 import { ConfirmAction } from "../components/ConfirmAction";
+import { DataPanel, FreshnessNote } from "../components/DataPanel";
 import { Field, FieldGrid } from "../components/Field";
 import { GatedNotice } from "../components/GatedNotice";
+import { PageHeader } from "../components/PageHeader";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { StatusChip } from "../components/StatusChip";
 import { WritesNotice } from "../components/WritesNotice";
@@ -278,16 +279,14 @@ export default function InboxScreen() {
 
   return (
     <section data-screen="inbox">
-      <Typography variant="h2" sx={{ fontSize: 20, fontWeight: 600, mb: 0.5 }}>
-        Inbox
-      </Typography>
       {/* Said out loud rather than implied by a missing button: an approvals
           inbox you cannot act on is a monitoring view. Pretending otherwise
           would leave someone waiting for an approve control that is not
           coming. */}
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Pending approval gates, and the controls to decide them.
-      </Typography>
+      <PageHeader
+        title="Inbox"
+        subtitle="Pending approval gates, and the controls to decide them."
+      />
 
       {list.freshness === "blocked" ? (
         <GatedNotice what="The approvals queue" result={list.result} />
@@ -296,21 +295,14 @@ export default function InboxScreen() {
           <WritesNotice what="Listing approvals marks any gate past its expiry as timed out and saves that." />
           {!writesEnabled && <ReadOnlyNotice what="Deciding a gate" />}
 
-          <Box
-            data-freshness={list.freshness}
-            sx={{
-              mb: 1,
-              fontSize: 12,
-              color: list.freshness === "stale" ? palette.warningText : palette.textSecondary,
-            }}
-          >
+          <FreshnessNote freshness={list.freshness}>
             {list.freshness === "live" && plural(rows.length, "approval")}
             {list.freshness === "stale" && "couldn't refresh — showing the last queue received"}
             {list.freshness === "empty" &&
               (list.loading ? "loading…" : list.result ? describe(list.result) : "")}
-          </Box>
+          </FreshnessNote>
 
-          <Paper variant="outlined">
+          <DataPanel>
             {list.loading && rows.length === 0 ? (
               <Box sx={{ p: 2 }}>
                 <Skeleton height={28} />
@@ -376,7 +368,7 @@ export default function InboxScreen() {
                 </TableBody>
               </Table>
             )}
-          </Paper>
+          </DataPanel>
         </>
       )}
     </section>

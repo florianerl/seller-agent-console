@@ -22,6 +22,11 @@ export const palette = {
   line: "#E4E4E4",
   ground: "#F7F6F6",
   paper: "#FFFFFF",
+  /**
+   * Active-nav wash. Light enough that brandRedText still clears 4.5:1, and
+   * distinct from paper so the selected item reads as a surface, not a fill.
+   */
+  navActiveWash: "#FBEDEC",
 
   ok: "#1F7A3F",
   /** 3.64:1 on white — fills and icons only. */
@@ -54,9 +59,18 @@ export const CONTRAST_CONTRACT: ReadonlyArray<{
   { name: "secondary text on paper", fg: palette.textSecondary, bg: palette.paper, min: "body" },
   { name: "secondary text on ground", fg: palette.textSecondary, bg: palette.ground, min: "body" },
   { name: "active nav text on ground", fg: palette.brandRedText, bg: palette.ground, min: "body" },
+  { name: "active nav text on paper", fg: palette.brandRedText, bg: palette.paper, min: "body" },
+  { name: "active nav text on wash", fg: palette.brandRedText, bg: palette.navActiveWash, min: "body" },
+  { name: "body text on nav wash", fg: palette.text, bg: palette.navActiveWash, min: "body" },
   { name: "link text on paper", fg: palette.brandRedText, bg: palette.paper, min: "body" },
+  { name: "overline on paper", fg: palette.brandRedText, bg: palette.paper, min: "body" },
+  { name: "overline on ground", fg: palette.brandRedText, bg: palette.ground, min: "body" },
   { name: "contained button label", fg: palette.paper, bg: palette.brandRedText, min: "body" },
   { name: "heading on paper", fg: palette.brandBlack, bg: palette.paper, min: "body" },
+  { name: "heading on ground", fg: palette.brandBlack, bg: palette.ground, min: "body" },
+  { name: "wordmark on app bar", fg: palette.paper, bg: palette.brandBlack, min: "body" },
+  { name: "app-bar connection text", fg: palette.paper, bg: palette.brandBlack, min: "body" },
+  { name: "brand rule on app bar", fg: palette.brandRed, bg: palette.brandBlack, min: "ui" },
   { name: "ok status text on paper", fg: palette.ok, bg: palette.paper, min: "body" },
   { name: "error status text on paper", fg: palette.error, bg: palette.paper, min: "body" },
   { name: "error text on error background", fg: palette.error, bg: palette.errorBg, min: "body" },

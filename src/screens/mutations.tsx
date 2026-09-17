@@ -71,8 +71,10 @@ function newKey(): string {
 
 function Panel({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <Paper variant="outlined" sx={{ p: 2, mb: 2 }} data-block="operator-writes">
-      <Typography sx={{ fontSize: 13, fontWeight: 600, mb: 1 }}>{title}</Typography>
+    <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }} data-block="operator-writes">
+      <Typography variant="h3" sx={{ mb: 1.5 }}>
+        {title}
+      </Typography>
       {children}
     </Paper>
   );
@@ -461,7 +463,7 @@ export function QuoteLookup() {
   const [submitted, setSubmitted] = useState<string | undefined>();
 
   return (
-    <Paper variant="outlined" sx={{ p: 2, mb: 2 }} data-block="quote-lookup">
+    <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }} data-block="quote-lookup">
       <WritesNotice what="Fetching a quote enforces its TTL and may persist status=expired." />
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
         <TextField size="small" label="Quote id" value={id} onChange={(e) => setId(e.target.value)} />
@@ -1318,8 +1320,10 @@ export function AudienceMatchForm() {
   const [identifier, setIdentifier] = useState("");
   const [submitted, setSubmitted] = useState<string | undefined>();
   return (
-    <Paper variant="outlined" sx={{ p: 2, mb: 2 }} data-block="audience-match">
-      <Typography sx={{ fontSize: 13, fontWeight: 600, mb: 1 }}>Audience match</Typography>
+    <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }} data-block="audience-match">
+      <Typography variant="h3" sx={{ mb: 0.5 }}>
+        Audience match
+      </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
         A POST that stores nothing, so it runs with writes off.
       </Typography>

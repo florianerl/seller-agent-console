@@ -15,6 +15,8 @@ import Typography from "@mui/material/Typography";
 import { events, type EventRecord, type EventsQuery } from "../api/endpoints";
 import { describe } from "../api/errors";
 import { GatedNotice } from "../components/GatedNotice";
+import { DataPanel, FreshnessNote } from "../components/DataPanel";
+import { PageHeader } from "../components/PageHeader";
 import { clock as stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
 import { useResource } from "../query/useResource";
@@ -45,21 +47,18 @@ export default function EventsScreen() {
 
   return (
     <section data-screen="events">
-      <Typography variant="h2" sx={{ fontSize: 20, fontWeight: 600, mb: 0.5 }}>
-        Events
-      </Typography>
       {/* The API has no cursor: ?limit returns the most recent N with no way to
           page backwards. Calling this a log would overstate it. */}
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        The {LIMIT} most recent events. This is a tail, not a full log — the API
-        offers no way to page further back.
-      </Typography>
+      <PageHeader
+        title="Events"
+        subtitle={`The ${LIMIT} most recent events. This is a tail, not a full log — the API offers no way to page further back.`}
+      />
 
       {feed.freshness === "blocked" ? (
         <GatedNotice what="The event stream" result={feed.result} />
       ) : (
         <>
-          <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+          <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }}>
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
               {(
                 [
@@ -87,21 +86,14 @@ export default function EventsScreen() {
             </Stack>
           </Paper>
 
-          <Box
-            data-freshness={feed.freshness}
-            sx={{
-              mb: 1,
-              fontSize: 12,
-              color: feed.freshness === "stale" ? palette.warningText : palette.textSecondary,
-            }}
-          >
+          <FreshnessNote freshness={feed.freshness}>
             {feed.freshness === "live" && feed.asOf && `as of ${stamp(new Date(feed.asOf).toISOString())}`}
             {feed.freshness === "stale" && "couldn't refresh — showing the last events received"}
             {feed.freshness === "empty" &&
               (feed.loading ? "loading…" : feed.result ? describe(feed.result) : "")}
-          </Box>
+          </FreshnessNote>
 
-          <Paper variant="outlined">
+          <DataPanel>
             {feed.loading && rows.length === 0 ? (
               <Box sx={{ p: 2 }}>
                 <Skeleton height={28} />
@@ -153,10 +145,10 @@ export default function EventsScreen() {
                 </TableBody>
               </Table>
             )}
-          </Paper>
+          </DataPanel>
 
           {selected && (
-            <Paper variant="outlined" sx={{ mt: 2, p: 2 }} data-panel="event-detail">
+            <Paper variant="outlined" sx={{ mt: 2.5, p: 2.5 }} data-panel="event-detail">
               <Stack direction="row" justifyContent="space-between" alignItems="center">
                 <Typography sx={{ fontSize: 14, fontWeight: 600 }}>
                   {selected.event_type}

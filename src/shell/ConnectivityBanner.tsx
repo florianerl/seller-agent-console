@@ -36,7 +36,7 @@ export function ConnectivityBanner() {
 
   if (!online) {
     return (
-      <Box sx={{ mb: 2 }}>
+      <Box sx={{ mb: 2.5 }}>
         <Alert severity="warning" variant="outlined" data-banner="offline">
           No network connection. Values below are the last ones this device saw.
         </Alert>
@@ -48,7 +48,7 @@ export function ConnectivityBanner() {
   // is the card's business, not the shell's.
   if (agentUnreachable) {
     return (
-      <Box sx={{ mb: 2 }}>
+      <Box sx={{ mb: 2.5 }}>
         <Alert severity="warning" variant="outlined" data-banner="unreachable">
           Can't reach the seller agent. Showing the last values received.
         </Alert>

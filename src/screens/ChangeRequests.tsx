@@ -15,8 +15,10 @@ import Typography from "@mui/material/Typography";
 import { changeRequestById, changeRequests, reviewChangeRequest, applyChangeRequest, type ChangeRequestReviewInput, type FieldDiff } from "../api/endpoints";
 import { describe } from "../api/errors";
 import { ConfirmAction } from "../components/ConfirmAction";
+import { DataPanel, FreshnessNote } from "../components/DataPanel";
 import { Field, FieldGrid } from "../components/Field";
 import { GatedNotice } from "../components/GatedNotice";
+import { PageHeader } from "../components/PageHeader";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { StatusChip } from "../components/StatusChip";
 import { useCredential } from "../credentials/context";
@@ -279,13 +281,10 @@ export default function ChangeRequestsScreen() {
 
   return (
     <section data-screen="change-requests">
-      <Typography variant="h2" sx={{ fontSize: 20, fontWeight: 600, mb: 0.5 }}>
-        Change requests
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Proposed edits to live orders. Review and apply are writes — they stay
-        visible while the switch is off, disabled.
-      </Typography>
+      <PageHeader
+        title="Change requests"
+        subtitle="Proposed edits to live orders. Review and apply are writes — they stay visible while the switch is off, disabled."
+      />
 
       {list.freshness === "blocked" ? (
         <GatedNotice what="The change request queue" result={list.result} />
@@ -295,7 +294,7 @@ export default function ChangeRequestsScreen() {
           <Panel title="Submit a request">
             <ChangeRequestCreate />
           </Panel>
-          <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+          <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }}>
             <TextField
               select
               size="small"
@@ -312,21 +311,14 @@ export default function ChangeRequestsScreen() {
             </TextField>
           </Paper>
 
-          <Box
-            data-freshness={list.freshness}
-            sx={{
-              mb: 1,
-              fontSize: 12,
-              color: list.freshness === "stale" ? palette.warningText : palette.textSecondary,
-            }}
-          >
+          <FreshnessNote freshness={list.freshness}>
             {list.freshness === "live" && plural(list.data?.count ?? rows.length, "change request")}
             {list.freshness === "stale" && "couldn't refresh — showing the last list received"}
             {list.freshness === "empty" &&
               (list.loading ? "loading…" : list.result ? describe(list.result) : "")}
-          </Box>
+          </FreshnessNote>
 
-          <Paper variant="outlined">
+          <DataPanel>
             {list.loading && rows.length === 0 ? (
               <Box sx={{ p: 2 }}>
                 <Skeleton height={28} />
@@ -395,7 +387,7 @@ export default function ChangeRequestsScreen() {
                 </TableBody>
               </Table>
             )}
-          </Paper>
+          </DataPanel>
         </>
       )}
     </section>

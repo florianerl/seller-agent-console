@@ -11,6 +11,7 @@ import {
   supplyChain,
 } from "../api/endpoints";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
+import { ScreenSection } from "../components/ScreenSection";
 import { ApiKeyDetailLookup, ApiKeyWrites, InventorySyncWrite, Panel } from "./mutations";
 import { StatusCard } from "../components/StatusCard";
 import { stamp } from "../lib/time";
@@ -50,14 +51,14 @@ export function HealthCards() {
     <Box
       sx={{
         display: "grid",
-        gap: 2,
-        gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", lg: "repeat(4, 1fr)" },
+        gap: 2.5,
+        gridTemplateColumns: { xs: "1fr", md: "1fr 1fr", xl: "repeat(4, 1fr)" },
       }}
     >
       <StatusCard title="Agent" testId="agent" resource={agent}>
         {(data) => (
           <>
-            <Typography sx={{ fontSize: 15, fontWeight: 600 }}>{data.status}</Typography>
+            <Typography sx={{ fontSize: 18, fontWeight: 700 }}>{data.status}</Typography>
             <Typography variant="body2" color="text.secondary">
               {identity.data?.name ?? "—"}
             </Typography>
@@ -75,7 +76,7 @@ export function HealthCards() {
       <StatusCard title="Console access" testId="access" resource={access}>
         {() => (
           <>
-            <Typography sx={{ fontSize: 15, fontWeight: 600 }}>
+            <Typography sx={{ fontSize: 18, fontWeight: 700 }}>
               {credential?.role === "operator" ? "Operator" : "Buyer"}
             </Typography>
             <Typography variant="body2" color="text.secondary">
@@ -88,7 +89,7 @@ export function HealthCards() {
       <StatusCard title="Inventory sync" testId="sync" resource={sync}>
         {(data) => (
           <>
-            <Typography sx={{ fontSize: 15, fontWeight: 600 }}>
+            <Typography sx={{ fontSize: 18, fontWeight: 700 }}>
               {data.enabled ? "Enabled" : "Disabled"}
             </Typography>
             <Typography variant="body2" color="text.secondary">
@@ -108,7 +109,7 @@ export function HealthCards() {
       <StatusCard title="Supply chain" testId="supply-chain" resource={chain}>
         {(data) => (
           <>
-            <Typography sx={{ fontSize: 15, fontWeight: 600 }}>
+            <Typography sx={{ fontSize: 18, fontWeight: 700 }}>
               {data.is_direct ? "Direct seller" : "Intermediary"}
             </Typography>
             <Typography variant="body2" color="text.secondary">
@@ -128,7 +129,7 @@ export function HealthCards() {
       <StatusCard title="Advertised card" testId="agent-card" resource={card}>
         {(data) => (
           <>
-            <Typography sx={{ fontSize: 15, fontWeight: 600 }}>{data.name}</Typography>
+            <Typography sx={{ fontSize: 18, fontWeight: 700 }}>{data.name}</Typography>
             <Typography variant="body2" color="text.secondary">
               {/* What the agent tells other agents about itself, which is
                   routinely wrong behind a proxy — it hardcodes localhost in the
@@ -150,11 +151,11 @@ export function HealthCards() {
         {(data) => {
           const latest = data.events[0];
           if (!latest) {
-            return <Typography sx={{ fontSize: 15 }}>no events yet</Typography>;
+            return <Typography sx={{ fontSize: 18 }}>no events yet</Typography>;
           }
           return (
             <>
-              <Typography sx={{ fontSize: 15, fontWeight: 600 }}>
+              <Typography sx={{ fontSize: 18, fontWeight: 700 }}>
                 {latest.event_type}
               </Typography>
               <Typography variant="body2" color="text.secondary">
@@ -165,15 +166,20 @@ export function HealthCards() {
         }}
       </StatusCard>
     </Box>
-    <Box sx={{ mt: 3 }}>
-      {!writesEnabled && <ReadOnlyNotice what="Minting keys or triggering a sync" />}
-      <Panel title="Inventory sync">
-        <InventorySyncWrite />
-      </Panel>
-      <Panel title="API keys">
-        <ApiKeyWrites />
-        <ApiKeyDetailLookup />
-      </Panel>
+    <Box sx={{ mt: 4 }}>
+      <ScreenSection
+        title="Operator writes"
+        caption="Mint keys and trigger inventory sync. Visible while the switch is off, disabled."
+      >
+        {!writesEnabled && <ReadOnlyNotice what="Minting keys or triggering a sync" />}
+        <Panel title="Inventory sync">
+          <InventorySyncWrite />
+        </Panel>
+        <Panel title="API keys">
+          <ApiKeyWrites />
+          <ApiKeyDetailLookup />
+        </Panel>
+      </ScreenSection>
     </Box>
     </>
   );

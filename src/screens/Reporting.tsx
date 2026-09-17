@@ -10,6 +10,7 @@ import { gamDeliveryReport, gamOrders, ordersReport } from "../api/endpoints";
 import { describe } from "../api/errors";
 import { Field, FieldGrid } from "../components/Field";
 import { GatedNotice } from "../components/GatedNotice";
+import { PageHeader } from "../components/PageHeader";
 import { plural, stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
 import { useResource, type ResourceHandle } from "../query/useResource";
@@ -103,11 +104,9 @@ function OrdersSummary() {
   }
 
   return (
-    <Paper variant="outlined" sx={{ p: 2 }} data-card="orders-report">
+    <Paper variant="outlined" sx={{ p: 2.5 }} data-card="orders-report">
       <Stack direction="row" justifyContent="space-between" alignItems="baseline" sx={{ mb: 1.5 }}>
-        <Typography variant="h3" sx={{ fontSize: 13, fontWeight: 600, color: "text.secondary" }}>
-          Orders, as the agent counts them
-        </Typography>
+        <Typography variant="h3">Orders, as the agent counts them</Typography>
         <Button size="small" onClick={report.refresh} disabled={report.validating}>
           {report.validating ? "Refreshing…" : "Refresh"}
         </Button>
@@ -173,11 +172,9 @@ function GamOrders() {
   const [loaded, setLoaded] = useState(false);
 
   return (
-    <Paper variant="outlined" sx={{ p: 2 }} data-card="gam-orders">
+    <Paper variant="outlined" sx={{ p: 2.5 }} data-card="gam-orders">
       <Stack direction="row" justifyContent="space-between" alignItems="baseline" sx={{ mb: 1.5 }}>
-        <Typography variant="h3" sx={{ fontSize: 13, fontWeight: 600, color: "text.secondary" }}>
-          Orders in the connected ad server
-        </Typography>
+        <Typography variant="h3">Orders in the connected ad server</Typography>
         {!loaded && (
           <Button size="small" onClick={() => setLoaded(true)}>
             Load
@@ -228,11 +225,8 @@ function DeliveryReport() {
   const [days, setDays] = useState("30");
 
   return (
-    <Paper variant="outlined" sx={{ p: 2 }} data-card="gam-report">
-      <Typography
-        variant="h3"
-        sx={{ fontSize: 13, fontWeight: 600, color: "text.secondary", mb: 1.5 }}
-      >
+    <Paper variant="outlined" sx={{ p: 2.5 }} data-card="gam-report">
+      <Typography variant="h3" sx={{ mb: 1.5 }}>
         Delivery for specific orders
       </Typography>
 
@@ -281,12 +275,10 @@ function DeliveryReport() {
 export default function ReportingScreen() {
   return (
     <section data-screen="reporting">
-      <Typography variant="h2" sx={{ fontSize: 20, fontWeight: 600, mb: 0.5 }}>
-        Reporting
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        What the agent counted, and what the connected ad server reports.
-      </Typography>
+      <PageHeader
+        title="Reporting"
+        subtitle="What the agent counted, and what the connected ad server reports."
+      />
 
       <Stack spacing={2}>
         <OrdersSummary />

@@ -15,7 +15,9 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { sessionById, sessions } from "../api/endpoints";
 import { describe } from "../api/errors";
+import { DataPanel, FreshnessNote } from "../components/DataPanel";
 import { Field, FieldGrid } from "../components/Field";
+import { PageHeader } from "../components/PageHeader";
 import { StatusChip } from "../components/StatusChip";
 import { WritesNotice } from "../components/WritesNotice";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
@@ -118,12 +120,10 @@ export default function NegotiationScreen() {
 
   return (
     <section data-screen="negotiation">
-      <Typography variant="h2" sx={{ fontSize: 20, fontWeight: 600, mb: 0.5 }}>
-        Negotiation
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Buyer sessions and their conversation history.
-      </Typography>
+      <PageHeader
+        title="Negotiation"
+        subtitle="Buyer sessions and their conversation history."
+      />
 
       <WritesNotice what="Listing sessions marks any session past its expiry as expired and saves that." />
       {!writesEnabled && <ReadOnlyNotice what="Creating a session or sending a message" />}
@@ -145,7 +145,7 @@ export default function NegotiationScreen() {
         the same thing.
       </Alert>
 
-      <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+      <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }}>
         <TextField
           select
           size="small"
@@ -162,21 +162,14 @@ export default function NegotiationScreen() {
         </TextField>
       </Paper>
 
-      <Box
-        data-freshness={list.freshness}
-        sx={{
-          mb: 1,
-          fontSize: 12,
-          color: list.freshness === "stale" ? palette.warningText : palette.textSecondary,
-        }}
-      >
+      <FreshnessNote freshness={list.freshness}>
         {list.freshness === "live" && plural(rows.length, "session")}
         {list.freshness === "stale" && "couldn't refresh — showing the last list received"}
         {list.freshness === "empty" &&
           (list.loading ? "loading…" : list.result ? describe(list.result) : "")}
-      </Box>
+      </FreshnessNote>
 
-      <Paper variant="outlined">
+      <DataPanel>
         {list.loading && rows.length === 0 ? (
           <Box sx={{ p: 2 }}>
             <Skeleton height={28} />
@@ -244,7 +237,7 @@ export default function NegotiationScreen() {
             </TableBody>
           </Table>
         )}
-      </Paper>
+      </DataPanel>
     </section>
   );
 }

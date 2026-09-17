@@ -15,7 +15,15 @@ import { ConnectionMenu } from "./ConnectionMenu";
 import { WritesChip } from "./WritesChip";
 import { InstallButton } from "../pwa/InstallButton";
 import { MenuIcon } from "../components/MenuIcon";
+import { CONTENT_MAX_WIDTH } from "../components/DataPanel";
 import { palette } from "../theme/palette";
+
+const drawerPaper = {
+  width: DRAWER_WIDTH,
+  boxSizing: "border-box" as const,
+  backgroundColor: palette.paper,
+  borderRight: `1px solid ${palette.line}`,
+};
 
 export function Shell() {
   const theme = useTheme();
@@ -30,12 +38,13 @@ export function Shell() {
         sx={{
           backgroundColor: palette.brandBlack,
           zIndex: (t) => t.zIndex.drawer + 1,
+          borderBottom: `3px solid ${palette.brandRed}`,
           // apple-mobile-web-app-status-bar-style: black-translucent draws the
           // app under the status bar, and MUI does not inset for it.
           pt: "env(safe-area-inset-top)",
         }}
       >
-        <Toolbar variant="dense">
+        <Toolbar>
           {!isDesktop && (
             <IconButton
               edge="start"
@@ -48,10 +57,7 @@ export function Shell() {
               <MenuIcon />
             </IconButton>
           )}
-          <Typography
-            variant="h1"
-            sx={{ fontSize: 15, fontWeight: 600, letterSpacing: 0.2, flexGrow: 1 }}
-          >
+          <Typography variant="h1" sx={{ flexGrow: 1 }}>
             Seller Agent Console
           </Typography>
           <WritesChip />
@@ -66,15 +72,10 @@ export function Shell() {
           sx={{
             width: DRAWER_WIDTH,
             flexShrink: 0,
-            "& .MuiDrawer-paper": {
-              width: DRAWER_WIDTH,
-              boxSizing: "border-box",
-              backgroundColor: palette.ground,
-              borderRight: `1px solid ${palette.line}`,
-            },
+            "& .MuiDrawer-paper": drawerPaper,
           }}
         >
-          <Toolbar variant="dense" sx={{ pt: "env(safe-area-inset-top)" }} />
+          <Toolbar sx={{ pt: "env(safe-area-inset-top)", minHeight: { xs: 59, sm: 67 } }} />
           <Sidebar />
         </Drawer>
       ) : (
@@ -85,13 +86,12 @@ export function Shell() {
           ModalProps={{ keepMounted: true }}
           sx={{
             "& .MuiDrawer-paper": {
-              width: DRAWER_WIDTH,
-              backgroundColor: palette.ground,
+              ...drawerPaper,
               pb: "env(safe-area-inset-bottom)",
             },
           }}
         >
-          <Toolbar variant="dense" />
+          <Toolbar />
           <Sidebar onNavigate={() => setMobileOpen(false)} />
         </Drawer>
       )}
@@ -101,21 +101,23 @@ export function Shell() {
         sx={{
           flexGrow: 1,
           p: { xs: 2, md: 3 },
-          pb: "calc(env(safe-area-inset-bottom) + 16px)",
+          pb: "calc(env(safe-area-inset-bottom) + 24px)",
           minWidth: 0,
         }}
       >
-        <Toolbar variant="dense" sx={{ pt: "env(safe-area-inset-top)" }} />
-        <ConnectivityBanner />
-        <Suspense
-          fallback={
-            <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
-              <CircularProgress aria-label="Loading screen" size={28} />
-            </Box>
-          }
-        >
-          <Outlet />
-        </Suspense>
+        <Toolbar sx={{ pt: "env(safe-area-inset-top)", minHeight: { xs: 59, sm: 67 } }} />
+        <Box sx={{ maxWidth: CONTENT_MAX_WIDTH }}>
+          <ConnectivityBanner />
+          <Suspense
+            fallback={
+              <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
+                <CircularProgress aria-label="Loading screen" size={28} />
+              </Box>
+            }
+          >
+            <Outlet />
+          </Suspense>
+        </Box>
       </Box>
     </Box>
   );

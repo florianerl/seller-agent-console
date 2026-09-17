@@ -28,9 +28,12 @@ import {
   type Money,
 } from "../api/endpoints";
 import { describe } from "../api/errors";
+import { DataPanel } from "../components/DataPanel";
 import { Field, FieldGrid } from "../components/Field";
 import { GatedNotice } from "../components/GatedNotice";
+import { PageHeader } from "../components/PageHeader";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
+import { ScreenSection } from "../components/ScreenSection";
 import { stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
 import { useResource } from "../query/useResource";
@@ -65,30 +68,6 @@ function isAvailsCollection(result: AvailsCheckResult): result is AvailsCollecti
 
 function availsList(result: AvailsCheckResult): Avails[] {
   return isAvailsCollection(result) ? result.avails : [result];
-}
-
-function Section({
-  title,
-  caption,
-  children,
-}: {
-  title: string;
-  caption?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <Box component="section" sx={{ mb: 4 }}>
-      <Typography variant="h3" sx={{ fontSize: 16, fontWeight: 600, mb: caption ? 0.25 : 1 }}>
-        {title}
-      </Typography>
-      {caption && (
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1, fontSize: 12 }}>
-          {caption}
-        </Typography>
-      )}
-      {children}
-    </Box>
-  );
 }
 
 function ProductDetail({ productId }: { productId: string }) {
@@ -207,7 +186,7 @@ function Products() {
   }
 
   return (
-    <Paper variant="outlined">
+    <DataPanel>
       <Table size="small" data-block="products">
         <TableHead>
           <TableRow>
@@ -259,7 +238,7 @@ function Products() {
           ))}
         </TableBody>
       </Table>
-    </Paper>
+    </DataPanel>
   );
 }
 
@@ -291,7 +270,7 @@ function Rates() {
           fallback values, not this publisher's pricing.
         </Alert>
       )}
-      <Paper variant="outlined">
+      <DataPanel>
         <Table size="small" data-block="rate-card" data-source={card.data.source}>
           <TableHead>
             <TableRow>
@@ -318,7 +297,7 @@ function Rates() {
             ))}
           </TableBody>
         </Table>
-      </Paper>
+      </DataPanel>
       <Typography variant="body2" sx={{ mt: 0.5, fontSize: 12, color: palette.textSecondary }}>
         {configured ? "Set by an operator" : "Agent defaults"} · updated{" "}
         {stamp(card.data.updated_at)}
@@ -343,7 +322,7 @@ function Packages() {
   }
 
   return (
-    <Paper variant="outlined">
+    <DataPanel>
       <Table size="small" data-block="packages">
         <TableHead>
           <TableRow>
@@ -385,7 +364,7 @@ function Packages() {
           ))}
         </TableBody>
       </Table>
-    </Paper>
+    </DataPanel>
   );
 }
 
@@ -400,7 +379,7 @@ function Discovery() {
   }
 
   return (
-    <Paper variant="outlined" sx={{ p: 2 }} data-block="discovery">
+    <Paper variant="outlined" sx={{ p: 2.5 }} data-block="discovery">
       <Box component="form" onSubmit={handleSubmit}>
         <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" useFlexGap>
           <TextField
@@ -503,7 +482,7 @@ function AvailsCheck() {
   }
 
   return (
-    <Paper variant="outlined" sx={{ p: 2 }} data-block="avails">
+    <Paper variant="outlined" sx={{ p: 2.5 }} data-block="avails">
       <Box component="form" onSubmit={handleSubmit}>
         <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" useFlexGap>
           <TextField
@@ -631,7 +610,7 @@ function Pricing() {
   }
 
   return (
-    <Paper variant="outlined" sx={{ p: 2 }} data-block="pricing">
+    <Paper variant="outlined" sx={{ p: 2.5 }} data-block="pricing">
       <Box component="form" onSubmit={handleSubmit}>
         <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" useFlexGap>
           <TextField
@@ -722,25 +701,20 @@ export default function CatalogScreen() {
   const { writesEnabled } = useCredential();
   return (
     <section data-screen="catalog">
-      <Typography variant="h2" sx={{ fontSize: 20, fontWeight: 600, mb: 0.5 }}>
-        Catalog
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        What this agent offers buyers.
-      </Typography>
+      <PageHeader title="Catalog" subtitle="What this agent offers buyers." />
 
-      <Section
+      <ScreenSection
         title="Products"
         caption="The same for every caller — this route ignores the key entirely."
       >
         <Products />
-      </Section>
+      </ScreenSection>
 
-      <Section title="Rate card" caption="Operator-set base pricing by inventory type.">
+      <ScreenSection title="Rate card" caption="Operator-set base pricing by inventory type.">
         <Rates />
-      </Section>
+      </ScreenSection>
 
-      <Section
+      <ScreenSection
         title="Packages"
         // The one catalog route whose content depends on the credential:
         // without a key the agent returns a price band, with one it returns
@@ -749,30 +723,30 @@ export default function CatalogScreen() {
         caption="As seen by this key. Unauthenticated callers get price bands instead of exact prices, and a buyer key may be priced differently again."
       >
         <Packages />
-      </Section>
+      </ScreenSection>
 
-      <Section
+      <ScreenSection
         title="Discovery"
         caption="What matches a brief. A POST that reads the catalog and stores nothing, so it runs with writes off."
       >
         <Discovery />
-      </Section>
+      </ScreenSection>
 
-      <Section
+      <ScreenSection
         title="Availability"
         caption="A forecast for a flight. Reserves nothing; also a query-shaped POST."
       >
         <AvailsCheck />
-      </Section>
+      </ScreenSection>
 
-      <Section
+      <ScreenSection
         title="Price a line"
         caption="Applies tier and volume discounts to the rate card without booking. An unknown product is a typo, not an outage."
       >
         <Pricing />
-      </Section>
+      </ScreenSection>
 
-      <Section
+      <ScreenSection
         title="Writes"
         caption="Rate card, packages, and inventory-type overrides. Visible while the switch is off, disabled."
       >
@@ -781,7 +755,7 @@ export default function CatalogScreen() {
         <PackageLookup />
         <CreateQuoteWrite />
         <QuoteLookup />
-      </Section>
+      </ScreenSection>
     </section>
   );
 }

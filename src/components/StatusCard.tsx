@@ -40,35 +40,40 @@ export function StatusCard<T>({
       variant="outlined"
       data-card={testId}
       data-state={freshness}
-      sx={{ p: 2, borderTop: `3px solid ${RULE[freshness]}`, height: "100%" }}
+      sx={{
+        p: 2.5,
+        borderTop: `3px solid ${RULE[freshness]}`,
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+      }}
     >
-      <Typography
-        variant="h3"
-        sx={{ fontSize: 13, fontWeight: 600, color: "text.secondary", mb: 1 }}
-      >
+      <Typography variant="overline" component="h3" sx={{ mb: 1.25 }}>
         {title}
       </Typography>
 
-      {loading && !data && freshness !== "blocked" ? (
-        <Skeleton variant="text" width="70%" height={28} />
-      ) : freshness === "blocked" ? (
-        <Typography variant="body2" sx={{ color: palette.error }}>
-          {result ? describe(result) : "access denied"}
-        </Typography>
-      ) : data !== undefined ? (
-        <Box sx={{ fontSize: 14 }}>{children(data)}</Box>
-      ) : (
-        <Typography variant="body2" sx={{ color: palette.textSecondary }}>
-          {result ? describe(result) : "no data yet"}
-        </Typography>
-      )}
+      <Box sx={{ flex: 1 }}>
+        {loading && !data && freshness !== "blocked" ? (
+          <Skeleton variant="text" width="70%" height={32} />
+        ) : freshness === "blocked" ? (
+          <Typography variant="body2" sx={{ color: palette.error }}>
+            {result ? describe(result) : "access denied"}
+          </Typography>
+        ) : data !== undefined ? (
+          <Box sx={{ fontSize: 15 }}>{children(data)}</Box>
+        ) : (
+          <Typography variant="body2" sx={{ color: palette.textSecondary }}>
+            {result ? describe(result) : "no data yet"}
+          </Typography>
+        )}
+      </Box>
 
       <Typography
         variant="caption"
         component="p"
         data-freshness={freshness}
         sx={{
-          mt: 1.5,
+          mt: 2,
           display: "block",
           color: freshness === "stale" ? palette.warningText : palette.textSecondary,
         }}

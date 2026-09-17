@@ -14,7 +14,9 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { orderAudit, orders } from "../api/endpoints";
 import { describe } from "../api/errors";
+import { DataPanel, FreshnessNote } from "../components/DataPanel";
 import { GatedNotice } from "../components/GatedNotice";
+import { PageHeader } from "../components/PageHeader";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { StatusChip } from "../components/StatusChip";
 import { useCredential } from "../credentials/context";
@@ -188,19 +190,17 @@ export default function OrdersScreen() {
 
   return (
     <section data-screen="orders">
-      <Typography variant="h2" sx={{ fontSize: 20, fontWeight: 600, mb: 0.5 }}>
-        Orders
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Order lifecycle and its audit trail. Transitions are writes.
-      </Typography>
+      <PageHeader
+        title="Orders"
+        subtitle="Order lifecycle and its audit trail. Transitions are writes."
+      />
 
       {!writesEnabled && <ReadOnlyNotice what="Creating or transitioning an order" />}
       <Panel title="Create and transition">
         <OrderWrites />
       </Panel>
 
-      <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+      <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }}>
         <TextField
           select
           size="small"
@@ -217,22 +217,15 @@ export default function OrdersScreen() {
         </TextField>
       </Paper>
 
-      <Box
-        data-freshness={list.freshness}
-        sx={{
-          mb: 1,
-          fontSize: 12,
-          color: list.freshness === "stale" ? palette.warningText : palette.textSecondary,
-        }}
-      >
+      <FreshnessNote freshness={list.freshness}>
         {list.freshness === "live" && plural(list.data?.count ?? rows.length, "order")}
         {list.freshness === "stale" && "couldn't refresh — showing the last list received"}
         {list.freshness === "blocked" && "access denied"}
         {list.freshness === "empty" &&
           (list.loading ? "loading…" : list.result ? describe(list.result) : "")}
-      </Box>
+      </FreshnessNote>
 
-      <Paper variant="outlined">
+      <DataPanel>
         {list.loading && rows.length === 0 ? (
           <Box sx={{ p: 2 }}>
             <Skeleton height={28} />
@@ -308,7 +301,7 @@ export default function OrdersScreen() {
             </TableBody>
           </Table>
         )}
-      </Paper>
+      </DataPanel>
     </section>
   );
 }

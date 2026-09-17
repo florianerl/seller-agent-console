@@ -14,8 +14,11 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { mediaKit, mediaKitPackage, mediaKitPackages, searchMediaKit } from "../api/endpoints";
 import { describe } from "../api/errors";
+import { DataPanel, FreshnessNote } from "../components/DataPanel";
 import { Field, FieldGrid } from "../components/Field";
 import { GatedNotice } from "../components/GatedNotice";
+import { PageHeader } from "../components/PageHeader";
+import { ScreenSection } from "../components/ScreenSection";
 import { StatusCard } from "../components/StatusCard";
 import { plural, stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
@@ -138,22 +141,15 @@ function PackagesTable() {
 
   return (
     <>
-      <Box
-        data-freshness={list.freshness}
-        sx={{
-          mb: 1,
-          fontSize: 12,
-          color: list.freshness === "stale" ? palette.warningText : palette.textSecondary,
-        }}
-      >
+      <FreshnessNote freshness={list.freshness}>
         {list.freshness === "live" &&
           `${plural(rows.length, "package")} · as of ${asOfStamp(list.asOf!)}`}
         {list.freshness === "stale" && "couldn't refresh — showing the last packages received"}
         {list.freshness === "empty" &&
           (list.loading ? "loading…" : list.result ? describe(list.result) : "")}
-      </Box>
+      </FreshnessNote>
 
-      <Paper variant="outlined">
+      <DataPanel>
         {list.loading && rows.length === 0 ? (
           <Box sx={{ p: 2 }}>
             <Skeleton height={28} />
@@ -220,7 +216,7 @@ function PackagesTable() {
             </TableBody>
           </Table>
         )}
-      </Paper>
+      </DataPanel>
     </>
   );
 }
@@ -313,7 +309,7 @@ function Search() {
   }
 
   return (
-    <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
+    <Paper variant="outlined" sx={{ p: 2.5, mb: 3 }}>
       <Box component="form" onSubmit={handleSubmit}>
         <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" useFlexGap>
           <TextField
@@ -337,22 +333,28 @@ function Search() {
 export default function MediaKitScreen() {
   return (
     <section data-screen="media-kit">
-      <Typography variant="h2" sx={{ fontSize: 20, fontWeight: 600, mb: 0.5 }}>
-        Media kit
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        The packages this agent publishes to buyers, with full-text search over them.
-      </Typography>
+      <PageHeader
+        title="Media kit"
+        subtitle="The packages this agent publishes to buyers, with full-text search over them."
+      />
 
-      <Box sx={{ mb: 3, maxWidth: 320 }}>
-        <Summary />
-      </Box>
+      <ScreenSection title="Summary">
+        <Box sx={{ mb: 0, maxWidth: 360 }}>
+          <Summary />
+        </Box>
+      </ScreenSection>
 
-      <Search />
+      <ScreenSection title="Search" caption="A query-shaped POST — it runs with writes off.">
+        <Search />
+      </ScreenSection>
 
-      <AudienceMatchForm />
+      <ScreenSection title="Audience">
+        <AudienceMatchForm />
+      </ScreenSection>
 
-      <PackagesTable />
+      <ScreenSection title="Packages">
+        <PackagesTable />
+      </ScreenSection>
     </section>
   );
 }

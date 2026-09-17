@@ -35,15 +35,14 @@ export function WriteForm({
   const [open, setOpen] = useState(false);
 
   return (
-    <Box sx={{ mt: 1.5 }} data-block={`write:${action}`}>
+    <Box sx={{ mt: 2 }} data-block={`write:${action}`}>
       {children}
       <Button
-        size="small"
         variant="outlined"
         data-action={action}
         disabled={blocked || pending}
         onClick={() => setOpen(true)}
-        sx={{ mt: children ? 1 : 0 }}
+        sx={{ mt: children ? 1.5 : 0 }}
       >
         {pending ? "Working…" : confirmLabel}
       </Button>

@@ -10,7 +10,7 @@ import Alert from "@mui/material/Alert";
  */
 export function ReadOnlyNotice({ what }: { what: string }) {
   return (
-    <Alert severity="info" variant="outlined" sx={{ mb: 2 }} data-note="read-only">
+    <Alert severity="info" variant="outlined" sx={{ mb: 2.5 }} data-note="read-only">
       This console is read-only. {what} is disabled until writes are enabled for
       this key, under the connection menu.
     </Alert>

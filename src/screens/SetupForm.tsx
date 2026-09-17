@@ -9,6 +9,7 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { probe, type ProbeResult } from "../api/probe";
+import { PageHeader } from "../components/PageHeader";
 import { useCredential } from "../credentials/context";
 
 export function SetupForm() {
@@ -42,14 +43,13 @@ export function SetupForm() {
 
   return (
     <Box sx={{ maxWidth: 560 }}>
-      <Typography variant="h2" sx={{ fontSize: 20, fontWeight: 600, mb: 1 }}>
-        Connect to your seller agent
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        This console reads from the agent's API. It never writes.
-      </Typography>
+      <PageHeader
+        eyebrow="Operator console"
+        title="Connect to your seller agent"
+        subtitle="This console talks to the agent's API from this browser. Writes stay off until you enable them for this key."
+      />
 
-      <Paper variant="outlined" sx={{ p: 3 }}>
+      <Paper variant="outlined" sx={{ p: { xs: 2.5, sm: 3.5 } }}>
         {/* The handler is async; a form's onSubmit wants void. Left bare, a
               rejection escapes as an unhandled promise rather than reaching the
               form's own error state. */}
@@ -67,7 +67,6 @@ export function SetupForm() {
               placeholder="https://agent.example.com"
               required
               fullWidth
-              size="small"
               autoComplete="url"
               slotProps={{ htmlInput: { "aria-describedby": "agent-address-help" } }}
               helperText="The origin only — no path."
@@ -79,7 +78,6 @@ export function SetupForm() {
               onChange={(e) => setApiKey(e.target.value)}
               required
               fullWidth
-              size="small"
               type="password"
               autoComplete="off"
               spellCheck={false}
@@ -89,12 +87,8 @@ export function SetupForm() {
 
             {failure && (
               <Alert severity="error" data-probe-step={failure.step}>
-                <AlertTitle sx={{ fontSize: 14, fontWeight: 600 }}>
-                  {failure.message}
-                </AlertTitle>
-                {failure.hint && (
-                  <Typography variant="body2">{failure.hint}</Typography>
-                )}
+                <AlertTitle>{failure.message}</AlertTitle>
+                {failure.hint && <Typography variant="body2">{failure.hint}</Typography>}
               </Alert>
             )}
 
@@ -105,7 +99,7 @@ export function SetupForm() {
                 color="primary"
                 disabled={checking}
                 startIcon={
-                  checking ? <CircularProgress size={14} color="inherit" /> : undefined
+                  checking ? <CircularProgress size={16} color="inherit" /> : undefined
                 }
               >
                 {checking ? "Checking…" : "Connect"}
@@ -116,14 +110,12 @@ export function SetupForm() {
       </Paper>
 
       <Alert severity="warning" variant="outlined" sx={{ mt: 3 }}>
-        <AlertTitle sx={{ fontSize: 14, fontWeight: 600 }}>
-          About the key you paste here
-        </AlertTitle>
+        <AlertTitle>About the key you paste here</AlertTitle>
         <Typography variant="body2">
           An operator key carries full write authority on your agent. This console
-          issues no writes, but that is a choice this application makes, not a
-          restriction the key carries. Anything running in this browser can read it.
-          Use a dedicated key and revoke it if the device is lost.
+          will not send writes until you enable them for this key, under the
+          connection menu. Anything running in this browser can read the key. Use
+          a dedicated key and revoke it if the device is lost.
         </Typography>
       </Alert>
     </Box>

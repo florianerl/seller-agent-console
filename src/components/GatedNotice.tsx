@@ -25,9 +25,7 @@ export function GatedNotice({
   if (anonymous) {
     return (
       <Alert severity="warning" variant="outlined" data-state="key-rejected">
-        <AlertTitle sx={{ fontSize: 14, fontWeight: 600 }}>
-          The agent rejected this key
-        </AlertTitle>
+        <AlertTitle>The agent rejected this key</AlertTitle>
         <Typography variant="body2">
           {what} could not be read because the agent refused the stored key. It has
           most likely expired or been revoked — or it belongs to a different
@@ -40,9 +38,7 @@ export function GatedNotice({
 
   return (
     <Alert severity="info" variant="outlined" data-state="operator-required">
-      <AlertTitle sx={{ fontSize: 14, fontWeight: 600 }}>
-        This screen needs an operator key
-      </AlertTitle>
+      <AlertTitle>This screen needs an operator key</AlertTitle>
       <Typography variant="body2">
         {what} is only readable with the operator role. The key this console is
         using is a buyer key, so the agent refuses the request. Sign out and

@@ -8,7 +8,7 @@ import Alert from "@mui/material/Alert";
  */
 export function WritesNotice({ what }: { what: string }) {
   return (
-    <Alert severity="info" variant="outlined" sx={{ mb: 2 }} data-note="writes">
+    <Alert severity="info" variant="outlined" sx={{ mb: 2.5 }} data-note="writes">
       Opening this screen makes the agent write. {what} That GET is not
       read-only on the server, even when this console's write switch is off.
     </Alert>

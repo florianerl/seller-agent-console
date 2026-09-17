@@ -23,8 +23,9 @@ export function WritesChip() {
       data-writes="on"
       sx={{
         mr: 1.5,
-        fontSize: 11,
-        fontWeight: 600,
+        height: 28,
+        fontSize: 12,
+        fontWeight: 700,
         letterSpacing: 0.3,
         color: palette.brandBlack,
         backgroundColor: palette.attention,

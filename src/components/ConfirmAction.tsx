@@ -35,11 +35,9 @@ export function ConfirmAction({
 }) {
   return (
     <Dialog open={open} onClose={pending ? undefined : onCancel}>
-      <DialogTitle sx={{ fontSize: 16, fontWeight: 600 }}>{title}</DialogTitle>
+      <DialogTitle>{title}</DialogTitle>
       <DialogContent>
-        <DialogContentText component="div" sx={{ fontSize: 14 }}>
-          {consequence}
-        </DialogContentText>
+        <DialogContentText component="div">{consequence}</DialogContentText>
       </DialogContent>
       <DialogActions>
         <Button onClick={onCancel} disabled={pending}>
