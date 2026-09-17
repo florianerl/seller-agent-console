@@ -98,8 +98,16 @@ describe("the fetch seam is the only place that issues requests", () => {
 
 describe("paths never end in a slash", () => {
   it("avoids the 307 that redirect_slashes would produce", () => {
-    const endpoints = readFileSync(resolve(srcDir, "api/endpoints/index.ts"), "utf8");
-    const paths = [...endpoints.matchAll(/^\s+\w+:\s*"(\/[^"]*)"/gm)].map((m) => m[1]!);
+    // Every module in the directory, not just the barrel: the table is split by
+    // domain now, and a guard that only read index.ts would pass by reading
+    // nothing at all.
+    const dir = resolve(srcDir, "api/endpoints");
+    const paths = readdirSync(dir)
+      .filter((f) => f.endsWith(".ts"))
+      .flatMap((f) => [
+        ...readFileSync(resolve(dir, f), "utf8").matchAll(/^\s+\w+:\s*"(\/[^"]*)"/gm),
+      ])
+      .map((m) => m[1]!);
 
     expect(paths.length).toBeGreaterThan(5);
     for (const p of paths) {
