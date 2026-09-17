@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { registerSW } from "virtual:pwa-register";
+import { shouldReloadOnControllerChange } from "./reload-policy";
 
 /** How often to ask the browser whether a new build exists. */
 const UPDATE_CHECK_INTERVAL = 60 * 60 * 1000;
@@ -34,7 +35,7 @@ export function useServiceWorker(): { updateReady: boolean; applyUpdate: () => v
     let reloading = false;
 
     const onControllerChange = () => {
-      if (!wasControlled || reloading) return;
+      if (!shouldReloadOnControllerChange({ wasControlled, reloading })) return;
       reloading = true;
       window.location.reload();
     };
