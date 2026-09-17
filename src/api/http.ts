@@ -44,7 +44,7 @@ export const TIMEOUTS = {
 function buildUrl(
   baseUrl: string,
   path: string,
-  query?: Readonly<Record<string, QueryValue>> | undefined,
+  query?: Readonly<Record<string, QueryValue>>,
 ): string {
   // Join by hand rather than with new URL(path, base): the base may carry a
   // path prefix behind a reverse proxy, and URL resolution would discard it.

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import useSWR from "swr";
 import type { Result } from "../api/errors";
 import type { Connection } from "../api/http";
@@ -26,7 +26,15 @@ export function useResource<T>(
   options: { refreshInterval?: number } = {},
 ): ResourceHandle<T> {
   const { credential, connection } = useCredential();
-  const lastGood = useRef<{ data: T; at: number } | undefined>(undefined);
+
+  // The last value that actually arrived, kept as state adjusted during render
+  // rather than as a ref written from an effect. A ref would be read while
+  // rendering and written afterwards, so a render React discards would leave
+  // the two out of step — the card would show a value the current result no
+  // longer justifies. Adjusting state during render is the documented way to
+  // derive from a changing input, and it re-renders before anything commits.
+  const [lastGood, setLastGood] = useState<{ data: T; at: number } | undefined>(undefined);
+  const [seen, setSeen] = useState<Result<T> | undefined>(undefined);
 
   // SWR's compare ignores fetchedAt so an unchanged payload keeps its object
   // identity and consumers do not re-reconcile. The timestamp still has to
@@ -54,22 +62,26 @@ export function useResource<T>(
     },
   );
 
+  if (result !== seen) {
+    setSeen(result);
+    if (result?.kind === "ok") {
+      setLastGood({ data: result.data, at: result.fetchedAt });
+    }
+    // A rejected result must not leave privileged data behind to be reused.
+    if (result?.kind === "rejected") {
+      setLastGood(undefined);
+    }
+  }
+
   useEffect(() => {
     // Feeds the shell-level "can't reach the agent" signal, which needs
-    // several resources to agree before it says anything.
+    // several resources to agree before it says anything. This one is a real
+    // side effect on something outside React, so it belongs in an effect.
     if (result) reportResult(name, result.kind === "unavailable");
-
-    if (result?.kind === "ok") {
-      lastGood.current = { data: result.data, at: result.fetchedAt };
-    }
-    // A rejected result must not leave privileged data cached for reuse.
-    if (result?.kind === "rejected") {
-      lastGood.current = undefined;
-    }
   }, [result, name]);
 
   return {
-    ...derive(result, lastGood.current, isLoading),
+    ...derive(result, lastGood, isLoading),
     validating: isValidating,
     // Exposed for resources that deliberately do not poll: the deals export is
     // an unpaginated full scan, so refreshing it has to be the operator's

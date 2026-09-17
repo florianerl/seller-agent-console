@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, waitFor, within } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { ThemeProvider } from "@mui/material/styles";
 import { API, server } from "../setup/msw";

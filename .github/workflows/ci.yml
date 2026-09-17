@@ -28,6 +28,10 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # Type-aware, and warnings fail: a warning nobody fails on is a comment.
+      - name: Lint
+        run: npm run lint
+
       # Shuffled so order dependence between tests surfaces here rather than
       # intermittently. Vitest prints the seed on failure for reproduction.
       - name: Unit and integration tests

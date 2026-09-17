@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { SWRConfig } from "swr";
 import type { ReactNode } from "react";
 import { useCredential } from "../credentials/context";
@@ -32,19 +32,22 @@ export function QueryProvider({ children }: { children: ReactNode }) {
   const credId = credential?.credId;
 
   const [cache, setCache] = useState<SwrCache | undefined>();
-  const cacheRef = useRef<SwrCache | undefined>(undefined);
+  const [loadedFor, setLoadedFor] = useState<string | undefined>(undefined);
+
+  // Dropping the previous credential's cache is not a side effect to schedule —
+  // it has to be true of the very render that sees the new credential, or a
+  // frame renders one principal's data under another's identity.
+  if (loadedFor !== credId) {
+    setLoadedFor(credId);
+    setCache(undefined);
+  }
 
   useEffect(() => {
-    if (!credId) {
-      setCache(undefined);
-      cacheRef.current = undefined;
-      return;
-    }
+    if (!credId) return;
 
     let cancelled = false;
     void loadCache(credId, __BUILD_ID__).then((restored) => {
       if (cancelled) return;
-      cacheRef.current = restored;
       setCache(restored);
     });
 
@@ -56,12 +59,14 @@ export function QueryProvider({ children }: { children: ReactNode }) {
   // Write on hide and on unload rather than on every mutation: polling five
   // resources would otherwise thrash IndexedDB every few seconds for data that
   // only matters if the page goes away.
+  // Depends on `cache` rather than reading it through a ref. SWR mutates the
+  // Map in place, so its identity changes only on hydration or a credential
+  // switch — this resubscribes twice per session, not once per poll.
   useEffect(() => {
-    if (!credId) return;
+    if (!credId || !cache) return;
 
     const persist = () => {
-      const current = cacheRef.current;
-      if (current) void saveCache(current, credId, __BUILD_ID__);
+      void saveCache(cache, credId, __BUILD_ID__);
     };
     const onHide = () => {
       if (document.visibilityState === "hidden") persist();
@@ -75,7 +80,7 @@ export function QueryProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("pagehide", persist);
       persist();
     };
-  }, [credId]);
+  }, [credId, cache]);
 
   // Until the cache is hydrated there is nothing to restore, so rendering with
   // a fresh provider would start every card empty and then swap — a visible

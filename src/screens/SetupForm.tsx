@@ -50,7 +50,15 @@ export function SetupForm() {
       </Typography>
 
       <Paper variant="outlined" sx={{ p: 3 }}>
-        <form onSubmit={onSubmit} noValidate>
+        {/* The handler is async; a form's onSubmit wants void. Left bare, a
+              rejection escapes as an unhandled promise rather than reaching the
+              form's own error state. */}
+        <form
+          onSubmit={(event) => {
+            void onSubmit(event);
+          }}
+          noValidate
+        >
           <Stack spacing={2.5}>
             <TextField
               label="Agent address"

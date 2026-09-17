@@ -134,7 +134,7 @@ export const eventById = (
   get(c, `${PATHS.events}/${encodeURIComponent(eventId)}`, {
     schema: EventDetail,
     signal,
-  }) as Promise<Result<Record<string, unknown>>>;
+  });
 
 // --- api keys (operator only; used as the role probe) -----------------------
 
