@@ -14,7 +14,7 @@ export function DataPanel({
   return (
     <Box>
       {header}
-      <Paper variant="outlined" sx={{ overflow: "hidden", borderRadius: 4 }}>
+      <Paper variant="outlined" sx={{ overflow: "hidden" }}>
         {children}
       </Paper>
     </Box>

@@ -103,7 +103,7 @@ describe("shell navigation", () => {
     await screen.findByRole("navigation", { name: /console sections/i });
 
     const reachable: string[] = [];
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 20; i++) {
       await user.tab();
       const el = document.activeElement;
       if (el && el.tagName === "A") reachable.push(el.textContent ?? "");

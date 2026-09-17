@@ -45,7 +45,6 @@ export function StatusCard<T>({
         height: "100%",
         display: "flex",
         flexDirection: "column",
-        borderRadius: 4,
       }}
     >
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>

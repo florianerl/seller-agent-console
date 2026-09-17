@@ -44,10 +44,10 @@ export const theme = createTheme({
     },
     h2: {
       fontFamily,
-      fontSize: 32,
+      fontSize: 40,
       fontWeight: 700,
-      letterSpacing: -0.7,
-      lineHeight: 1.15,
+      letterSpacing: -0.9,
+      lineHeight: 1.1,
       color: palette.brandBlack,
     },
     h3: {
@@ -86,7 +86,7 @@ export const theme = createTheme({
     },
   },
 
-  shape: { borderRadius: 12 },
+  shape: { borderRadius: 4 },
 
   components: {
     MuiButton: {
@@ -96,11 +96,13 @@ export const theme = createTheme({
       styleOverrides: {
         root: {
           minHeight: 44,
-          paddingInline: 18,
-          borderRadius: 12,
+          paddingInline: 20,
+          borderRadius: 4,
         },
         sizeSmall: {
-          minHeight: 36,
+          // Match MUI outlined TextField size="small" so FormRow flex-end
+          // sits on the input, not a shorter chip.
+          minHeight: 40,
           paddingInline: 14,
         },
         // MUI resolves `contained primary` to palette.primary.main by default,
@@ -128,14 +130,14 @@ export const theme = createTheme({
       styleOverrides: {
         outlined: {
           borderColor: palette.line,
-          borderRadius: 16,
+          borderRadius: 4,
         },
       },
     },
     MuiAlert: {
       styleOverrides: {
         root: {
-          borderRadius: 12,
+          borderRadius: 4,
         },
         outlined: {
           backgroundColor: palette.paper,
@@ -146,7 +148,7 @@ export const theme = createTheme({
       styleOverrides: {
         root: {
           fontWeight: 600,
-          borderRadius: 8,
+          borderRadius: 2,
         },
       },
     },
@@ -162,8 +164,11 @@ export const theme = createTheme({
         },
         head: {
           fontWeight: 600,
-          color: palette.brandBlack,
-          backgroundColor: palette.ground,
+          fontSize: 12,
+          letterSpacing: 0.04,
+          textTransform: "uppercase",
+          color: palette.textSecondary,
+          backgroundColor: palette.paper,
           borderBottom: `1px solid ${palette.line}`,
         },
       },

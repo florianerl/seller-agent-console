@@ -14,6 +14,7 @@ import { PageHeader } from "../components/PageHeader";
 import { plural, stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
 import { useResource, type ResourceHandle } from "../query/useResource";
+import { FormRow } from "../components/WriteForm";
 import { palette } from "../theme/palette";
 
 /**
@@ -236,14 +237,14 @@ function DeliveryReport() {
           event.preventDefault();
           setSubmitted(orderIds.trim());
         }}
-        sx={{ display: "flex", gap: 2, flexWrap: "wrap", mb: 2, alignItems: "flex-start" }}
+        sx={{ mb: 2 }}
       >
+        <FormRow>
         <TextField
           size="small"
           label="Order IDs"
           // The agent takes one comma-joined string rather than a repeated
           // parameter, so the field asks for exactly what it sends.
-          helperText="Comma-separated, as the ad server knows them"
           value={orderIds}
           onChange={(e) => setOrderIds(e.target.value)}
           sx={{ minWidth: 280 }}
@@ -259,6 +260,10 @@ function DeliveryReport() {
         <Button type="submit" variant="outlined" size="small" disabled={!orderIds.trim()}>
           Run report
         </Button>
+        </FormRow>
+        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75 }}>
+          Comma-separated, as the ad server knows them
+        </Typography>
       </Box>
 
       {submitted ? (
@@ -278,13 +283,14 @@ export default function ReportingScreen() {
       <PageHeader
         title="Reporting"
         subtitle="What the agent counted, and what the connected ad server reports."
-      />
+      >
 
       <Stack spacing={2}>
         <OrdersSummary />
         <GamOrders />
         <DeliveryReport />
       </Stack>
+      </PageHeader>
     </section>
   );
 }

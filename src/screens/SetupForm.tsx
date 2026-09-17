@@ -42,12 +42,12 @@ export function SetupForm() {
   }
 
   return (
-    <Box sx={{ maxWidth: 560 }}>
       <PageHeader
         eyebrow="Operator console"
         title="Connect to your seller agent"
         subtitle="This console talks to the agent's API from this browser. Writes stay off until you enable them for this key."
-      />
+      >
+      <Box sx={{ maxWidth: 560 }}>
 
       <Paper variant="outlined" sx={{ p: { xs: 2.5, sm: 3.5 } }}>
         {/* The handler is async; a form's onSubmit wants void. Left bare, a
@@ -118,6 +118,7 @@ export function SetupForm() {
           a dedicated key and revoke it if the device is lost.
         </Typography>
       </Alert>
-    </Box>
+      </Box>
+      </PageHeader>
   );
 }

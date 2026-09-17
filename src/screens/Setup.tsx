@@ -29,8 +29,9 @@ export default function SetupScreen() {
       <PageHeader
         title="Setup and health"
         subtitle={`${credential.baseUrl} · signed in as ${credential.role}`}
-      />
-      <HealthCards />
+      >
+        <HealthCards />
+      </PageHeader>
     </section>
   );
 }

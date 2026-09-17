@@ -26,6 +26,7 @@ import { plural, stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
 import { useMutation } from "../query/useMutation";
 import { useResource } from "../query/useResource";
+import { FormRow } from "../components/WriteForm";
 import { ChangeRequestCreate, Panel } from "./mutations";
 import { palette } from "../theme/palette";
 
@@ -92,7 +93,7 @@ function ReviewControls({
     <Box sx={{ mt: 1 }} data-block="change-request-controls">
       <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 1 }}>Review this request</Typography>
 
-      <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", alignItems: "flex-start", mb: 1.5 }}>
+      <FormRow>
         <TextField
           size="small"
           label="Reason"
@@ -104,15 +105,11 @@ function ReviewControls({
         <TextField
           size="small"
           label="Your name"
-          helperText="Stored as given; the agent does not verify it"
           value={name}
           onChange={(e) => setName(e.target.value)}
           disabled={blocked || !reviewable || busy}
           sx={{ minWidth: 200 }}
         />
-      </Box>
-
-      <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
         <Button
           size="small"
           variant="contained"
@@ -139,7 +136,10 @@ function ReviewControls({
         >
           {apply.pending ? "Applying…" : "Apply to order"}
         </Button>
-      </Box>
+      </FormRow>
+      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75 }}>
+        Name is stored as given; the agent does not verify it
+      </Typography>
 
       {writesEnabled && !reviewable && !applicable && (
         <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }} data-state="not-actionable">
@@ -284,7 +284,7 @@ export default function ChangeRequestsScreen() {
       <PageHeader
         title="Change requests"
         subtitle="Proposed edits to live orders. Review and apply are writes — they stay visible while the switch is off, disabled."
-      />
+      >
 
       {list.freshness === "blocked" ? (
         <GatedNotice what="The change request queue" result={list.result} />
@@ -390,6 +390,7 @@ export default function ChangeRequestsScreen() {
           </DataPanel>
         </>
       )}
+      </PageHeader>
     </section>
   );
 }

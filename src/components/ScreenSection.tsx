@@ -14,7 +14,7 @@ export function ScreenSection({
 }) {
   return (
     <Box component="section" sx={{ mb: 5 }}>
-      <Typography variant="h3" sx={{ mb: caption ? 0.75 : 2, fontSize: 18, fontWeight: 700 }}>
+      <Typography variant="h3" sx={{ mb: caption ? 0.75 : 2, fontSize: 22, fontWeight: 700 }}>
         {title}
       </Typography>
       {caption && (

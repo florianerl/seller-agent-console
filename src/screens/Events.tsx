@@ -20,6 +20,7 @@ import { PageHeader } from "../components/PageHeader";
 import { clock as stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
 import { useResource } from "../query/useResource";
+import { FormRow } from "../components/WriteForm";
 import { EventLookup } from "./mutations";
 import { palette } from "../theme/palette";
 
@@ -52,14 +53,14 @@ export default function EventsScreen() {
       <PageHeader
         title="Events"
         subtitle={`The ${LIMIT} most recent events. This is a tail, not a full log — the API offers no way to page further back.`}
-      />
+      >
 
       {feed.freshness === "blocked" ? (
         <GatedNotice what="The event stream" result={feed.result} />
       ) : (
         <>
           <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }}>
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+            <FormRow>
               {(
                 [
                   ["event_type", "Event type"],
@@ -83,7 +84,7 @@ export default function EventsScreen() {
               >
                 Clear
               </Button>
-            </Stack>
+            </FormRow>
           </Paper>
 
           <FreshnessNote freshness={feed.freshness}>
@@ -175,6 +176,7 @@ export default function EventsScreen() {
           )}
         </>
       )}
+      </PageHeader>
     </section>
   );
 }

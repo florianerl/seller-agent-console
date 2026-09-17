@@ -25,6 +25,7 @@ import { day, plural, stamp } from "../lib/time";
 import { useResource } from "../query/useResource";
 import { palette } from "../theme/palette";
 import { useCredential } from "../credentials/context";
+import { FormRow } from "../components/WriteForm";
 import { DealLookups, DealWrites, Panel } from "./mutations";
 
 /**
@@ -168,7 +169,7 @@ export default function DealsScreen() {
 
   return (
     <section data-screen="deals">
-      <PageHeader title="Deals" subtitle="Every buyer's deals, as the agent has them stored." />
+      <PageHeader title="Deals" subtitle="Every buyer's deals, as the agent has them stored.">
 
       {!writesEnabled && <ReadOnlyNotice what="Booking, pushing, or migrating a deal" />}
       <Panel title="Deal writes">
@@ -180,7 +181,7 @@ export default function DealsScreen() {
       ) : (
         <>
           <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }}>
-            <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" useFlexGap>
+            <FormRow>
               <TextField
                 select
                 size="small"
@@ -204,10 +205,10 @@ export default function DealsScreen() {
               >
                 {list.validating ? "Refreshing…" : "Refresh"}
               </Button>
-              <Typography variant="body2" color="text.secondary" sx={{ fontSize: 12 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ fontSize: 12, pb: 1 }}>
                 This list does not poll — it reads every deal in one unpaginated pass.
               </Typography>
-            </Stack>
+            </FormRow>
           </Paper>
 
           {/* The agent drops deals it cannot map into the wire shape. Left
@@ -314,6 +315,7 @@ export default function DealsScreen() {
           </DataPanel>
         </>
       )}
+      </PageHeader>
     </section>
   );
 }

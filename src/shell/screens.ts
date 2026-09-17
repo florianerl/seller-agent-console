@@ -44,3 +44,5 @@ export const NAV_GROUPS: ReadonlyArray<{ label: string; ids: readonly string[] }
 ];
 
 export const NAV_GROUP_IDS = NAV_GROUPS.flatMap((group) => group.ids);
+
+export const DRAWER_WIDTH = 288;

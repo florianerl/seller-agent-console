@@ -23,6 +23,11 @@ export const palette = {
   ground: "#F7F6F6",
   paper: "#FFFFFF",
   /**
+   * Subtitles on the dark masthead. Brand-black is near-black; this grey
+   * still clears 4.5:1 so the hero copy is readable, not decorative.
+   */
+  onDarkMuted: "#C9C6C5",
+  /**
    * Active-nav wash. Light enough that brandRedText still clears 4.5:1, and
    * distinct from paper so the selected item reads as a surface, not a fill.
    */
@@ -67,10 +72,13 @@ export const CONTRAST_CONTRACT: ReadonlyArray<{
   { name: "overline on ground", fg: palette.brandRedText, bg: palette.ground, min: "body" },
   { name: "contained button label", fg: palette.paper, bg: palette.brandRedText, min: "body" },
   { name: "heading on paper", fg: palette.brandBlack, bg: palette.paper, min: "body" },
-  { name: "table header on ground", fg: palette.brandBlack, bg: palette.ground, min: "body" },
+  { name: "masthead title", fg: palette.paper, bg: palette.brandBlack, min: "body" },
+  { name: "masthead subtitle", fg: palette.onDarkMuted, bg: palette.brandBlack, min: "body" },
+  { name: "table header on paper", fg: palette.textSecondary, bg: palette.paper, min: "body" },
   { name: "header actions on paper", fg: palette.brandBlack, bg: palette.paper, min: "body" },
   { name: "header secondary on paper", fg: palette.textSecondary, bg: palette.paper, min: "body" },
   { name: "brand mark on paper", fg: palette.brandRed, bg: palette.paper, min: "ui" },
+  { name: "active nav rule on paper", fg: palette.brandRed, bg: palette.paper, min: "ui" },
   { name: "ok status text on paper", fg: palette.ok, bg: palette.paper, min: "body" },
   { name: "error status text on paper", fg: palette.error, bg: palette.paper, min: "body" },
   { name: "error text on error background", fg: palette.error, bg: palette.errorBg, min: "body" },

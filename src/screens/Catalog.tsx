@@ -38,6 +38,7 @@ import { stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
 import { useResource } from "../query/useResource";
 import { palette } from "../theme/palette";
+import { FormRow } from "../components/WriteForm";
 import { CatalogWrites, CreateQuoteWrite, PackageLookup, QuoteLookup } from "./mutations";
 import { useCredential } from "../credentials/context";
 
@@ -381,7 +382,7 @@ function Discovery() {
   return (
     <Paper variant="outlined" sx={{ p: 2.5 }} data-block="discovery">
       <Box component="form" onSubmit={handleSubmit}>
-        <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" useFlexGap>
+        <FormRow>
           <TextField
             size="small"
             label="Brief"
@@ -392,7 +393,7 @@ function Discovery() {
           <Button type="submit" variant="outlined" size="small" data-action="discover">
             Discover
           </Button>
-        </Stack>
+        </FormRow>
       </Box>
       {submitted !== undefined && <DiscoveryResults query={submitted} />}
     </Paper>
@@ -484,7 +485,7 @@ function AvailsCheck() {
   return (
     <Paper variant="outlined" sx={{ p: 2.5 }} data-block="avails">
       <Box component="form" onSubmit={handleSubmit}>
-        <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" useFlexGap>
+        <FormRow>
           <TextField
             size="small"
             label="Product id"
@@ -511,7 +512,7 @@ function AvailsCheck() {
           <Button type="submit" variant="outlined" size="small" data-action="check-avails">
             Check avails
           </Button>
-        </Stack>
+        </FormRow>
       </Box>
       {submitted !== undefined && <AvailsResults query={submitted} />}
     </Paper>
@@ -612,7 +613,7 @@ function Pricing() {
   return (
     <Paper variant="outlined" sx={{ p: 2.5 }} data-block="pricing">
       <Box component="form" onSubmit={handleSubmit}>
-        <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" useFlexGap>
+        <FormRow>
           <TextField
             size="small"
             label="Product id"
@@ -631,7 +632,7 @@ function Pricing() {
           <Button type="submit" variant="outlined" size="small" data-action="quote">
             Quote
           </Button>
-        </Stack>
+        </FormRow>
       </Box>
       {submitted !== undefined && <PricingResult query={submitted} />}
     </Paper>
@@ -701,7 +702,7 @@ export default function CatalogScreen() {
   const { writesEnabled } = useCredential();
   return (
     <section data-screen="catalog">
-      <PageHeader title="Catalog" subtitle="What this agent offers buyers." />
+      <PageHeader title="Catalog" subtitle="What this agent offers buyers.">
 
       <ScreenSection
         title="Products"
@@ -756,6 +757,7 @@ export default function CatalogScreen() {
         <CreateQuoteWrite />
         <QuoteLookup />
       </ScreenSection>
+      </PageHeader>
     </section>
   );
 }

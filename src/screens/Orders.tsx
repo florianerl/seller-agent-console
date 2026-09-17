@@ -193,7 +193,7 @@ export default function OrdersScreen() {
       <PageHeader
         title="Orders"
         subtitle="Order lifecycle and its audit trail. Transitions are writes."
-      />
+      >
 
       {!writesEnabled && <ReadOnlyNotice what="Creating or transitioning an order" />}
       <Panel title="Create and transition">
@@ -302,6 +302,7 @@ export default function OrdersScreen() {
           </Table>
         )}
       </DataPanel>
+      </PageHeader>
     </section>
   );
 }

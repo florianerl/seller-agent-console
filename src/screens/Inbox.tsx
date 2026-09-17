@@ -30,6 +30,7 @@ import { plural, stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
 import { useMutation } from "../query/useMutation";
 import { useResource } from "../query/useResource";
+import { FormRow } from "../components/WriteForm";
 import { palette } from "../theme/palette";
 
 /**
@@ -78,7 +79,7 @@ function DecisionControls({
     <Box sx={{ mt: 2 }} data-block="approval-controls">
       <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 1 }}>Decide this gate</Typography>
 
-      <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", alignItems: "flex-start", mb: 1.5 }}>
+      <FormRow>
         <TextField
           size="small"
           label="Reason"
@@ -90,17 +91,11 @@ function DecisionControls({
         <TextField
           size="small"
           label="Your name"
-          // Sent because the agent's own default is the literal "anonymous",
-          // which is a worse record than a name nobody checked.
-          helperText="Stored as given; the agent does not verify it"
           value={name}
           onChange={(e) => setName(e.target.value)}
           disabled={blocked || busy}
           sx={{ minWidth: 200 }}
         />
-      </Box>
-
-      <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
         <Button
           size="small"
           variant="contained"
@@ -129,7 +124,12 @@ function DecisionControls({
         >
           {resume.pending ? "Resuming…" : "Resume flow"}
         </Button>
-      </Box>
+      </FormRow>
+      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75, mb: 1.5 }}>
+        {/* Sent because the agent's own default is the literal "anonymous",
+            which is a worse record than a name nobody checked. */}
+        Name is stored as given; the agent does not verify it
+      </Typography>
 
       {!decidable && writesEnabled && (
         <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }} data-state="not-pending">
@@ -286,8 +286,7 @@ export default function InboxScreen() {
       <PageHeader
         title="Inbox"
         subtitle="Pending approval gates, and the controls to decide them."
-      />
-
+      >
       {list.freshness === "blocked" ? (
         <GatedNotice what="The approvals queue" result={list.result} />
       ) : (
@@ -371,6 +370,7 @@ export default function InboxScreen() {
           </DataPanel>
         </>
       )}
+      </PageHeader>
     </section>
   );
 }

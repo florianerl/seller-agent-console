@@ -123,7 +123,7 @@ export default function NegotiationScreen() {
       <PageHeader
         title="Negotiation"
         subtitle="Buyer sessions and their conversation history."
-      />
+      >
 
       <WritesNotice what="Listing sessions marks any session past its expiry as expired and saves that." />
       {!writesEnabled && <ReadOnlyNotice what="Creating a session or sending a message" />}
@@ -238,6 +238,7 @@ export default function NegotiationScreen() {
           </Table>
         )}
       </DataPanel>
+      </PageHeader>
     </section>
   );
 }

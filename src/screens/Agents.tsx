@@ -3,7 +3,6 @@ import Box from "@mui/material/Box";
 import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
 import Skeleton from "@mui/material/Skeleton";
-import Stack from "@mui/material/Stack";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
@@ -18,6 +17,7 @@ import { PageHeader } from "../components/PageHeader";
 import { StatusChip } from "../components/StatusChip";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { useCredential } from "../credentials/context";
+import { FormRow } from "../components/WriteForm";
 import { AgentDetailLookup, AgentWrites, Panel } from "./mutations";
 import { plural, stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
@@ -50,7 +50,7 @@ export default function AgentsScreen() {
       <PageHeader
         title="Agents"
         subtitle="Buyer and partner agents this seller has seen. Trust changes are writes."
-      />
+      >
 
       {!writesEnabled && <ReadOnlyNotice what="Discovering or changing trust" />}
       <Panel title="Registry writes">
@@ -59,7 +59,7 @@ export default function AgentsScreen() {
       </Panel>
 
       <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }}>
-        <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>
+        <FormRow>
           <TextField
             select
             size="small"
@@ -88,7 +88,7 @@ export default function AgentsScreen() {
               </MenuItem>
             ))}
           </TextField>
-        </Stack>
+        </FormRow>
       </Paper>
 
       <FreshnessNote freshness={list.freshness}>
@@ -184,6 +184,7 @@ export default function AgentsScreen() {
           </Table>
         )}
       </DataPanel>
+      </PageHeader>
     </section>
   );
 }

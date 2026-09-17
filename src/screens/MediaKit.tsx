@@ -23,6 +23,7 @@ import { StatusCard } from "../components/StatusCard";
 import { plural, stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
 import { useResource } from "../query/useResource";
+import { FormRow } from "../components/WriteForm";
 import { AudienceMatchForm } from "./mutations";
 import { palette } from "../theme/palette";
 
@@ -311,7 +312,7 @@ function Search() {
   return (
     <Paper variant="outlined" sx={{ p: 2.5, mb: 3 }}>
       <Box component="form" onSubmit={handleSubmit}>
-        <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" useFlexGap>
+        <FormRow>
           <TextField
             size="small"
             label="Search the media kit"
@@ -322,7 +323,7 @@ function Search() {
           <Button type="submit" variant="outlined" size="small" data-action="search">
             Search
           </Button>
-        </Stack>
+        </FormRow>
       </Box>
 
       {submittedQuery !== undefined && <SearchResults query={submittedQuery} />}
@@ -336,7 +337,7 @@ export default function MediaKitScreen() {
       <PageHeader
         title="Media kit"
         subtitle="The packages this agent publishes to buyers, with full-text search over them."
-      />
+      >
 
       <ScreenSection title="Summary">
         <Box sx={{ mb: 0, maxWidth: 360 }}>
@@ -355,6 +356,7 @@ export default function MediaKitScreen() {
       <ScreenSection title="Packages">
         <PackagesTable />
       </ScreenSection>
+      </PageHeader>
     </section>
   );
 }

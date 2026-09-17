@@ -112,7 +112,7 @@ export default function CuratorsScreen() {
       <PageHeader
         title="Curators"
         subtitle="Third-party deal and supply-path optimizers registered with this seller."
-      />
+      >
 
       {!writesEnabled && <ReadOnlyNotice what="Registering a curator" />}
       <Panel title="Register">
@@ -231,6 +231,7 @@ export default function CuratorsScreen() {
           </DataPanel>
         </>
       )}
+      </PageHeader>
     </section>
   );
 }

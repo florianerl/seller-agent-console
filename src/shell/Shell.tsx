@@ -3,11 +3,10 @@ import Box from "@mui/material/Box";
 import CircularProgress from "@mui/material/CircularProgress";
 import Drawer from "@mui/material/Drawer";
 import IconButton from "@mui/material/IconButton";
-import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { useTheme } from "@mui/material/styles";
 import { Outlet } from "react-router";
-import { DRAWER_WIDTH, Sidebar } from "./Sidebar";
+import { BrandMark, ConsoleNav, Sidebar } from "./Sidebar";
 import { ConnectivityBanner } from "./ConnectivityBanner";
 import { ConnectionMenu } from "./ConnectionMenu";
 import { WritesChip } from "./WritesChip";
@@ -15,13 +14,7 @@ import { InstallButton } from "../pwa/InstallButton";
 import { MenuIcon } from "../components/MenuIcon";
 import { CONTENT_MAX_WIDTH } from "../components/DataPanel";
 import { palette } from "../theme/palette";
-
-const drawerPaper = {
-  width: DRAWER_WIDTH,
-  boxSizing: "border-box" as const,
-  backgroundColor: palette.paper,
-  borderRight: `1px solid ${palette.line}`,
-};
+import { DRAWER_WIDTH } from "./screens";
 
 export function Shell() {
   const theme = useTheme();
@@ -29,63 +22,28 @@ export function Shell() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <Box sx={{ display: "flex", minHeight: "100dvh", backgroundColor: palette.ground }}>
-      {isDesktop ? (
-        <Drawer
-          variant="permanent"
-          sx={{
-            width: DRAWER_WIDTH,
-            flexShrink: 0,
-            "& .MuiDrawer-paper": {
-              ...drawerPaper,
-              pt: "env(safe-area-inset-top)",
-            },
-          }}
-        >
-          <Sidebar />
-        </Drawer>
-      ) : (
-        <Drawer
-          variant="temporary"
-          open={mobileOpen}
-          onClose={() => setMobileOpen(false)}
-          ModalProps={{ keepMounted: true }}
-          sx={{
-            "& .MuiDrawer-paper": {
-              ...drawerPaper,
-              pt: "env(safe-area-inset-top)",
-              pb: "env(safe-area-inset-bottom)",
-            },
-          }}
-        >
-          <Sidebar asHeading={false} onNavigate={() => setMobileOpen(false)} />
-        </Drawer>
-      )}
-
+    <Box sx={{ minHeight: "100dvh", backgroundColor: palette.paper, display: "flex", flexDirection: "column" }}>
       <Box
-        component="main"
+        component="header"
         sx={{
-          flexGrow: 1,
-          minWidth: 0,
-          display: "flex",
-          flexDirection: "column",
+          position: "sticky",
+          top: 0,
+          zIndex: (t) => t.zIndex.appBar,
+          backgroundColor: palette.paper,
+          borderBottom: `1px solid ${palette.line}`,
+          color: palette.brandBlack,
+          pt: "env(safe-area-inset-top)",
         }}
       >
         <Box
-          component="header"
           sx={{
-            position: "sticky",
-            top: 0,
-            zIndex: (t) => t.zIndex.appBar,
             display: "flex",
             alignItems: "center",
-            gap: 1.5,
+            gap: 3,
+            flexWrap: "wrap",
             px: { xs: 2, md: 4 },
-            py: 1.25,
-            pt: "calc(env(safe-area-inset-top) + 10px)",
-            backgroundColor: palette.paper,
-            borderBottom: `1px solid ${palette.line}`,
-            color: palette.brandBlack,
+            py: 1,
+            minHeight: 64,
           }}
         >
           {!isDesktop && (
@@ -99,10 +57,11 @@ export function Shell() {
               <MenuIcon />
             </IconButton>
           )}
-          {!isDesktop && (
-            <Typography variant="h1" sx={{ flexGrow: 1, minWidth: 0 }}>
-              Seller Agent Console
-            </Typography>
+          <BrandMark asHeading compact={!isDesktop} />
+          {isDesktop && (
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <ConsoleNav />
+            </Box>
           )}
           <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, ml: "auto" }}>
             <WritesChip />
@@ -110,28 +69,43 @@ export function Shell() {
             <ConnectionMenu />
           </Box>
         </Box>
+      </Box>
 
-        <Box
+      {!isDesktop && (
+        <Drawer
+          variant="temporary"
+          open={mobileOpen}
+          onClose={() => setMobileOpen(false)}
+          ModalProps={{ keepMounted: true }}
           sx={{
-            flexGrow: 1,
-            px: { xs: 2.5, md: 4 },
-            py: { xs: 3, md: 4 },
-            pb: "calc(env(safe-area-inset-bottom) + 32px)",
+            "& .MuiDrawer-paper": {
+              width: DRAWER_WIDTH,
+              boxSizing: "border-box",
+              backgroundColor: palette.paper,
+              pt: "env(safe-area-inset-top)",
+              pb: "env(safe-area-inset-bottom)",
+            },
           }}
         >
+          <Sidebar asHeading={false} onNavigate={() => setMobileOpen(false)} />
+        </Drawer>
+      )}
+
+      <Box component="main" sx={{ flexGrow: 1, minWidth: 0 }}>
+        <Box sx={{ px: { xs: 2.5, md: 4 }, pt: 1.5 }}>
           <Box sx={{ maxWidth: CONTENT_MAX_WIDTH }}>
             <ConnectivityBanner />
-            <Suspense
-              fallback={
-                <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
-                  <CircularProgress aria-label="Loading screen" size={28} />
-                </Box>
-              }
-            >
-              <Outlet />
-            </Suspense>
           </Box>
         </Box>
+        <Suspense
+          fallback={
+            <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
+              <CircularProgress aria-label="Loading screen" size={28} />
+            </Box>
+          }
+        >
+          <Outlet />
+        </Suspense>
       </Box>
     </Box>
   );

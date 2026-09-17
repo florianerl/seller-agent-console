@@ -57,7 +57,7 @@ import {
   type CreatedApiKey,
 } from "../api/endpoints";
 import { describe } from "../api/errors";
-import { WriteForm } from "../components/WriteForm";
+import { FormFields, FormRow, WriteForm } from "../components/WriteForm";
 import { WritesNotice } from "../components/WritesNotice";
 import { useCredential } from "../credentials/context";
 import { useMutation } from "../query/useMutation";
@@ -309,7 +309,7 @@ export function CatalogWrites() {
           </>
         }
       >
-        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+        <FormFields>
           <TextField
             size="small"
             label="Inventory type"
@@ -324,7 +324,7 @@ export function CatalogWrites() {
             onChange={(e) => setCpm(e.target.value)}
             disabled={blocked}
           />
-        </Stack>
+        </FormFields>
       </WriteForm>
       <WriteForm
         title="Set an inventory type override?"
@@ -342,7 +342,7 @@ export function CatalogWrites() {
         }
         consequence="The override persists across inventory syncs. A second set replaces the first."
       >
-        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+        <FormFields>
           <TextField
             size="small"
             label="Product id"
@@ -364,7 +364,7 @@ export function CatalogWrites() {
             onChange={(e) => setReason(e.target.value)}
             disabled={blocked}
           />
-        </Stack>
+        </FormFields>
       </WriteForm>
       <WriteForm
         title="Delete this inventory type override?"
@@ -392,11 +392,11 @@ export function CatalogWrites() {
         }
         consequence="Not idempotent: each call mints a new package id."
       >
-        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+        <FormFields>
           <TextField size="small" label="Name" value={pkgName} onChange={(e) => setPkgName(e.target.value)} disabled={blocked} />
           <TextField size="small" label="Base price" value={pkgPrice} onChange={(e) => setPkgPrice(e.target.value)} disabled={blocked} />
           <TextField size="small" label="Floor" value={pkgFloor} onChange={(e) => setPkgFloor(e.target.value)} disabled={blocked} />
-        </Stack>
+        </FormFields>
       </WriteForm>
       <WriteForm
         title="Rename this package?"
@@ -465,7 +465,7 @@ export function QuoteLookup() {
   return (
     <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }} data-block="quote-lookup">
       <WritesNotice what="Fetching a quote enforces its TTL and may persist status=expired." />
-      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+      <FormRow>
         <TextField size="small" label="Quote id" value={id} onChange={(e) => setId(e.target.value)} />
         <WriteForm
           title="Re-read this quote?"
@@ -477,7 +477,7 @@ export function QuoteLookup() {
           onConfirm={() => setSubmitted(id.trim())}
           consequence="This GET can expire the stored quote. Re-reading an already-expired quote is a no-op besides the 410."
         />
-      </Stack>
+      </FormRow>
       {submitted && <QuoteBody quoteId={submitted} />}
     </Paper>
   );
@@ -534,7 +534,7 @@ export function PackageLookup() {
   const [submitted, setSubmitted] = useState<string | undefined>();
   return (
     <Box sx={{ mt: 1 }} data-block="package-lookup">
-      <Stack direction="row" spacing={1}>
+      <FormRow>
         <TextField size="small" label="Package id" value={id} onChange={(e) => setId(e.target.value)} />
         <WriteForm
           title="Load this package?"
@@ -546,7 +546,7 @@ export function PackageLookup() {
           onConfirm={() => setSubmitted(id.trim())}
           consequence="A GET. An invalid key is rejected rather than treated as anonymous."
         />
-      </Stack>
+      </FormRow>
       {submitted && <PackageBody packageId={submitted} />}
     </Box>
   );
@@ -620,12 +620,12 @@ export function OrderWrites({ orderId }: { orderId?: string }) {
         }
         consequence="Not idempotent. A 409 names the allowed next states. Re-read the order before retrying."
       >
-        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+        <FormFields>
           <TextField size="small" label="Order id" value={target} onChange={(e) => setTarget(e.target.value)} disabled={!writesEnabled} />
           <TextField size="small" label="To status" value={toStatus} onChange={(e) => setToStatus(e.target.value)} disabled={!writesEnabled} />
           <TextField size="small" label="Actor" value={actor} onChange={(e) => setActor(e.target.value)} disabled={!writesEnabled} />
           <TextField size="small" label="Reason" value={reason} onChange={(e) => setReason(e.target.value)} disabled={!writesEnabled} />
-        </Stack>
+        </FormFields>
       </WriteForm>
     </Stack>
   );
@@ -737,10 +737,10 @@ export function DealWrites({ dealId }: { dealId?: string }) {
         onConfirm={() => void fromTpl.run({ deal_type: dealType, product_id: productId.trim() })}
         consequence="Prices and auto-books. 422 if max CPM is below floor. Not a replay-safe mint without an idempotency story on this route."
       >
-        <Stack direction="row" spacing={1}>
+        <FormFields>
           <TextField size="small" label="Product id" value={productId} onChange={(e) => setProductId(e.target.value)} disabled={blocked} />
           <TextField size="small" label="Deal type" value={dealType} onChange={(e) => setDealType(e.target.value)} disabled={blocked} />
-        </Stack>
+        </FormFields>
       </WriteForm>
       <WriteForm
         title="Run a bulk deal operation?"
@@ -869,7 +869,7 @@ function BuyerStatus({ dealId }: { dealId: string }) {
   const [submitted, setSubmitted] = useState<string | undefined>();
   return (
     <>
-      <Stack direction="row" spacing={1}>
+      <FormRow>
         <TextField size="small" label="Buyer URL" value={buyerUrl} onChange={(e) => setBuyerUrl(e.target.value)} />
         <WriteForm
           title="Read buyer activation status?"
@@ -881,7 +881,7 @@ function BuyerStatus({ dealId }: { dealId: string }) {
           onConfirm={() => setSubmitted(buyerUrl.trim())}
           consequence="A GET of how this buyer sees the deal."
         />
-      </Stack>
+      </FormRow>
       {submitted && <BuyerStatusBody dealId={dealId} buyerUrl={submitted} />}
     </>
   );
@@ -903,7 +903,7 @@ function SspTrouble({ dealId }: { dealId: string }) {
   const [submitted, setSubmitted] = useState<string | undefined>();
   return (
     <>
-      <Stack direction="row" spacing={1}>
+      <FormRow>
         <TextField size="small" label="SSP" value={ssp} onChange={(e) => setSsp(e.target.value)} />
         <WriteForm
           title="Troubleshoot this SSP?"
@@ -915,7 +915,7 @@ function SspTrouble({ dealId }: { dealId: string }) {
           onConfirm={() => setSubmitted(ssp.trim())}
           consequence="A GET of connector diagnostics for one SSP."
         />
-      </Stack>
+      </FormRow>
       {submitted && <SspTroubleBody dealId={dealId} ssp={submitted} />}
     </>
   );
@@ -1045,10 +1045,10 @@ export function ProposalWrites() {
         }
         consequence="Not idempotent. A retry after an unclear failure may create a second proposal."
       >
-        <Stack direction="row" spacing={1}>
+        <FormFields>
           <TextField size="small" label="Product id" value={productId} onChange={(e) => setProductId(e.target.value)} disabled={!writesEnabled} />
           <TextField size="small" label="Price" value={price} onChange={(e) => setPrice(e.target.value)} disabled={!writesEnabled} />
-        </Stack>
+        </FormFields>
       </WriteForm>
       <TextField size="small" label="Proposal id" value={proposalId} onChange={(e) => setProposalId(e.target.value)} />
       {proposalId.trim() ? <NegotiationStatus proposalId={proposalId.trim()} /> : null}
@@ -1128,7 +1128,7 @@ export function AgentWrites() {
         }
         consequence="Trust is this operator's decision and caps the buyer's access tier. A blocked agent is refused on later calls."
       >
-        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+        <FormFields>
           <TextField size="small" label="Agent id" value={agentId} onChange={(e) => setAgentId(e.target.value)} disabled={!writesEnabled} />
           <TextField select size="small" label="Trust" value={trust} onChange={(e) => setTrust(e.target.value)} disabled={!writesEnabled} sx={{ minWidth: 160 }}>
             {["unknown", "registered", "approved", "preferred", "blocked"].map((t) => (
@@ -1138,7 +1138,7 @@ export function AgentWrites() {
             ))}
           </TextField>
           <TextField size="small" label="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} disabled={!writesEnabled} />
-        </Stack>
+        </FormFields>
       </WriteForm>
       <WriteForm
         title="Remove this agent from the local registry?"
@@ -1173,7 +1173,7 @@ export function AgentDetailLookup() {
   const [submitted, setSubmitted] = useState<string | undefined>();
   return (
     <Box sx={{ mt: 1 }}>
-      <Stack direction="row" spacing={1}>
+      <FormRow>
         <TextField size="small" label="Agent id" value={id} onChange={(e) => setId(e.target.value)} />
         <WriteForm
           title="Load this registered agent?"
@@ -1185,7 +1185,7 @@ export function AgentDetailLookup() {
           onConfirm={() => setSubmitted(id.trim())}
           consequence="A GET of the local registry row."
         />
-      </Stack>
+      </FormRow>
       {submitted && <AgentBody agentId={submitted} />}
     </Box>
   );
@@ -1223,11 +1223,11 @@ export function CuratorWrite() {
       }
       consequence="Not idempotent if the id is new; a duplicate id may 409."
     >
-      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+      <FormFields>
         <TextField size="small" label="Curator id" value={curatorId} onChange={(e) => setCuratorId(e.target.value)} disabled={!writesEnabled} />
         <TextField size="small" label="Name" value={name} onChange={(e) => setName(e.target.value)} disabled={!writesEnabled} />
         <TextField size="small" label="Domain" value={domain} onChange={(e) => setDomain(e.target.value)} disabled={!writesEnabled} />
-      </Stack>
+      </FormFields>
     </WriteForm>
   );
 }
@@ -1260,11 +1260,11 @@ export function ChangeRequestCreate() {
       }
       consequence="Idempotent per order and key for 24 hours. Same key + different body is 409."
     >
-      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+      <FormFields>
         <TextField size="small" label="Order id" value={orderId} onChange={(e) => setOrderId(e.target.value)} disabled={!writesEnabled} />
         <TextField size="small" label="Change type" value={changeType} onChange={(e) => setChangeType(e.target.value)} disabled={!writesEnabled} />
         <TextField size="small" label="Request reason" value={reason} onChange={(e) => setReason(e.target.value)} disabled={!writesEnabled} />
-      </Stack>
+      </FormFields>
     </WriteForm>
   );
 }
@@ -1288,7 +1288,7 @@ export function ApiKeyDetailLookup() {
   const [submitted, setSubmitted] = useState<string | undefined>();
   return (
     <Box sx={{ mt: 1 }}>
-      <Stack direction="row" spacing={1}>
+      <FormRow>
         <TextField size="small" label="Key id" value={id} onChange={(e) => setId(e.target.value)} />
         <WriteForm
           title="Load this key's metadata?"
@@ -1300,7 +1300,7 @@ export function ApiKeyDetailLookup() {
           onConfirm={() => setSubmitted(id.trim())}
           consequence="Metadata only. The secret is never on this route."
         />
-      </Stack>
+      </FormRow>
       {submitted && <ApiKeyBody keyId={submitted} />}
     </Box>
   );
@@ -1327,7 +1327,7 @@ export function AudienceMatchForm() {
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
         A POST that stores nothing, so it runs with writes off.
       </Typography>
-      <Stack direction="row" spacing={1}>
+      <FormRow>
         <TextField
           size="small"
           label="Audience identifier"
@@ -1344,7 +1344,7 @@ export function AudienceMatchForm() {
           onConfirm={() => setSubmitted(identifier.trim())}
           consequence="Query-shaped: nothing is stored. A missing identifier is a form error, not an outage."
         />
-      </Stack>
+      </FormRow>
       {submitted && <AudienceMatchBody identifier={submitted} />}
     </Paper>
   );
