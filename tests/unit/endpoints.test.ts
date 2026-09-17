@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { http, HttpResponse } from "msw";
-import { API, server, takeViolations } from "../setup/msw";
+import { API, server } from "../setup/msw";
 import * as endpoints from "../../src/api/endpoints";
 import type { Connection } from "../../src/api/http";
 
 const connection: Connection = { baseUrl: API, apiKey: "k-operator" };
 
 /**
- * Every exported endpoint function, discovered rather than listed, so adding
- * one without a read-only assertion is not possible.
+ * Every exported endpoint function, discovered rather than listed, so a new one
+ * cannot be added without this file noticing.
  */
 const callers = Object.entries(endpoints).filter(
   ([, value]) => typeof value === "function",
@@ -29,7 +29,12 @@ const EXTRA_ARGS: Record<string, unknown[]> = {
   sessionById: ["S-1"],
 };
 
-describe("read-only: layer 2, every endpoint issues GET", () => {
+/**
+ * The endpoint table is all reads today. This is not the read-only enforcement
+ * it once was (ADR 11) — it is a statement about the current table, and a
+ * deliberately added write endpoint updates it rather than working around it.
+ */
+describe("every endpoint currently in the table issues GET", () => {
   it("discovered every exported endpoint", () => {
     expect(callers.map(([name]) => name).sort()).toEqual([
       "agents",
@@ -73,26 +78,6 @@ describe("read-only: layer 2, every endpoint issues GET", () => {
 
     expect(methods.length).toBeGreaterThan(0);
     expect(methods.every((m) => m === "GET")).toBe(true);
-  });
-});
-
-describe("read-only: layer 3, the global trap", () => {
-  it("records any non-GET, whatever handlers a test installed", async () => {
-    // Simulates a future refactor reintroducing a mutating call. Drained here
-    // so this test passes; in any other test the afterEach hook fails the run.
-    await fetch(`${API}/api/v1/deals`, { method: "POST" });
-    await fetch(`${API}/api/v1/deals/x`, { method: "DELETE" });
-
-    const found = takeViolations();
-    expect(found).toHaveLength(2);
-    expect(found[0]).toContain("POST");
-    expect(found[1]).toContain("DELETE");
-  });
-
-  it("lets GET through without recording anything", async () => {
-    const response = await fetch(`${API}/health`);
-    expect(response.ok).toBe(true);
-    expect(takeViolations()).toEqual([]);
   });
 });
 

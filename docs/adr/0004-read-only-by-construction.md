@@ -1,6 +1,8 @@
 # 4. Read-only enforced by module shape, not by convention
 
-**Status:** Accepted
+**Status:** Superseded by [ADR 11](0011-writes-permitted.md). The reasoning
+below is left as it was written; it is the record of why this was chosen, not a
+description of the client today.
 
 ## Context
 

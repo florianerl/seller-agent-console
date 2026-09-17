@@ -65,7 +65,13 @@ function scan(file: string): Finding[] {
   return findings;
 }
 
-describe("read-only: layer 1, the fetch seam is the only one", () => {
+/**
+ * The seam is no longer a read-only boundary — it takes a method, and writes
+ * go through it (ADR 11). It is still the only place allowed to issue a
+ * request, so that timeouts, the auth header, the redirect policy and the
+ * result taxonomy have exactly one implementation.
+ */
+describe("the fetch seam is the only place that issues requests", () => {
   it("finds no request-issuing API anywhere outside src/api/http.ts", () => {
     const offenders = sourceFiles(srcDir)
       .filter((f) => f !== FETCH_SEAM)
@@ -79,7 +85,7 @@ describe("read-only: layer 1, the fetch seam is the only one", () => {
 
   it("confirms the scanner actually detects a violation", () => {
     // Guards that have only ever been green are guards nobody has tested.
-    const fixture = resolve(repoRoot, "tests/fixtures/readonly-violation.ts.txt");
+    const fixture = resolve(repoRoot, "tests/fixtures/fetch-seam-violation.ts.txt");
     expect(scan(fixture).map((f) => f.name).sort()).toEqual([
       "EventSource",
       "WebSocket",
@@ -87,35 +93,6 @@ describe("read-only: layer 1, the fetch seam is the only one", () => {
       "fetch",
       "sendBeacon",
     ]);
-  });
-});
-
-describe("read-only: the seam exposes no mutating verb", () => {
-  const seam = readFileSync(FETCH_SEAM, "utf8");
-
-  it("exports get and no other request function", () => {
-    const sf = ts.createSourceFile(FETCH_SEAM, seam, ts.ScriptTarget.ES2022, true);
-    const exportedFunctions: string[] = [];
-
-    ts.forEachChild(sf, (node) => {
-      if (
-        ts.isFunctionDeclaration(node) &&
-        node.name &&
-        node.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)
-      ) {
-        exportedFunctions.push(node.name.text);
-      }
-    });
-
-    expect(exportedFunctions).toEqual(["get"]);
-    for (const verb of ["post", "put", "patch", "del", "remove", "request"]) {
-      expect(exportedFunctions).not.toContain(verb);
-    }
-  });
-
-  it("hardcodes the method rather than taking it as a parameter", () => {
-    expect(seam).toContain('method: "GET"');
-    expect(seam).not.toMatch(/method:\s*(?!"GET")[a-zA-Z_]/);
   });
 });
 

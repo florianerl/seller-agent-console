@@ -4,10 +4,15 @@ import type { Result, UnavailableReason } from "./errors";
 /**
  * The only module in this repository permitted to call fetch.
  *
- * It exports `get` and nothing else — no post, no put, no delete, no generic
- * request taking a method. Read-only is a property of this module's shape
- * rather than a convention someone has to remember, and three guards in
- * tests/guards keep it that way.
+ * It exports `request`, which takes a method, and `get`, which is that with
+ * the method fixed. Centralising the call is what keeps the timeouts, the
+ * result taxonomy, the auth header and the redirect policy in one place, and a
+ * guard in tests/guards keeps every other module out of the business of
+ * issuing requests.
+ *
+ * This module used to export `get` alone, so that a mutation was not something
+ * anyone could write. That restriction was lifted deliberately — see ADR 11,
+ * which supersedes ADR 4 and records what it cost.
  */
 
 export type Connection = {
@@ -19,12 +24,25 @@ export type Connection = {
 
 export type QueryValue = string | number | boolean | undefined;
 
+/** The methods the client will issue. Anything outside this set is a typo. */
+export type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+
 export type GetOptions<T> = {
   readonly schema: ZodType<T>;
   readonly query?: Readonly<Record<string, QueryValue>> | undefined;
   readonly timeoutMs?: number | undefined;
   /** Caller cancellation, composed with the timeout. */
   readonly signal?: AbortSignal | undefined;
+};
+
+export type RequestOptions<T> = GetOptions<T> & {
+  /** Defaults to GET, so a read reads exactly as it did before. */
+  readonly method?: Method | undefined;
+  /**
+   * Serialised as JSON. A GET may not carry one, and passing a body with a GET
+   * is a programming error rather than something to drop silently.
+   */
+  readonly body?: unknown;
 };
 
 /**
@@ -71,26 +89,47 @@ function unavailable(
   };
 }
 
-export async function get<T>(
+/** A read. The method is fixed here so a caller cannot make it anything else. */
+export function get<T>(
   connection: Connection,
   path: string,
   options: GetOptions<T>,
 ): Promise<Result<T>> {
-  const { schema, query, timeoutMs = TIMEOUTS.normal, signal } = options;
+  return request(connection, path, { ...options, method: "GET" });
+}
+
+export async function request<T>(
+  connection: Connection,
+  path: string,
+  options: RequestOptions<T>,
+): Promise<Result<T>> {
+  const {
+    schema,
+    query,
+    timeoutMs = TIMEOUTS.normal,
+    signal,
+    method = "GET",
+    body: requestBody,
+  } = options;
   const fetchedAt = Date.now();
+
+  if (method === "GET" && requestBody !== undefined) {
+    throw new TypeError("a GET request cannot carry a body");
+  }
 
   const timeout = AbortSignal.timeout(timeoutMs);
   const composed = signal ? AbortSignal.any([timeout, signal]) : timeout;
 
   const headers: Record<string, string> = { Accept: "application/json" };
   if (connection.apiKey) headers["X-Api-Key"] = connection.apiKey;
+  if (requestBody !== undefined) headers["Content-Type"] = "application/json";
 
   let response: Response;
   try {
     response = await fetch(buildUrl(connection.baseUrl, path, query), {
-      // Hardcoded, never a parameter.
-      method: "GET",
+      method,
       headers,
+      ...(requestBody !== undefined ? { body: JSON.stringify(requestBody) } : {}),
       // 'manual' rather than 'error': both refuse to follow, but 'error'
       // rejects with a TypeError indistinguishable from a network failure,
       // so a stray trailing slash (FastAPI's redirect_slashes answers 307)
@@ -134,6 +173,20 @@ export async function get<T>(
 
   if (!response.ok) {
     return unavailable("http", fetchedAt, { status: response.status });
+  }
+
+  // A mutation that returns nothing is a 204, and a 204 has no content-type to
+  // check and no body to parse. The schema still runs, against `undefined`, so
+  // a caller expecting a payload here fails as a shape error rather than
+  // receiving undefined typed as T.
+  if (response.status === 204 || response.status === 205) {
+    const parsedEmpty = schema.safeParse(undefined);
+    return parsedEmpty.success
+      ? { kind: "ok", data: parsedEmpty.data, fetchedAt }
+      : unavailable("shape", fetchedAt, {
+          status: response.status,
+          detail: "the response carried no body",
+        });
   }
 
   const contentType = response.headers.get("content-type") ?? "";

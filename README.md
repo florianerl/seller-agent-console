@@ -1,6 +1,6 @@
 # Seller Agent Operator Console
 
-A read-only, installable operator console for an [IAB Tech Lab seller
+An installable operator console for an [IAB Tech Lab seller
 agent](https://github.com/IABTechLab/seller-agent). It is a static single-page
 app: no server, no backend-for-frontend, no serverless function. The browser
 talks to your agent's API directly.
@@ -25,11 +25,14 @@ Deployed to GitHub Pages from `main`.
 > Use a dedicated key, rotate it, revoke it when a device is lost. The durable
 > fix is upstream: a read-only operator role and per-key origin scoping.
 >
-> **"Read-only" means this console issues no unsafe HTTP methods. It does not
-> mean the server makes no writes.**
+> **This console is no longer read-only.** It previously issued no unsafe HTTP
+> method — not as a restriction the key carried, but because the client had no
+> function capable of one. That restriction was lifted deliberately
+> ([ADR 11](docs/adr/0011-writes-permitted.md)). Nothing replaced it, so a bug
+> in this bundle can now mutate what the key is authorised to mutate.
 
-That last sentence is not hypothetical. Three of the agent's `GET` routes
-modify storage when you read them:
+Separately, and unchanged by any of that: three of the agent's `GET` routes
+modify storage when you read them, so even a pure read is not side-effect free.
 
 | Route | What it writes | Called by this console? |
 |---|---|---|
@@ -39,20 +42,19 @@ modify storage when you read them:
 | `GET /approvals` | marks an expired pending gate `timed_out` | **Yes**, the Inbox screen. It says so on the screen. |
 | any authenticated route | bumps the key's `last_used_at` and `use_count` | Yes — presenting a valid key is itself a write, on every request. |
 
-### What "read-only" is enforced by
+### What the client seam still enforces
 
-Three independent layers, because a convention is not an enforcement:
+One layer survives, with a narrower purpose. `src/api/http.ts` remains the only
+module permitted to issue a request, and the AST guard in
+`tests/guards/fetch-seam.guard.test.ts` fails if `fetch`, `XMLHttpRequest`,
+`sendBeacon`, `EventSource` or `WebSocket` appears anywhere outside it. That is
+now about having one owner for timeouts, the auth header, the redirect policy
+and the result taxonomy — not about preventing writes.
 
-1. **Shape.** `src/api/http.ts` is the only module permitted to call `fetch`,
-   and it exports one function, `get`. There is no `post`, no `request`, no
-   method parameter.
-2. **A guard.** `tests/guards/readonly.guard.test.ts` walks the TypeScript AST
-   and fails if `fetch`, `XMLHttpRequest`, `sendBeacon`, `EventSource` or
-   `WebSocket` appears anywhere outside that module.
-3. **A trap.** Every unit test runs against MSW with `onUnhandledRequest:
-   "error"` and a catch-all that records any non-`GET` and fails the run.
-
-The guard has caught three real additions. It earns its place.
+Gone: the seam-shape assertions (it exports `request`, which takes a method)
+and the MSW trap that failed any run issuing a non-`GET`. Every endpoint in the
+table is still a read, and a test asserts that, but it is a description of
+today's table rather than a boundary.
 
 ---
 

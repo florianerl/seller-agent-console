@@ -1,4 +1,4 @@
-// Fixture for the read-only guard's own test. Deliberately violating; the .txt
+// Fixture for the fetch-seam guard's own test. Deliberately violating; the .txt
 // extension keeps it out of the build and out of tsconfig.
 export async function bad() {
   await fetch("https://example.com");
