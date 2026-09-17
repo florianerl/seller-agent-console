@@ -4,6 +4,7 @@ import type { Result } from "../api/errors";
 import type { Connection } from "../api/http";
 import { useCredential } from "../credentials/context";
 import { derive, sameResult, type Resource } from "./freshness";
+import { reportResult } from "./reachability";
 
 /**
  * One SWR entry per resource, which is what makes each card degrade on its own:
@@ -42,6 +43,10 @@ export function useResource<T>(
   );
 
   useEffect(() => {
+    // Feeds the shell-level "can't reach the agent" signal, which needs
+    // several resources to agree before it says anything.
+    if (result) reportResult(name, result.kind === "unavailable");
+
     if (result?.kind === "ok") {
       lastGood.current = { data: result.data, at: result.fetchedAt };
     }
@@ -49,7 +54,7 @@ export function useResource<T>(
     if (result?.kind === "rejected") {
       lastGood.current = undefined;
     }
-  }, [result]);
+  }, [result, name]);
 
   return derive(result, lastGood.current, isLoading);
 }

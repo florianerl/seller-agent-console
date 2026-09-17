@@ -10,6 +10,7 @@ import useMediaQuery from "@mui/material/useMediaQuery";
 import { useTheme } from "@mui/material/styles";
 import { Outlet } from "react-router";
 import { DRAWER_WIDTH, Sidebar } from "./Sidebar";
+import { ConnectivityBanner } from "./ConnectivityBanner";
 import { MenuIcon } from "../components/MenuIcon";
 import { palette } from "../theme/palette";
 
@@ -99,6 +100,7 @@ export function Shell() {
         }}
       >
         <Toolbar variant="dense" sx={{ pt: "env(safe-area-inset-top)" }} />
+        <ConnectivityBanner />
         <Suspense
           fallback={
             <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
