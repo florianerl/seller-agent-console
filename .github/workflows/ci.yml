@@ -124,8 +124,16 @@ jobs:
           ASSET=$(curl -fsS http://localhost:8080/index.html | grep -oE '/assets/[^"]+\.js' | head -1)
           curl -fsSI "http://localhost:8080$ASSET" | grep -i '^cache-control:' | grep -q 'immutable'
 
-          echo "--- real headers a meta tag cannot express ---"
-          curl -fsSI http://localhost:8080/index.html | grep -i '^content-security-policy:' | grep -q "frame-ancestors 'none'"
+          # Checked on more than one path: nginx's add_header does not merge,
+          # so a header set at server level disappears from any location that
+          # adds one of its own. That is how the CSP went missing from
+          # index.html while still being present elsewhere.
+          echo "--- real headers a meta tag cannot express, on every path ---"
+          for path in / /index.html /manifest.webmanifest "$ASSET"; do
+            curl -fsSI "http://localhost:8080$path" \
+              | grep -i '^content-security-policy:' | grep -q "frame-ancestors 'none'" \
+              || { echo "no CSP header on $path"; exit 1; }
+          done
 
           echo "--- a missing chunk is a 404, never a 200 of index.html ---"
           test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/assets/does-not-exist.js)" = "404"
