@@ -4,6 +4,7 @@ import type { Result } from "../errors";
 
 const PATHS = {
   orders: "/api/v1/orders",
+  ordersReport: "/api/v1/orders/report",
 } as const;
 
 // --- orders ------------------------------------------------------------------
@@ -70,6 +71,61 @@ export const orderHistory = (
   get(c, `${PATHS.orders}/${encodeURIComponent(orderId)}/history`, {
     schema: OrderHistory,
     // Audit trails scan storage and can be large.
+    timeoutMs: TIMEOUTS.heavy,
+    signal,
+  });
+
+export const OrdersReport = z
+  .object({
+    total_orders: z.number().catch(0),
+    status_counts: z.record(z.string(), z.number()).catch({}),
+    total_transitions: z.number().catch(0),
+    avg_transitions_per_order: z.number().catch(0),
+    actor_type_counts: z.record(z.string(), z.number()).catch({}),
+    change_requests: z
+      .object({ total: z.number().catch(0), by_status: z.record(z.string(), z.number()).catch({}) })
+      .loose()
+      .catch({ total: 0, by_status: {} }),
+  })
+  .loose();
+export type OrdersReport = z.infer<typeof OrdersReport>;
+
+/** Aggregates over every stored order, same as the audit trail — heavy timeout. */
+export const ordersReport = (
+  c: Connection,
+  query: { from_date?: string; to_date?: string } = {},
+  signal?: AbortSignal,
+): Promise<Result<OrdersReport>> =>
+  get(c, PATHS.ordersReport, { schema: OrdersReport, query, timeoutMs: TIMEOUTS.heavy, signal });
+
+/**
+ * Superset of `OrderHistory` — same transitions plus change requests. The
+ * only order in this deployment has none, so `change_requests` entries are
+ * left as loose, unvalidated records until a populated one can be inspected.
+ */
+export const OrderAudit = z
+  .object({
+    order_id: z.string(),
+    current_status: z.string().nullable().catch(null),
+    created_at: z.string().nullable().catch(null),
+    transitions: z.array(StateTransition),
+    transition_count: z.number().catch(0),
+    change_requests: z.array(z.object({}).loose()).catch([]),
+    change_request_count: z.number().catch(0),
+  })
+  .loose();
+export type OrderAudit = z.infer<typeof OrderAudit>;
+
+export const orderAudit = (
+  c: Connection,
+  orderId: string,
+  query: { actor?: string; from_date?: string; to_date?: string } = {},
+  signal?: AbortSignal,
+): Promise<Result<OrderAudit>> =>
+  get(c, `${PATHS.orders}/${encodeURIComponent(orderId)}/audit`, {
+    schema: OrderAudit,
+    query,
+    // Same storage scan as /history, with change requests layered on top.
     timeoutMs: TIMEOUTS.heavy,
     signal,
   });

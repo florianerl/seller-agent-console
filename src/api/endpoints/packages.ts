@@ -35,3 +35,16 @@ export type PackageList = z.infer<typeof PackageList>;
 
 export const packages = (c: Connection, signal?: AbortSignal): Promise<Result<PackageList>> =>
   get(c, PATHS.packages, { schema: PackageList, signal });
+
+/**
+ * `/packages/{id}` shares `/packages`'s credential sensitivity in both
+ * directions: same authenticated-vs-public field split, and — unlike the
+ * catalog routes in products.ts — an invalid key is rejected (401) rather than
+ * silently treated as anonymous. Confirmed on the live agent.
+ */
+export const packageById = (
+  c: Connection,
+  packageId: string,
+  signal?: AbortSignal,
+): Promise<Result<Package>> =>
+  get(c, `${PATHS.packages}/${encodeURIComponent(packageId)}`, { schema: Package, signal });

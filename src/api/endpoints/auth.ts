@@ -27,3 +27,29 @@ export const ApiKeyList = z.unknown();
 
 export const apiKeys = (c: Connection, signal?: AbortSignal): Promise<Result<unknown>> =>
   get(c, PATHS.apiKeys, { schema: ApiKeyList, timeoutMs: TIMEOUTS.probe, signal });
+
+/**
+ * One key's record. The agent never returns the secret here — only its
+ * metadata — and this console must never render one either, so the schema
+ * deliberately does not carry a field that could hold it.
+ */
+export const ApiKeyDetail = z
+  .object({
+    key_id: z.string(),
+    name: z.string().nullable().catch(null),
+    role: z.string().nullable().catch(null),
+    created_at: z.string().nullable().catch(null),
+    expires_at: z.string().nullable().catch(null),
+    last_used_at: z.string().nullable().catch(null),
+    use_count: z.number().nullable().catch(null),
+    revoked: z.boolean().nullable().catch(null),
+  })
+  .loose();
+export type ApiKeyDetail = z.infer<typeof ApiKeyDetail>;
+
+export const apiKeyById = (
+  c: Connection,
+  keyId: string,
+  signal?: AbortSignal,
+): Promise<Result<ApiKeyDetail>> =>
+  get(c, `${PATHS.apiKeys}/${encodeURIComponent(keyId)}`, { schema: ApiKeyDetail, signal });

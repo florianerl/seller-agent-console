@@ -9,6 +9,7 @@ import {
   setWritesEnabled,
 } from "../../src/api/policy";
 import { z } from "zod";
+import { ENDPOINT_CALLS, type EndpointFn } from "../fixtures/endpoint-calls";
 
 const connection: Connection = { baseUrl: API, apiKey: "k-operator" };
 const anything = z.unknown();
@@ -103,27 +104,26 @@ describe("with writes off", () => {
    */
   it("leaves every endpoint in the table callable or refused, never silently sent", async () => {
     const recorder = recordRequests();
-    const EXTRA: Record<string, unknown[]> = {
-      eventById: ["e1"],
-      orderById: ["ORD-1"],
-      orderHistory: ["ORD-1"],
-      dealPerformance: ["D-1"],
-      dealLineage: ["D-1"],
-      approvalById: ["A-1"],
-      sessionById: ["S-1"],
-    };
 
     const callers = Object.entries(endpoints).filter(
       ([, value]) => typeof value === "function",
-    ) as Array<[string, (c: Connection, ...rest: never[]) => Promise<unknown>]>;
+    ) as Array<[string, EndpointFn]>;
 
     for (const [name, call] of callers) {
-      await call(connection, ...((EXTRA[name] ?? []) as never[]));
+      const spec = ENDPOINT_CALLS[name];
+      expect(spec, `${name} has no entry in ENDPOINT_CALLS`).toBeDefined();
+      await call(connection, ...(spec!.args as never[]));
     }
 
     const unsafe = recorder.seen.filter((line) => !line.startsWith("GET "));
     const allowed = QUERY_SHAPED_PATHS.map((p) => `POST ${API}${p}`);
     expect(unsafe.filter((line) => !allowed.includes(line))).toEqual([]);
+
+    // And the exempt ones did go out — a sweep that sent nothing at all would
+    // pass this test while proving nothing.
+    for (const path of QUERY_SHAPED_PATHS) {
+      expect(recorder.seen).toContain(`POST ${API}${path}`);
+    }
   });
 });
 

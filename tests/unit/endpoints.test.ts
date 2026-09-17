@@ -1,10 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { http, HttpResponse } from "msw";
 import { API, server } from "../setup/msw";
 import * as endpoints from "../../src/api/endpoints";
 import type { Connection } from "../../src/api/http";
+import { resetWritePolicy, setWritesEnabled } from "../../src/api/policy";
+import { ENDPOINT_CALLS, type EndpointFn } from "../fixtures/endpoint-calls";
 
 const connection: Connection = { baseUrl: API, apiKey: "k-operator" };
+
+afterEach(() => resetWritePolicy());
 
 /**
  * Every exported endpoint function, discovered rather than listed, so a new one
@@ -12,56 +16,28 @@ const connection: Connection = { baseUrl: API, apiKey: "k-operator" };
  */
 const callers = Object.entries(endpoints).filter(
   ([, value]) => typeof value === "function",
-) as Array<[string, (c: Connection, ...rest: never[]) => Promise<unknown>]>;
+) as Array<[string, EndpointFn]>;
 
 /**
- * Extra arguments for endpoints that take a path parameter. Everything else
- * needs only the connection. Listed rather than guessed, so a new endpoint
- * with an unusual signature fails loudly instead of being silently skipped.
+ * The table is no longer all reads: five POSTs are queries the agent could not
+ * fit in a URL (src/api/policy.ts). So this asserts each endpoint issues the
+ * method it *claims* in the shared call table, rather than asserting GET — and
+ * a write added without declaring itself fails here rather than passing
+ * quietly.
  */
-const EXTRA_ARGS: Record<string, unknown[]> = {
-  eventById: ["e1"],
-  orderById: ["ORD-1"],
-  orderHistory: ["ORD-1"],
-  dealPerformance: ["D-1"],
-  dealLineage: ["D-1"],
-  approvalById: ["A-1"],
-  sessionById: ["S-1"],
-};
-
-/**
- * The endpoint table is all reads today. This is not the read-only enforcement
- * it once was (ADR 11) — it is a statement about the current table, and a
- * deliberately added write endpoint updates it rather than working around it.
- */
-describe("every endpoint currently in the table issues GET", () => {
-  it("discovered every exported endpoint", () => {
-    expect(callers.map(([name]) => name).sort()).toEqual([
-      "agents",
-      "apiKeys",
-      "approvalById",
-      "approvals",
-      "dealLineage",
-      "dealPerformance",
-      "deals",
-      "eventById",
-      "events",
-      "health",
-      "inventorySyncStatus",
-      "inventorySyncWatermark",
-      "orderById",
-      "orderHistory",
-      "orders",
-      "packages",
-      "products",
-      "rateCard",
-      "root",
-      "sessionById",
-      "sessions",
-    ]);
+describe("every endpoint issues the method it declares", () => {
+  it("has a declared call for every exported endpoint, and no stale ones", () => {
+    expect(callers.map(([name]) => name).sort()).toEqual(Object.keys(ENDPOINT_CALLS).sort());
   });
 
-  it.each(callers)("%s issues GET and nothing else", async (name, call) => {
+  it.each(callers)("%s issues its declared method and nothing else", async (name, call) => {
+    const spec = ENDPOINT_CALLS[name];
+    expect(spec, `${name} has no entry in ENDPOINT_CALLS`).toBeDefined();
+
+    // The query-shaped POSTs are the only unsafe methods permitted while the
+    // switch is off, and this file runs with it off.
+    setWritesEnabled(true);
+
     const methods: string[] = [];
     server.use(
       http.all(`${API}/*`, ({ request }) => {
@@ -74,10 +50,10 @@ describe("every endpoint currently in the table issues GET", () => {
       }),
     );
 
-    await call(connection, ...((EXTRA_ARGS[name] ?? []) as never[]));
+    await call(connection, ...(spec!.args as never[]));
 
     expect(methods.length).toBeGreaterThan(0);
-    expect(methods.every((m) => m === "GET")).toBe(true);
+    expect(methods.every((m) => m === spec!.method)).toBe(true);
   });
 });
 

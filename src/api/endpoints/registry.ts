@@ -4,6 +4,7 @@ import type { Result } from "../errors";
 
 const PATHS = {
   agents: "/registry/agents",
+  agentCard: "/.well-known/agent.json",
 } as const;
 
 // --- agent registry ---------------------------------------------------------
@@ -53,3 +54,57 @@ export const agents = (
   query: { agent_type?: string; trust_status?: string } = {},
   signal?: AbortSignal,
 ): Promise<Result<AgentList>> => get(c, PATHS.agents, { schema: AgentList, query, signal });
+
+export const agentById = (
+  c: Connection,
+  agentId: string,
+  signal?: AbortSignal,
+): Promise<Result<RegisteredAgent>> =>
+  get(c, `${PATHS.agents}/${encodeURIComponent(agentId)}`, { schema: RegisteredAgent, signal });
+
+/**
+ * The agent's own A2A card, served unauthenticated at a well-known path. It is
+ * what the agent claims about itself to anyone who asks — which is exactly why
+ * it is worth showing next to what the agent actually does. `url` here is the
+ * address the agent advertises, and it is routinely wrong behind a proxy
+ * (localhost, in the deployment this was written against), so the screen must
+ * never present it as the address this console is talking to.
+ */
+export const AgentCard = z
+  .object({
+    name: z.string(),
+    description: z.string().nullable().catch(null),
+    url: z.string().nullable().catch(null),
+    version: z.string().catch(""),
+    provider: z
+      .object({ name: z.string().catch(""), url: z.string().nullable().catch(null) })
+      .loose()
+      .nullable()
+      .catch(null),
+    capabilities: z
+      .object({
+        protocols: z.array(z.string()).catch([]),
+        streaming: z.boolean().catch(false),
+        push_notifications: z.boolean().catch(false),
+      })
+      .loose()
+      .nullable()
+      .catch(null),
+    skills: z
+      .array(
+        z
+          .object({
+            id: z.string(),
+            name: z.string().catch(""),
+            description: z.string().nullable().catch(null),
+            tags: z.array(z.string()).catch([]),
+          })
+          .loose(),
+      )
+      .catch([]),
+  })
+  .loose();
+export type AgentCard = z.infer<typeof AgentCard>;
+
+export const agentCard = (c: Connection, signal?: AbortSignal): Promise<Result<AgentCard>> =>
+  get(c, PATHS.agentCard, { schema: AgentCard, signal });

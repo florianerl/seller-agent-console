@@ -7,6 +7,7 @@ const PATHS = {
   health: "/health",
   inventorySyncStatus: "/api/v1/inventory-sync/status",
   inventorySyncWatermark: "/api/v1/inventory-sync/watermark",
+  supplyChain: "/api/v1/supply-chain",
 } as const;
 
 // --- root -------------------------------------------------------------------
@@ -72,3 +73,41 @@ export const inventorySyncWatermark = (
   signal?: AbortSignal,
 ): Promise<Result<Watermark>> =>
   get(c, PATHS.inventorySyncWatermark, { schema: Watermark, signal });
+
+// --- supply chain -----------------------------------------------------------
+
+/**
+ * The seller's own sellers.json/schain declaration, as the agent will present
+ * it to a buyer. `is_direct` and the chain length are the two facts a buyer
+ * checks, so neither is allowed a default that could invent an answer.
+ */
+export const SupplyChainNode = z
+  .object({
+    asi: z.string(),
+    sid: z.string(),
+    name: z.string().catch(""),
+    domain: z.string().nullable().catch(null),
+    seller_type: z.string().nullable().catch(null),
+    is_direct: z.boolean(),
+    comment: z.string().nullable().catch(null),
+  })
+  .loose();
+export type SupplyChainNode = z.infer<typeof SupplyChainNode>;
+
+export const SupplyChain = z
+  .object({
+    seller_id: z.string(),
+    seller_name: z.string().catch(""),
+    seller_type: z.string().nullable().catch(null),
+    domain: z.string().nullable().catch(null),
+    is_direct: z.boolean(),
+    supported_deal_types: z.array(z.string()).catch([]),
+    contact_email: z.string().nullable().catch(null),
+    schain: z.array(SupplyChainNode).catch([]),
+    version: z.string().catch(""),
+  })
+  .loose();
+export type SupplyChain = z.infer<typeof SupplyChain>;
+
+export const supplyChain = (c: Connection, signal?: AbortSignal): Promise<Result<SupplyChain>> =>
+  get(c, PATHS.supplyChain, { schema: SupplyChain, signal });
