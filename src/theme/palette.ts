@@ -55,9 +55,15 @@ export const CONTRAST_CONTRACT: ReadonlyArray<{
   { name: "error status text on paper", fg: palette.error, bg: palette.paper, min: "body" },
   { name: "error text on error background", fg: palette.error, bg: palette.errorBg, min: "body" },
   { name: "warning text on paper", fg: palette.warningText, bg: palette.paper, min: "body" },
-  // Non-text: disabled "soon" nav items are roadmap information we chose to
-  // display, so they are held to the 3:1 UI bar even though WCAG 1.4.3 exempts
-  // genuinely disabled controls.
-  { name: "disabled nav on ground", fg: palette.disabled, bg: palette.ground, min: "ui" },
+  // "soon" nav items were held to the 3:1 UI bar on the grounds that WCAG
+  // 1.4.3 exempts disabled controls. They are not controls — Sidebar renders
+  // them as plain list items precisely so a screen reader does not announce a
+  // button that does nothing — so the exemption never applied and the real bar
+  // is 4.5:1. This contract asserted the comfortable reading of its own
+  // component; axe in a real browser is what caught it.
+  { name: "soon nav label on paper", fg: palette.textSecondary, bg: palette.paper, min: "body" },
+  { name: "soon nav label on ground", fg: palette.textSecondary, bg: palette.ground, min: "body" },
+  // Kept for genuinely disabled controls, where the exemption does hold.
+  { name: "disabled control on ground", fg: palette.disabled, bg: palette.ground, min: "ui" },
   { name: "warning fill on paper", fg: palette.warning, bg: palette.paper, min: "ui" },
 ];

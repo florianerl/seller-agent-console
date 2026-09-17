@@ -3,7 +3,9 @@ import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 import { BASE_PATH } from "./config/base-path";
 
-const BUILD_ID = new Date().toISOString();
+// Overridable so the update end-to-end test can build two distinguishable
+// versions on demand; a normal build just stamps the time.
+const BUILD_ID = process.env.BUILD_ID ?? new Date().toISOString();
 
 export default defineConfig({
   define: {

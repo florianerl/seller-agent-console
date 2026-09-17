@@ -19,8 +19,10 @@ export default tseslint.config(
       "playwright-report",
       "test-results",
       "node_modules",
-      // Lints itself into a circular project-service lookup; nothing to gain.
+      // Both are plain config files outside any tsconfig project, and
+      // type-aware linting has nothing to say about them.
       "eslint.config.js",
+      "lighthouserc.cjs",
     ],
   },
 

@@ -22,10 +22,17 @@ export function useServiceWorker(): { updateReady: boolean; applyUpdate: () => v
 
     let cleanup: (() => void) | undefined;
 
-    // Own the reload rather than relying on the plugin's implicit one, which
-    // was observed not to fire: the new worker activated and took control
-    // while the page kept running the previous build — new worker, old page,
-    // and the prompt still on screen.
+    // Owning the reload rather than relying on the plugin's implicit one.
+    //
+    // Honest account of why: a deployed build once activated a new worker,
+    // took control, and left the page running the old build with the prompt
+    // still on screen. Adding this handler fixed it. But the end-to-end update
+    // test still passes with this handler disabled, so the plugin does reload
+    // on its own in that scenario — which means this is a belt whose
+    // contribution has not been isolated, not the demonstrated fix it was
+    // first described as. It stays because the `reloading` guard below is a
+    // real protection either way, and because the failure it addresses leaves
+    // an operator stranded on a stale build.
     //
     // Only reload when this page was ALREADY controlled when we registered.
     // On a first install clientsClaim() also fires controllerchange, and
@@ -44,8 +51,7 @@ export function useServiceWorker(): { updateReady: boolean; applyUpdate: () => v
     const updateSW = registerSW({
       onNeedRefresh() {
         setUpdateReady(true);
-        // Messages the waiting worker to skip waiting. The reload is handled
-        // by the controllerchange listener above. The function's boolean
+        // Messages the waiting worker to skip waiting. The function's boolean
         // parameter has been ignored since plugin 0.13.2, so it is not passed.
         setUpdate({ run: () => updateSW() });
       },

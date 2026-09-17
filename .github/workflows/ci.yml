@@ -45,3 +45,25 @@ jobs:
 
       - name: Guards
         run: npm run test:guards
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      # Serves dist/ under the real deploy prefix, never at the origin root:
+      # base-path bugs resolve correctly at / and only break under a prefix,
+      # which is exactly how they reach production unnoticed.
+      - name: End-to-end tests
+        run: npm run test:e2e
+
+      - name: Upload the Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+      # Against a local preview of this build, so a pull request is gated
+      # before anything deploys.
+      - name: Lighthouse budgets
+        run: npm run test:lighthouse

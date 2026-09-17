@@ -20,11 +20,16 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             return (
               <ListItem key={screen.id} data-nav={screen.id} data-state="soon">
                 {/* Not a control: a disabled button would be a focus stop that
-                    does nothing, and announcing it as a button would lie. */}
+                    does nothing, and announcing it as a button would lie.
+                    Which is also why these are held to the 4.5:1 text bar and
+                    not the 3:1 one — WCAG exempts disabled *controls*, and
+                    having deliberately made these not controls, we do not get
+                    to claim the exemption. The "soon" is carried by the chip's
+                    own word, so dimming the label was never doing the work. */}
                 <ListItemText
                   primary={screen.label}
                   slotProps={{
-                    primary: { sx: { color: palette.disabled, fontSize: 14 } },
+                    primary: { sx: { color: palette.textSecondary, fontSize: 14 } },
                   }}
                 />
                 <Chip
@@ -33,7 +38,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                   sx={{
                     height: 20,
                     fontSize: 11,
-                    color: palette.disabled,
+                    color: palette.textSecondary,
                     borderColor: palette.line,
                   }}
                   variant="outlined"
