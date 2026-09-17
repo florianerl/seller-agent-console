@@ -1,6 +1,7 @@
 import { z } from "zod";
-import { get, type Connection } from "../http";
+import { get, request, type Connection } from "../http";
 import type { Result } from "../errors";
+import { MutationAck } from "./shared";
 
 const PATHS = {
   packages: "/packages",
@@ -48,3 +49,47 @@ export const packageById = (
   signal?: AbortSignal,
 ): Promise<Result<Package>> =>
   get(c, `${PATHS.packages}/${encodeURIComponent(packageId)}`, { schema: Package, signal });
+
+export const createPackage = (
+  c: Connection,
+  body: { name: string; base_price: number; floor_price: number },
+  signal?: AbortSignal,
+): Promise<Result<Package>> =>
+  request(c, PATHS.packages, { schema: Package, method: "POST", body, signal });
+
+export const updatePackage = (
+  c: Connection,
+  packageId: string,
+  body: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<Result<Package>> =>
+  request(c, `${PATHS.packages}/${encodeURIComponent(packageId)}`, {
+    schema: Package,
+    method: "PUT",
+    body,
+    signal,
+  });
+
+export const deletePackage = (
+  c: Connection,
+  packageId: string,
+  signal?: AbortSignal,
+): Promise<Result<MutationAck>> =>
+  request(c, `${PATHS.packages}/${encodeURIComponent(packageId)}`, {
+    schema: MutationAck,
+    method: "DELETE",
+    signal,
+  });
+
+export const assemblePackage = (
+  c: Connection,
+  body: { name: string; product_ids: string[] },
+  signal?: AbortSignal,
+): Promise<Result<Package>> =>
+  request(c, `${PATHS.packages}/assemble`, { schema: Package, method: "POST", body, signal });
+
+export const syncPackages = (
+  c: Connection,
+  signal?: AbortSignal,
+): Promise<Result<MutationAck>> =>
+  request(c, `${PATHS.packages}/sync`, { schema: MutationAck, method: "POST", signal });

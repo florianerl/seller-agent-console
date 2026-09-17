@@ -17,7 +17,7 @@ const CHANGE_REQUESTS = [
     cr_id: "CR-ABC123",
     order_id: "ORD-1",
     change_type: "flight_extension",
-    status: "pending",
+    status: "pending_approval",
     diffs: [{ field: "flight_end", old_value: "2026-09-30", new_value: "2026-10-15" }],
     reason: "buyer asked for two extra weeks",
     requested_by: "agent:buyer-7",
@@ -78,7 +78,7 @@ describe("the change requests screen", () => {
     renderScreen();
     await waitFor(() => expect(screen.getByText("CR-ABC123")).toBeInTheDocument());
 
-    expect(document.querySelector('[data-status="pending"]')).toBeTruthy();
+    expect(document.querySelector('[data-status="pending_approval"]')).toBeTruthy();
     expect(document.querySelector('[data-status="approved"]')).toBeTruthy();
   });
 

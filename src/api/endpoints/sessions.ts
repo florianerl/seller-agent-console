@@ -1,6 +1,7 @@
 import { z } from "zod";
-import { get, type Connection } from "../http";
+import { get, request, type Connection } from "../http";
 import type { Result } from "../errors";
+import { MutationAck } from "./shared";
 
 const PATHS = {
   sessions: "/sessions",
@@ -61,5 +62,36 @@ export const sessionById = (
 ): Promise<Result<SessionDetail>> =>
   get(c, `${PATHS.sessions}/${encodeURIComponent(sessionId)}`, {
     schema: SessionDetail,
+    signal,
+  });
+
+export const createSession = (
+  c: Connection,
+  body: { seat_id?: string; agent_url?: string } = {},
+  signal?: AbortSignal,
+): Promise<Result<SessionDetail>> =>
+  request(c, PATHS.sessions, { schema: SessionDetail, method: "POST", body, signal });
+
+export const sendSessionMessage = (
+  c: Connection,
+  sessionId: string,
+  body: { message: string },
+  signal?: AbortSignal,
+): Promise<Result<SessionDetail>> =>
+  request(c, `${PATHS.sessions}/${encodeURIComponent(sessionId)}/messages`, {
+    schema: SessionDetail,
+    method: "POST",
+    body,
+    signal,
+  });
+
+export const closeSession = (
+  c: Connection,
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<Result<MutationAck>> =>
+  request(c, `${PATHS.sessions}/${encodeURIComponent(sessionId)}/close`, {
+    schema: MutationAck,
+    method: "POST",
     signal,
   });

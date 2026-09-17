@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { get, TIMEOUTS, type Connection } from "../http";
+import { get, request, TIMEOUTS, type Connection } from "../http";
 import type { Result } from "../errors";
-import { Money } from "./shared";
+import { Money, MutationAck } from "./shared";
 
 const PATHS = {
   deals: "/api/v1/deals",
@@ -259,5 +259,81 @@ export const dealSspTroubleshoot = (
   get(c, `${PATHS.deals}/${encodeURIComponent(dealId)}/ssp-troubleshoot`, {
     schema: DealSspTroubleshoot,
     query: { ssp_name: sspName },
+    signal,
+  });
+
+export const generateDeal = (
+  c: Connection,
+  body: { proposal_id: string; dsp_platform?: string },
+  signal?: AbortSignal,
+): Promise<Result<MutationAck>> =>
+  // Legacy OpenDirect path, distinct from POST /api/v1/deals (book from quote).
+  request(c, "/deals", { schema: MutationAck, method: "POST", body, signal });
+
+export const bookDeal = (
+  c: Connection,
+  body: { quote_id: string; idempotency_key: string; notes?: string },
+  signal?: AbortSignal,
+): Promise<Result<MutationAck>> =>
+  request(c, PATHS.deals, { schema: MutationAck, method: "POST", body, signal });
+
+export const dealFromTemplate = (
+  c: Connection,
+  body: { deal_type: string; product_id: string },
+  signal?: AbortSignal,
+): Promise<Result<MutationAck>> =>
+  request(c, `${PATHS.deals}/from-template`, { schema: MutationAck, method: "POST", body, signal });
+
+export const bulkDealOperations = (
+  c: Connection,
+  body: { operations: readonly { action: string; deal_id?: string; quote_id?: string }[] },
+  signal?: AbortSignal,
+): Promise<Result<MutationAck>> =>
+  request(c, `${PATHS.deals}/bulk`, { schema: MutationAck, method: "POST", body, signal });
+
+export const pushDeal = (
+  c: Connection,
+  body: { deal_id: string; buyer_urls: string[] },
+  signal?: AbortSignal,
+): Promise<Result<MutationAck>> =>
+  request(c, `${PATHS.deals}/push`, { schema: MutationAck, method: "POST", body, signal });
+
+export const distributeDeal = (
+  c: Connection,
+  body: { deal_id: string; ssp_name?: string },
+  signal?: AbortSignal,
+): Promise<Result<MutationAck>> =>
+  request(c, `${PATHS.deals}/distribute`, { schema: MutationAck, method: "POST", body, signal });
+
+export const createCuratedDeal = (
+  c: Connection,
+  body: { curator_id: string; deal_type?: string },
+  signal?: AbortSignal,
+): Promise<Result<MutationAck>> =>
+  request(c, `${PATHS.deals}/curated`, { schema: MutationAck, method: "POST", body, signal });
+
+export const migrateDeal = (
+  c: Connection,
+  dealId: string,
+  body: { reason?: string },
+  signal?: AbortSignal,
+): Promise<Result<MutationAck>> =>
+  request(c, `${PATHS.deals}/${encodeURIComponent(dealId)}/migrate`, {
+    schema: MutationAck,
+    method: "POST",
+    body,
+    signal,
+  });
+
+export const deprecateDeal = (
+  c: Connection,
+  dealId: string,
+  body: { reason: string; replacement_deal_id?: string },
+  signal?: AbortSignal,
+): Promise<Result<MutationAck>> =>
+  request(c, `${PATHS.deals}/${encodeURIComponent(dealId)}/deprecate`, {
+    schema: MutationAck,
+    method: "POST",
+    body,
     signal,
   });

@@ -12,26 +12,27 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { changeRequestById, changeRequests, type FieldDiff } from "../api/endpoints";
+import { changeRequestById, changeRequests, reviewChangeRequest, applyChangeRequest, type ChangeRequestReviewInput, type FieldDiff } from "../api/endpoints";
 import { describe } from "../api/errors";
+import { ConfirmAction } from "../components/ConfirmAction";
 import { Field, FieldGrid } from "../components/Field";
 import { GatedNotice } from "../components/GatedNotice";
+import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { StatusChip } from "../components/StatusChip";
+import { useCredential } from "../credentials/context";
 import { plural, stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
+import { useMutation } from "../query/useMutation";
 import { useResource } from "../query/useResource";
+import { ChangeRequestCreate, Panel } from "./mutations";
 import { palette } from "../theme/palette";
 
 /**
- * The wire schema for a change request is inferred, not observed (see the
- * comment in src/api/endpoints/change-requests.ts) — openapi.json gives it an
- * empty response body and the local store has never held one to sample. There
- * is no confirmed enum to filter on, so this list mirrors the review states
- * `ReviewChangeRequestModel` implies plus the two a request starts and ends in.
- * If the real agent uses different words, this filter will silently match
- * nothing rather than error, which is the right failure for a guess.
+ * The list filter has to use the agent's words. Review requires
+ * `pending_approval`; `failed` is a validation outcome at create time, not a
+ * state this screen can act on.
  */
-const STATUSES = ["", "pending", "approved", "rejected", "applied"];
+const STATUSES = ["", "pending_approval", "approved", "rejected", "applied", "failed"];
 
 /** A diff value can be any JSON the agent stored; render it as text, not as a type error. */
 function formatValue(value: unknown): string {
@@ -47,6 +48,159 @@ function DiffRow({ diff }: { diff: FieldDiff }) {
       <Box sx={{ color: palette.textSecondary }}>{formatValue(diff.old_value)}</Box>
       <Box>→</Box>
       <Box>{formatValue(diff.new_value)}</Box>
+    </Box>
+  );
+}
+
+function ReviewControls({
+  crId,
+  status,
+  onChanged,
+}: {
+  crId: string;
+  status: string;
+  onChanged: () => void;
+}) {
+  const { writesEnabled } = useCredential();
+  const [reason, setReason] = useState("");
+  const [name, setName] = useState("");
+  const [pendingDecision, setPendingDecision] = useState<"approve" | "reject" | undefined>();
+  const [pendingApply, setPendingApply] = useState(false);
+
+  const invalidate = {
+    invalidates: ["change-requests:*", `change-request:${crId}`] as const,
+  };
+
+  const review = useMutation<{ id: string; body: ChangeRequestReviewInput }, unknown>(
+    (c, args) => reviewChangeRequest(c, args.id, args.body),
+    invalidate,
+  );
+  const apply = useMutation<{ id: string }, unknown>(
+    (c, args) => applyChangeRequest(c, args.id),
+    invalidate,
+  );
+
+  const reviewable = status === "pending_approval";
+  const applicable = status === "approved";
+  const busy = review.pending || apply.pending;
+  const blocked = !writesEnabled;
+  const outcome = review.last ?? apply.last;
+
+  return (
+    <Box sx={{ mt: 1 }} data-block="change-request-controls">
+      <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 1 }}>Review this request</Typography>
+
+      <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", alignItems: "flex-start", mb: 1.5 }}>
+        <TextField
+          size="small"
+          label="Reason"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          disabled={blocked || !reviewable || busy}
+          sx={{ minWidth: 240 }}
+        />
+        <TextField
+          size="small"
+          label="Your name"
+          helperText="Stored as given; the agent does not verify it"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          disabled={blocked || !reviewable || busy}
+          sx={{ minWidth: 200 }}
+        />
+      </Box>
+
+      <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+        <Button
+          size="small"
+          variant="contained"
+          data-action="approve"
+          disabled={blocked || !reviewable || busy}
+          onClick={() => setPendingDecision("approve")}
+        >
+          Approve
+        </Button>
+        <Button
+          size="small"
+          variant="outlined"
+          data-action="reject"
+          disabled={blocked || !reviewable || busy}
+          onClick={() => setPendingDecision("reject")}
+        >
+          Reject
+        </Button>
+        <Button
+          size="small"
+          data-action="apply"
+          disabled={blocked || !applicable || busy}
+          onClick={() => setPendingApply(true)}
+        >
+          {apply.pending ? "Applying…" : "Apply to order"}
+        </Button>
+      </Box>
+
+      {writesEnabled && !reviewable && !applicable && (
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }} data-state="not-actionable">
+          This request is {status.replace(/_/g, " ")} — only a pending-approval
+          request can be reviewed, and only an approved one can be applied.
+        </Typography>
+      )}
+
+      {outcome && outcome.kind !== "ok" && (
+        <Typography variant="body2" sx={{ mt: 1, color: palette.error }} data-state="write-failed">
+          {describe(outcome)}
+        </Typography>
+      )}
+
+      <ConfirmAction
+        open={pendingDecision !== undefined}
+        title={pendingDecision === "reject" ? "Reject this change request?" : "Approve this change request?"}
+        confirmLabel={pendingDecision === "reject" ? "Reject" : "Approve"}
+        pending={review.pending}
+        onCancel={() => setPendingDecision(undefined)}
+        consequence={
+          <>
+            The agent records this decision on the change request. It keeps the
+            first decision it receives and refuses later ones, so if this fails
+            without a clear answer, re-read the request before trying again
+            rather than reviewing twice.
+          </>
+        }
+        onConfirm={() => {
+          const decision = pendingDecision;
+          setPendingDecision(undefined);
+          if (!decision) return;
+          void review
+            .run({
+              id: crId,
+              body: {
+                decision,
+                ...(reason ? { reason } : {}),
+                ...(name ? { decided_by: name } : {}),
+              },
+            })
+            .then(onChanged);
+        }}
+      />
+
+      <ConfirmAction
+        open={pendingApply}
+        title="Apply this change request to the order?"
+        confirmLabel="Apply"
+        pending={apply.pending}
+        onCancel={() => setPendingApply(false)}
+        consequence={
+          <>
+            The agent writes the proposed values onto the order and marks this
+            request applied. A second apply is refused, so if this fails without
+            a clear answer, re-read the request rather than applying twice.
+          </>
+        }
+        onConfirm={() => {
+          setPendingApply(false);
+          void apply.run({ id: crId }).then(onChanged);
+        }}
+      />
     </Box>
   );
 }
@@ -68,6 +222,9 @@ function Detail({ crId }: { crId: string }) {
 
   const cr = detail.data;
 
+  const decidedBy = cr.approved_by || cr.decided_by;
+  const decidedAt = cr.approved_at || cr.decided_at;
+
   return (
     <Stack spacing={2} sx={{ py: 1 }}>
       <FieldGrid data-block="change-request-detail">
@@ -80,11 +237,10 @@ function Detail({ crId }: { crId: string }) {
         <Field label="Requested by">{cr.requested_by || "—"}</Field>
         <Field label="Reason">{cr.reason || "—"}</Field>
         <Field label="Created">{stamp(cr.created_at)}</Field>
-        {/* decided_by/decided_at only exist once the (not-yet-wired) review
-            route has run; a still-pending request has neither, and that is a
-            normal state, not a missing field. */}
+        {/* The review route stamps approved_by for both approve and reject,
+            and does not verify the string. Shown as a label, not attribution. */}
         <Field label="Decided">
-          {cr.decided_at ? `${stamp(cr.decided_at)} by ${cr.decided_by ?? "—"}` : "Not decided yet"}
+          {decidedAt ? `${stamp(decidedAt)} by ${decidedBy ?? "—"}` : "Not decided yet"}
         </Field>
       </FieldGrid>
 
@@ -102,6 +258,8 @@ function Detail({ crId }: { crId: string }) {
           </Box>
         )}
       </Box>
+
+      <ReviewControls crId={crId} status={cr.status} onChanged={detail.refresh} />
     </Stack>
   );
 }
@@ -109,6 +267,7 @@ function Detail({ crId }: { crId: string }) {
 export default function ChangeRequestsScreen() {
   const [status, setStatus] = useState("");
   const [openId, setOpenId] = useState<string | undefined>();
+  const { writesEnabled } = useCredential();
 
   const list = useResource(
     `change-requests:${status}`,
@@ -124,15 +283,18 @@ export default function ChangeRequestsScreen() {
         Change requests
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Proposed edits to live orders, awaiting review. Read-only — approving,
-        rejecting, and applying a request are writes and happen in the agent,
-        not here.
+        Proposed edits to live orders. Review and apply are writes — they stay
+        visible while the switch is off, disabled.
       </Typography>
 
       {list.freshness === "blocked" ? (
         <GatedNotice what="The change request queue" result={list.result} />
       ) : (
         <>
+          {!writesEnabled && <ReadOnlyNotice what="Reviewing or applying a change request" />}
+          <Panel title="Submit a request">
+            <ChangeRequestCreate />
+          </Panel>
           <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
             <TextField
               select

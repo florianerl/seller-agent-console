@@ -6,9 +6,12 @@ import {
   events,
   health,
   inventorySyncStatus,
+  inventorySyncWatermark,
   root,
   supplyChain,
 } from "../api/endpoints";
+import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
+import { ApiKeyDetailLookup, ApiKeyWrites, InventorySyncWrite, Panel } from "./mutations";
 import { StatusCard } from "../components/StatusCard";
 import { stamp } from "../lib/time";
 import { useCredential } from "../credentials/context";
@@ -21,12 +24,15 @@ function when(iso: string | null | undefined): string {
 }
 
 export function HealthCards() {
-  const { credential } = useCredential();
+  const { credential, writesEnabled } = useCredential();
 
   const agent = useResource("health", health, { refreshInterval: CADENCE.health });
   const identity = useResource("root", root, { refreshInterval: CADENCE.health });
   const access = useResource("api-keys", apiKeys, { refreshInterval: CADENCE.health });
   const sync = useResource("inventory-sync", inventorySyncStatus, {
+    refreshInterval: CADENCE.inventorySync,
+  });
+  const watermark = useResource("inventory-watermark", inventorySyncWatermark, {
     refreshInterval: CADENCE.inventorySync,
   });
   const chain = useResource("supply-chain", supplyChain, {
@@ -40,6 +46,7 @@ export function HealthCards() {
   );
 
   return (
+    <>
     <Box
       sx={{
         display: "grid",
@@ -90,6 +97,9 @@ export function HealthCards() {
             <Typography variant="body2" color="text.secondary">
               {data.sync_count} run{data.sync_count === 1 ? "" : "s"}
               {data.task_running ? " · running now" : ""}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              watermark {watermark.data?.last_sync_at ? when(watermark.data.last_sync_at) : "none"}
             </Typography>
           </>
         )}
@@ -155,5 +165,16 @@ export function HealthCards() {
         }}
       </StatusCard>
     </Box>
+    <Box sx={{ mt: 3 }}>
+      {!writesEnabled && <ReadOnlyNotice what="Minting keys or triggering a sync" />}
+      <Panel title="Inventory sync">
+        <InventorySyncWrite />
+      </Panel>
+      <Panel title="API keys">
+        <ApiKeyWrites />
+        <ApiKeyDetailLookup />
+      </Panel>
+    </Box>
+    </>
   );
 }

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { get, type Connection } from "../http";
+import { get, request, type Connection } from "../http";
 import type { Result } from "../errors";
 import { Money } from "./shared";
 
@@ -90,3 +90,16 @@ export const quoteById = (
   signal?: AbortSignal,
 ): Promise<Result<QuoteResponse>> =>
   get(c, `${PATHS.quotes}/${encodeURIComponent(quoteId)}`, { schema: QuoteResponse, signal });
+
+export const createQuote = (
+  c: Connection,
+  body: {
+    idempotency_key: string;
+    product_id: string;
+    media_type?: string;
+    deal_type?: string;
+    impressions?: number;
+  },
+  signal?: AbortSignal,
+): Promise<Result<QuoteResponse>> =>
+  request(c, PATHS.quotes, { schema: QuoteResponse, method: "POST", body, signal });

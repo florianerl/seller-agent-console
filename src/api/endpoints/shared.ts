@@ -27,3 +27,7 @@ export const Money = z
   .object({ amount_micros: z.number(), currency: z.string().catch("USD") })
   .loose();
 export type Money = z.infer<typeof Money>;
+
+/** Empty ack: many mutation routes return an untyped body. */
+export const MutationAck = z.looseObject({});
+export type MutationAck = z.infer<typeof MutationAck>;

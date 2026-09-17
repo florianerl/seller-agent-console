@@ -213,4 +213,49 @@ describe("deciding an approval", () => {
 
     await waitFor(() => expect(resumed).toEqual(["resume"]));
   });
+
+  it("disables resume while a decision is in flight, and the reverse", async () => {
+    await connect(true);
+    const user = userEvent.setup();
+    let release: (() => void) | undefined;
+    server.use(
+      http.post(`${API}/approvals/appr-1/decide`, async () => {
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+
+    renderScreen();
+    await openGate(user);
+    await user.click(document.querySelector('[data-action="approve"]') as HTMLElement);
+    await user.click(document.querySelector('[data-action="confirm-mutation"]') as HTMLElement);
+
+    await waitFor(() => expect(document.querySelector('[data-action="resume"]')).toBeDisabled());
+    expect(document.querySelector('[data-action="reject"]')).toBeDisabled();
+
+    release?.();
+    await waitFor(() => expect(document.querySelector('[data-block="approval-controls"]')).toBeNull());
+  });
+
+  it("hides the decide controls as soon as the decision is accepted, before the gate is re-read", async () => {
+    await connect(true);
+    const user = userEvent.setup();
+    server.use(
+      http.post(`${API}/approvals/appr-1/decide`, () => HttpResponse.json({ ok: true })),
+      // The detail stays undecided so the lock cannot cheat by waiting for response.
+      http.get(`${API}/approvals/appr-1`, () =>
+        HttpResponse.json({ request: GATE, response: null }),
+      ),
+    );
+
+    renderScreen();
+    await openGate(user);
+    await user.click(document.querySelector('[data-action="reject"]') as HTMLElement);
+    await user.click(document.querySelector('[data-action="confirm-mutation"]') as HTMLElement);
+
+    await waitFor(() => expect(document.querySelector('[data-state="decision-sent"]')).toBeTruthy());
+    expect(document.querySelector('[data-action="approve"]')).toBeNull();
+  });
 });

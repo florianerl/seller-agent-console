@@ -30,10 +30,13 @@ import {
 import { describe } from "../api/errors";
 import { Field, FieldGrid } from "../components/Field";
 import { GatedNotice } from "../components/GatedNotice";
+import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
 import { useResource } from "../query/useResource";
 import { palette } from "../theme/palette";
+import { CatalogWrites, CreateQuoteWrite, PackageLookup, QuoteLookup } from "./mutations";
+import { useCredential } from "../credentials/context";
 
 function money(amount: Money | null | undefined): string {
   if (!amount) return "on request";
@@ -147,12 +150,33 @@ function ProductDetail({ productId }: { productId: string }) {
             {override.result ? describe(override.result) : "no override"}
           </Typography>
         )}
+        <Typography
+          variant="caption"
+          component="p"
+          data-freshness={noOverride ? "live" : override.freshness}
+          data-block="override-freshness"
+          sx={{
+            mt: 0.5,
+            color: override.freshness === "stale" ? palette.warningText : palette.textSecondary,
+          }}
+        >
+          {noOverride &&
+            override.result !== undefined &&
+            `as of ${asOfStamp(override.result.fetchedAt)}`}
+          {!noOverride &&
+            override.freshness === "live" &&
+            override.asOf !== undefined &&
+            `as of ${asOfStamp(override.asOf)}`}
+          {override.freshness === "stale" &&
+            "couldn't refresh — showing the last override received"}
+        </Typography>
       </Box>
 
       <Typography
         variant="caption"
         component="p"
         data-freshness={product.freshness}
+        data-block="product-freshness"
         sx={{ color: product.freshness === "stale" ? palette.warningText : palette.textSecondary }}
       >
         {product.freshness === "live" &&
@@ -695,6 +719,7 @@ function PricingResult({ query }: { query: { product_id: string; volume?: number
 }
 
 export default function CatalogScreen() {
+  const { writesEnabled } = useCredential();
   return (
     <section data-screen="catalog">
       <Typography variant="h2" sx={{ fontSize: 20, fontWeight: 600, mb: 0.5 }}>
@@ -745,6 +770,17 @@ export default function CatalogScreen() {
         caption="Applies tier and volume discounts to the rate card without booking. An unknown product is a typo, not an outage."
       >
         <Pricing />
+      </Section>
+
+      <Section
+        title="Writes"
+        caption="Rate card, packages, and inventory-type overrides. Visible while the switch is off, disabled."
+      >
+        {!writesEnabled && <ReadOnlyNotice what="Changing the catalog" />}
+        <CatalogWrites />
+        <PackageLookup />
+        <CreateQuoteWrite />
+        <QuoteLookup />
       </Section>
     </section>
   );

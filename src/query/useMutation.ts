@@ -33,13 +33,28 @@ export type MutationHandle<TArgs, T> = {
   readonly permitted: boolean;
 };
 
+/**
+ * `invalidates` entries are exact `useResource` names, or a prefix if they
+ * end in `*`. Filtered lists key on the filter, so a write has to drop every
+ * view of that list, not only the one currently on screen.
+ */
+function matchesInvalidation(name: string, patterns: ReadonlySet<string>): boolean {
+  if (patterns.has(name)) return true;
+  for (const pattern of patterns) {
+    if (pattern.endsWith("*") && name.startsWith(pattern.slice(0, -1))) return true;
+  }
+  return false;
+}
+
 export function useMutation<TArgs, T>(
   run: (connection: Connection, args: TArgs) => Promise<Result<T>>,
   options: {
     /**
      * `useResource` names whose values this call invalidates. They are matched
      * against the [credId, name] key shape, so only the current credential's
-     * entries are touched.
+     * entries are touched. A trailing `*` is a prefix — filtered lists key on
+     * the filter (`change-requests:approved`), and a write has to drop every
+     * view of that list, not only the one currently on screen.
      */
     readonly invalidates?: readonly string[];
   } = {},
@@ -96,11 +111,13 @@ export function useMutation<TArgs, T>(
         // cannot stand behind. Revalidate rather than patch: the agent decides
         // what the record looks like afterwards, not us.
         await mutate(
-          (key) =>
-            Array.isArray(key) &&
-            key[0] === credential.credId &&
-            typeof key[1] === "string" &&
-            names.has(key[1]),
+          (key) => {
+            if (!Array.isArray(key) || key[0] !== credential.credId || typeof key[1] !== "string") {
+              return false;
+            }
+            const name = key[1];
+            return matchesInvalidation(name, names);
+          },
           undefined,
           { revalidate: true },
         );

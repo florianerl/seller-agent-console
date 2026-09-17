@@ -211,6 +211,9 @@ describe("the catalog screen", () => {
       ),
     );
     expect(document.body.textContent).not.toMatch(/the agent returned 404/i);
+    expect(document.querySelector('[data-block="override-freshness"]')?.textContent).toMatch(
+      /as of/i,
+    );
   });
 
   it("does not discover until the operator submits a brief", async () => {

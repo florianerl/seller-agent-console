@@ -14,6 +14,9 @@ import Typography from "@mui/material/Typography";
 import { agents } from "../api/endpoints";
 import { describe } from "../api/errors";
 import { StatusChip } from "../components/StatusChip";
+import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
+import { useCredential } from "../credentials/context";
+import { AgentDetailLookup, AgentWrites, Panel } from "./mutations";
 import { plural, stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
 import { useResource } from "../query/useResource";
@@ -25,6 +28,7 @@ const TYPES = ["", "buyer", "seller", "tool_provider", "data_provider", "other"]
 export default function AgentsScreen() {
   const [trust, setTrust] = useState("");
   const [type, setType] = useState("");
+  const { writesEnabled } = useCredential();
 
   const list = useResource(
     `agents:${trust}:${type}`,
@@ -45,9 +49,14 @@ export default function AgentsScreen() {
         Agents
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Buyer and partner agents this seller has seen. Trust changes are writes,
-        so they happen in the agent, not here.
+        Buyer and partner agents this seller has seen. Trust changes are writes.
       </Typography>
+
+      {!writesEnabled && <ReadOnlyNotice what="Discovering or changing trust" />}
+      <Panel title="Registry writes">
+        <AgentWrites />
+        <AgentDetailLookup />
+      </Panel>
 
       <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
         <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>

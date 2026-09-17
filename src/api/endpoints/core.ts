@@ -1,6 +1,7 @@
 import { z } from "zod";
-import { get, TIMEOUTS, type Connection } from "../http";
+import { get, request, TIMEOUTS, type Connection } from "../http";
 import type { Result } from "../errors";
+import { MutationAck } from "./shared";
 
 const PATHS = {
   root: "/",
@@ -73,6 +74,19 @@ export const inventorySyncWatermark = (
   signal?: AbortSignal,
 ): Promise<Result<Watermark>> =>
   get(c, PATHS.inventorySyncWatermark, { schema: Watermark, signal });
+
+/** Manual sync. Not idempotent: each trigger runs another pass against the ad server. */
+export const triggerInventorySync = (
+  c: Connection,
+  query: { incremental?: boolean } = {},
+  signal?: AbortSignal,
+): Promise<Result<MutationAck>> =>
+  request(c, "/api/v1/inventory-sync/trigger", {
+    schema: MutationAck,
+    method: "POST",
+    query,
+    signal,
+  });
 
 // --- supply chain -----------------------------------------------------------
 

@@ -77,6 +77,37 @@ describe("useMutation", () => {
     await waitFor(() => expect(screen.getByTestId("reads").textContent).toBe("2"));
   });
 
+  it("invalidates every resource whose name matches a trailing-* prefix", async () => {
+    let filteredReads = 0;
+    const write = vi.fn(() => Promise.resolve(ok({ ok: true })));
+
+    function Screen() {
+      const list = useResource("change-requests:approved", () => {
+        filteredReads += 1;
+        return Promise.resolve(ok({ n: filteredReads }));
+      });
+      const mutation = useMutation(write, { invalidates: ["change-requests:*"] });
+
+      return (
+        <>
+          <span data-testid="reads">{list.data ? String(list.data.n) : "-"}</span>
+          <button onClick={() => void mutation.run(undefined)}>go</button>
+        </>
+      );
+    }
+
+    const user = userEvent.setup();
+    render(
+      <Harness>
+        <Screen />
+      </Harness>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId("reads").textContent).toBe("1"));
+    await user.click(screen.getByRole("button", { name: "go" }));
+    await waitFor(() => expect(screen.getByTestId("reads").textContent).toBe("2"));
+  });
+
   /**
    * A double-click is never two intentions. The second attempt is refused
    * rather than queued, so "how many did the agent receive" stays answerable.

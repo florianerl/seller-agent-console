@@ -20,6 +20,7 @@ import { StatusCard } from "../components/StatusCard";
 import { plural, stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
 import { useResource } from "../query/useResource";
+import { AudienceMatchForm } from "./mutations";
 import { palette } from "../theme/palette";
 
 /**
@@ -348,6 +349,8 @@ export default function MediaKitScreen() {
       </Box>
 
       <Search />
+
+      <AudienceMatchForm />
 
       <PackagesTable />
     </section>

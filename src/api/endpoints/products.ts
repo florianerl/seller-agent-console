@@ -213,3 +213,27 @@ export const discovery = (
   // catalog. Exempted by exact path in policy.ts (QUERY_SHAPED_PATHS) — the
   // only way a non-GET goes out while writes are off.
   request(c, PATHS.discovery, { schema: Discovery, method: "POST", body, signal });
+
+export const setInventoryTypeOverride = (
+  c: Connection,
+  productId: string,
+  body: { product_id: string; inventory_type: string; reason?: string },
+  signal?: AbortSignal,
+): Promise<Result<InventoryTypeOverride>> =>
+  request(c, `${PATHS.inventoryTypeOverrides}/${encodeURIComponent(productId)}/inventory-type`, {
+    schema: InventoryTypeOverride,
+    method: "POST",
+    body,
+    signal,
+  });
+
+export const deleteInventoryTypeOverride = (
+  c: Connection,
+  productId: string,
+  signal?: AbortSignal,
+): Promise<Result<InventoryTypeOverride>> =>
+  request(c, `${PATHS.inventoryTypeOverrides}/${encodeURIComponent(productId)}/inventory-type`, {
+    schema: InventoryTypeOverride,
+    method: "DELETE",
+    signal,
+  });

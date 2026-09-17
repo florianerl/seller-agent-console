@@ -18,6 +18,9 @@ import { describe } from "../api/errors";
 import { Field, FieldGrid } from "../components/Field";
 import { StatusChip } from "../components/StatusChip";
 import { WritesNotice } from "../components/WritesNotice";
+import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
+import { useCredential } from "../credentials/context";
+import { CreateSessionWrite, Panel, ProposalWrites, SessionWrites } from "./mutations";
 import { plural, stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
 import { useResource } from "../query/useResource";
@@ -95,6 +98,7 @@ function Conversation({ sessionId }: { sessionId: string }) {
           </Box>
         )}
       </Box>
+      <SessionWrites sessionId={sessionId} />
     </Stack>
   );
 }
@@ -102,6 +106,7 @@ function Conversation({ sessionId }: { sessionId: string }) {
 export default function NegotiationScreen() {
   const [status, setStatus] = useState("");
   const [open, setOpen] = useState<string | undefined>();
+  const { writesEnabled } = useCredential();
 
   const list = useResource(
     `sessions:${status}`,
@@ -121,6 +126,13 @@ export default function NegotiationScreen() {
       </Typography>
 
       <WritesNotice what="Listing sessions marks any session past its expiry as expired and saves that." />
+      {!writesEnabled && <ReadOnlyNotice what="Creating a session or sending a message" />}
+      <Panel title="Open a session">
+        <CreateSessionWrite />
+      </Panel>
+      <Panel title="Proposals">
+        <ProposalWrites />
+      </Panel>
 
       {/* An honest note about the API, not about this console. Someone reading
           a list of every buyer's sessions should know the agent did not check

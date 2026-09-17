@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { get, type Connection } from "../http";
+import { get, request, type Connection } from "../http";
 import type { Result } from "../errors";
 
 const PATHS = {
@@ -56,3 +56,10 @@ export const curatorById = (
   signal?: AbortSignal,
 ): Promise<Result<Curator>> =>
   get(c, `${PATHS.curators}/${encodeURIComponent(curatorId)}`, { schema: Curator, signal });
+
+export const registerCurator = (
+  c: Connection,
+  body: { curator_id: string; name: string; domain: string },
+  signal?: AbortSignal,
+): Promise<Result<Curator>> =>
+  request(c, PATHS.curators, { schema: Curator, method: "POST", body, signal });

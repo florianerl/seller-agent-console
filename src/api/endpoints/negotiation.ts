@@ -1,6 +1,7 @@
 import { z } from "zod";
-import { get, type Connection } from "../http";
+import { get, request, type Connection } from "../http";
 import type { Result } from "../errors";
+import { MutationAck } from "./shared";
 
 /**
  * A proposal's negotiation history: what each side offered, round by round,
@@ -60,3 +61,44 @@ export const negotiationStatus = (
     schema: NegotiationStatus,
     signal,
   });
+
+export const submitProposal = (
+  c: Connection,
+  body: {
+    product_id: string;
+    deal_type: string;
+    price: number;
+    impressions: number;
+    start_date: string;
+    end_date: string;
+  },
+  signal?: AbortSignal,
+): Promise<Result<MutationAck>> =>
+  request(c, PATHS.proposals, { schema: MutationAck, method: "POST", body, signal });
+
+export const counterProposal = (
+  c: Connection,
+  proposalId: string,
+  body: { buyer_price: number; buyer_tier?: string },
+  signal?: AbortSignal,
+): Promise<Result<MutationAck>> =>
+  request(c, `${PATHS.proposals}/${encodeURIComponent(proposalId)}/counter`, {
+    schema: MutationAck,
+    method: "POST",
+    body,
+    signal,
+  });
+
+export const postNegotiationMessage = (
+  c: Connection,
+  body: {
+    idempotency_key: string;
+    action: string;
+    proposal_id?: string;
+    negotiation_id?: string;
+    quote_id?: string;
+    buyer_price?: { amount_micros: number; currency: string };
+  },
+  signal?: AbortSignal,
+): Promise<Result<MutationAck>> =>
+  request(c, "/api/v1/negotiations/messages", { schema: MutationAck, method: "POST", body, signal });

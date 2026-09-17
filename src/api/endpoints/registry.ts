@@ -1,6 +1,7 @@
 import { z } from "zod";
-import { get, type Connection } from "../http";
+import { get, request, type Connection } from "../http";
 import type { Result } from "../errors";
+import { MutationAck } from "./shared";
 
 const PATHS = {
   agents: "/registry/agents",
@@ -108,3 +109,34 @@ export type AgentCard = z.infer<typeof AgentCard>;
 
 export const agentCard = (c: Connection, signal?: AbortSignal): Promise<Result<AgentCard>> =>
   get(c, PATHS.agentCard, { schema: AgentCard, signal });
+
+export const discoverAgent = (
+  c: Connection,
+  body: { agent_url: string },
+  signal?: AbortSignal,
+): Promise<Result<MutationAck>> =>
+  request(c, `${PATHS.agents}/discover`, { schema: MutationAck, method: "POST", body, signal });
+
+export const updateAgentTrust = (
+  c: Connection,
+  agentId: string,
+  body: { trust_status: string; notes?: string },
+  signal?: AbortSignal,
+): Promise<Result<MutationAck>> =>
+  request(c, `${PATHS.agents}/${encodeURIComponent(agentId)}/trust`, {
+    schema: MutationAck,
+    method: "PUT",
+    body,
+    signal,
+  });
+
+export const removeRegisteredAgent = (
+  c: Connection,
+  agentId: string,
+  signal?: AbortSignal,
+): Promise<Result<MutationAck>> =>
+  request(c, `${PATHS.agents}/${encodeURIComponent(agentId)}`, {
+    schema: MutationAck,
+    method: "DELETE",
+    signal,
+  });

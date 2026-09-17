@@ -17,10 +17,13 @@ import { dealLineage, dealPerformance, deals, type Money } from "../api/endpoint
 import { describe } from "../api/errors";
 import { Field, FieldGrid } from "../components/Field";
 import { GatedNotice } from "../components/GatedNotice";
+import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { StatusChip } from "../components/StatusChip";
 import { day, plural, stamp } from "../lib/time";
 import { useResource } from "../query/useResource";
 import { palette } from "../theme/palette";
+import { useCredential } from "../credentials/context";
+import { DealLookups, DealWrites, Panel } from "./mutations";
 
 /**
  * The shared wire vocabulary, taken from the agent's DealStatus enum. The list
@@ -141,6 +144,8 @@ function Detail({ dealId }: { dealId: string }) {
           </Box>
         )}
       </Box>
+      <DealLookups dealId={dealId} />
+      <DealWrites dealId={dealId} />
     </Stack>
   );
 }
@@ -148,6 +153,7 @@ function Detail({ dealId }: { dealId: string }) {
 export default function DealsScreen() {
   const [status, setStatus] = useState("");
   const [openDeal, setOpenDeal] = useState<string | undefined>();
+  const { writesEnabled } = useCredential();
 
   // No refreshInterval: the route scans every deal in storage with no
   // pagination, so refreshing it is the operator's decision, not a timer's.
@@ -166,6 +172,11 @@ export default function DealsScreen() {
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         Every buyer's deals, as the agent has them stored.
       </Typography>
+
+      {!writesEnabled && <ReadOnlyNotice what="Booking, pushing, or migrating a deal" />}
+      <Panel title="Deal writes">
+        <DealWrites />
+      </Panel>
 
       {list.freshness === "blocked" ? (
         <GatedNotice what="The deal ledger" result={list.result} />

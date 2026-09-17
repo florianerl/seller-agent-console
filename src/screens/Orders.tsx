@@ -15,7 +15,10 @@ import Typography from "@mui/material/Typography";
 import { orderAudit, orders } from "../api/endpoints";
 import { describe } from "../api/errors";
 import { GatedNotice } from "../components/GatedNotice";
+import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { StatusChip } from "../components/StatusChip";
+import { useCredential } from "../credentials/context";
+import { OrderRecord, OrderWrites, Panel } from "./mutations";
 import { plural, stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
 import { useResource } from "../query/useResource";
@@ -173,6 +176,7 @@ function Timeline({ orderId }: { orderId: string }) {
 export default function OrdersScreen() {
   const [status, setStatus] = useState("");
   const [openOrder, setOpenOrder] = useState<string | undefined>();
+  const { writesEnabled } = useCredential();
 
   const list = useResource(
     `orders:${status}`,
@@ -188,9 +192,13 @@ export default function OrdersScreen() {
         Orders
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Order lifecycle and its audit trail. Read-only — transitions are made
-        through the agent, not here.
+        Order lifecycle and its audit trail. Transitions are writes.
       </Typography>
+
+      {!writesEnabled && <ReadOnlyNotice what="Creating or transitioning an order" />}
+      <Panel title="Create and transition">
+        <OrderWrites />
+      </Panel>
 
       <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
         <TextField
@@ -288,7 +296,9 @@ export default function OrdersScreen() {
                           <Typography sx={{ fontSize: 12, fontWeight: 600 }}>
                             Transition history
                           </Typography>
+                          <OrderRecord orderId={order.order_id} />
                           <Timeline orderId={order.order_id} />
+                          <OrderWrites orderId={order.order_id} />
                         </Stack>
                       </TableCell>
                     </TableRow>

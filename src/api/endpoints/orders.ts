@@ -1,6 +1,7 @@
 import { z } from "zod";
-import { get, TIMEOUTS, type Connection } from "../http";
+import { get, request, TIMEOUTS, type Connection } from "../http";
 import type { Result } from "../errors";
+import { MutationAck } from "./shared";
 
 const PATHS = {
   orders: "/api/v1/orders",
@@ -127,5 +128,31 @@ export const orderAudit = (
     query,
     // Same storage scan as /history, with change requests layered on top.
     timeoutMs: TIMEOUTS.heavy,
+    signal,
+  });
+
+/**
+ * | Call       | Idempotent on retry?                    | Confirm? | A failure leaves behind |
+ * |------------|-----------------------------------------|----------|-------------------------|
+ * | create     | No. Each call mints a new order id.     | Yes      | A new draft exists or it does not. |
+ * | transition | No. A 409 names the allowed next states. | Yes      | Either the status moved or it did not. |
+ */
+export const createOrder = (
+  c: Connection,
+  body: { deal_id?: string; quote_id?: string; metadata?: Record<string, unknown> },
+  signal?: AbortSignal,
+): Promise<Result<Order>> =>
+  request(c, PATHS.orders, { schema: Order, method: "POST", body, signal });
+
+export const transitionOrder = (
+  c: Connection,
+  orderId: string,
+  body: { to_status: string; actor?: string; reason?: string },
+  signal?: AbortSignal,
+): Promise<Result<MutationAck>> =>
+  request(c, `${PATHS.orders}/${encodeURIComponent(orderId)}/transition`, {
+    schema: MutationAck,
+    method: "POST",
+    body,
     signal,
   });

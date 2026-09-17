@@ -78,3 +78,11 @@ export const pricingQuote = (
   signal?: AbortSignal,
 ): Promise<Result<PricingQuote>> =>
   request(c, PATHS.pricing, { schema: PricingQuote, method: "POST", body, signal });
+
+/** Replaces the stored rate card. Not a merge. A failure leaves the previous card. */
+export const putRateCard = (
+  c: Connection,
+  entries: readonly { inventory_type: string; base_cpm: number; currency?: string; notes?: string }[],
+  signal?: AbortSignal,
+): Promise<Result<RateCard>> =>
+  request(c, PATHS.rateCard, { schema: RateCard, method: "PUT", body: entries, signal });

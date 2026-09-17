@@ -24,6 +24,10 @@ const OK = {
     sync_count: 0,
     task_running: false,
   },
+  "/api/v1/inventory-sync/watermark": {
+    last_sync_at: null,
+    message: "No sync has been performed yet.",
+  },
   "/api/v1/orders": {
     orders: [
       {

@@ -18,6 +18,7 @@ import { GatedNotice } from "../components/GatedNotice";
 import { clock as stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
 import { useResource } from "../query/useResource";
+import { EventLookup } from "./mutations";
 import { palette } from "../theme/palette";
 
 const LIMIT = 50;
@@ -177,6 +178,7 @@ export default function EventsScreen() {
               >
                 {JSON.stringify(selected, null, 2)}
               </Box>
+              {selected.event_id && <EventLookup eventId={selected.event_id} />}
             </Paper>
           )}
         </>

@@ -75,8 +75,8 @@ operator key this app holds carries full write authority — minting keys,
 transitioning orders, rewriting the rate card — so a mistaken call site is now a
 real mutation. A write added in `src/api/endpoints/` needs its own answer on
 confirmation, idempotency and what a partial failure leaves behind, because the
-client answers none of that generically. Approvals (`decide` / `resume`) are the
-first mutations; the table lives next to those calls.
+client answers none of that generically. Screens under `src/screens/` own those
+call sites, each behind `ConfirmAction` / `WriteForm`.
 
 **Results are values, never exceptions.** `src/api/errors.ts` defines
 `Result<T>` = `ok` | `rejected` (401/403 only) | `unavailable` (timeout,

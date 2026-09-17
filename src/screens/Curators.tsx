@@ -16,7 +16,10 @@ import { curatorById, curators, type CuratorFee } from "../api/endpoints";
 import { describe } from "../api/errors";
 import { Field, FieldGrid } from "../components/Field";
 import { GatedNotice } from "../components/GatedNotice";
+import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { StatusChip } from "../components/StatusChip";
+import { useCredential } from "../credentials/context";
+import { CuratorWrite, Panel } from "./mutations";
 import { plural, stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
 import { useResource } from "../query/useResource";
@@ -90,6 +93,7 @@ function Detail({ curatorId }: { curatorId: string }) {
 export default function CuratorsScreen() {
   const [activeOnly, setActiveOnly] = useState("");
   const [openCurator, setOpenCurator] = useState<string | undefined>();
+  const { writesEnabled } = useCredential();
 
   const list = useResource(
     "curators",
@@ -107,10 +111,13 @@ export default function CuratorsScreen() {
         Curators
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Third-party deal and supply-path optimizers registered with this
-        seller. Read-only — registering a curator and creating curated deals
-        happen elsewhere.
+        Third-party deal and supply-path optimizers registered with this seller.
       </Typography>
+
+      {!writesEnabled && <ReadOnlyNotice what="Registering a curator" />}
+      <Panel title="Register">
+        <CuratorWrite />
+      </Panel>
 
       {list.freshness === "blocked" ? (
         <GatedNotice what="The curator list" result={list.result} />

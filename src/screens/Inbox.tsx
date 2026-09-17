@@ -17,7 +17,7 @@ import {
   resumeApproval,
   type ApprovalDecisionInput,
 } from "../api/endpoints";
-import { describe } from "../api/errors";
+import { describe, type Result } from "../api/errors";
 import { ConfirmAction } from "../components/ConfirmAction";
 import { Field, FieldGrid } from "../components/Field";
 import { GatedNotice } from "../components/GatedNotice";
@@ -46,7 +46,7 @@ function DecisionControls({
 }: {
   approvalId: string;
   status: string;
-  onDecided: () => void;
+  onDecided: (result: Result<unknown>) => void;
 }) {
   const { writesEnabled } = useCredential();
   const [reason, setReason] = useState("");
@@ -68,6 +68,7 @@ function DecisionControls({
   // A gate the agent has already answered, or let expire, is not ours to
   // decide. The control stays visible so the row does not change shape.
   const decidable = status === "pending";
+  const busy = decide.pending || resume.pending;
   const blocked = !writesEnabled || !decidable;
 
   const outcome = decide.last ?? resume.last;
@@ -82,7 +83,7 @@ function DecisionControls({
           label="Reason"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          disabled={blocked}
+          disabled={blocked || busy}
           sx={{ minWidth: 240 }}
         />
         <TextField
@@ -93,7 +94,7 @@ function DecisionControls({
           helperText="Stored as given; the agent does not verify it"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          disabled={blocked}
+          disabled={blocked || busy}
           sx={{ minWidth: 200 }}
         />
       </Box>
@@ -103,7 +104,7 @@ function DecisionControls({
           size="small"
           variant="contained"
           data-action="approve"
-          disabled={blocked || decide.pending}
+          disabled={blocked || busy}
           onClick={() => setPendingDecision("approve")}
         >
           Approve
@@ -112,7 +113,7 @@ function DecisionControls({
           size="small"
           variant="outlined"
           data-action="reject"
-          disabled={blocked || decide.pending}
+          disabled={blocked || busy}
           onClick={() => setPendingDecision("reject")}
         >
           Reject
@@ -120,7 +121,7 @@ function DecisionControls({
         <Button
           size="small"
           data-action="resume"
-          disabled={!writesEnabled || resume.pending}
+          disabled={!writesEnabled || busy}
           onClick={() => {
             void resume.run({ id: approvalId }).then(onDecided);
           }}
@@ -178,13 +179,24 @@ function DecisionControls({
   );
 }
 
-function Decision({ approvalId }: { approvalId: string }) {
+function Decision({
+  approvalId,
+  locked,
+  onLocked,
+}: {
+  approvalId: string;
+  locked: boolean;
+  onLocked: () => void;
+}) {
   const detail = useResource(`approval:${approvalId}`, (c, signal) =>
     approvalById(c, approvalId, signal),
   );
+  // Held on the list row, not inside this component: a successful decide
+  // invalidates the queue, which remounts the expanded row and would otherwise
+  // bring the controls back for the re-fetch window.
 
-  if (detail.loading && !detail.data) return <Skeleton height={24} />;
-  if (!detail.data) {
+  if (detail.loading && !detail.data && !locked) return <Skeleton height={24} />;
+  if (!detail.data && !locked) {
     return (
       <Typography variant="body2" color="text.secondary">
         {detail.result ? describe(detail.result) : "no detail"}
@@ -192,11 +204,13 @@ function Decision({ approvalId }: { approvalId: string }) {
     );
   }
 
-  const { request, response } = detail.data;
-  const decided = response !== null;
+  const request = detail.data?.request;
+  const response = detail.data?.response ?? null;
+  const decided = response !== null || locked;
 
   return (
     <Box sx={{ py: 1 }}>
+      {request && (
       <FieldGrid data-block="approval-detail">
         <Field label="Flow">{request.flow_type || "—"}</Field>
         <Field label="Flow id">
@@ -208,14 +222,19 @@ function Decision({ approvalId }: { approvalId: string }) {
         <Field label="Deal">{request.deal_id || "—"}</Field>
         <Field label="Expires">{stamp(request.expires_at)}</Field>
       </FieldGrid>
+      )}
 
       <Box sx={{ mt: 2 }}>
         <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 0.5 }}>Decision</Typography>
-        {!response ? (
+        {!response && !locked ? (
           <Typography variant="body2" color="text.secondary" data-state="undecided">
             Not decided yet.
           </Typography>
-        ) : (
+        ) : !response && locked ? (
+          <Typography variant="body2" color="text.secondary" data-state="decision-sent">
+            Decision sent. Re-reading the gate…
+          </Typography>
+        ) : response ? (
           <FieldGrid data-block="approval-decision">
             <Field label="Decision">{response.decision}</Field>
             <Field label="When">{stamp(response.decided_at)}</Field>
@@ -232,14 +251,17 @@ function Decision({ approvalId }: { approvalId: string }) {
             <Field label="Name given (unverified)">{response.decided_by || "—"}</Field>
             <Field label="Reason">{response.reason || "—"}</Field>
           </FieldGrid>
-        )}
+        ) : null}
       </Box>
 
       {!decided && (
         <DecisionControls
           approvalId={approvalId}
-          status={request.status}
-          onDecided={detail.refresh}
+          status={request?.status ?? "pending"}
+          onDecided={(result) => {
+            if (result.kind === "ok") onLocked();
+            detail.refresh();
+          }}
         />
       )}
     </Box>
@@ -248,6 +270,7 @@ function Decision({ approvalId }: { approvalId: string }) {
 
 export default function InboxScreen() {
   const [open, setOpen] = useState<string | undefined>();
+  const [locked, setLocked] = useState<Readonly<Record<string, true>>>({});
   const { writesEnabled } = useCredential();
 
   const list = useResource("approvals", approvals, { refreshInterval: CADENCE.orders });
@@ -338,7 +361,13 @@ export default function InboxScreen() {
                       {open === row.approval_id && (
                         <TableRow>
                           <TableCell colSpan={5} sx={{ backgroundColor: palette.ground }}>
-                            <Decision approvalId={row.approval_id} />
+                            <Decision
+                              approvalId={row.approval_id}
+                              locked={locked[row.approval_id] === true}
+                              onLocked={() =>
+                                setLocked((current) => ({ ...current, [row.approval_id]: true }))
+                              }
+                            />
                           </TableCell>
                         </TableRow>
                       )}
