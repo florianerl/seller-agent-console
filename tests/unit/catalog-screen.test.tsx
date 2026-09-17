@@ -99,7 +99,7 @@ describe("the catalog screen", () => {
         HttpResponse.json({ products: PRODUCTS, total_count: PRODUCTS.length, limit: 200, offset: 0 }),
       ),
       http.get(`${API}/api/v1/rate-card`, () => HttpResponse.json(RATE_CARD_STORED)),
-      http.get(`${API}/packages`, () => HttpResponse.json(PACKAGES)),
+      http.get(`${API}/packages`, () => HttpResponse.json({ packages: PACKAGES })),
     );
   });
 

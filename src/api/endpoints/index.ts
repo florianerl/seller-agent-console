@@ -604,8 +604,11 @@ export const Package = z
   .loose();
 export type Package = z.infer<typeof Package>;
 
-export const packages = (c: Connection, signal?: AbortSignal): Promise<Result<Package[]>> =>
-  get(c, PATHS.packages, { schema: z.array(Package), signal });
+export const PackageList = z.object({ packages: z.array(Package) }).loose();
+export type PackageList = z.infer<typeof PackageList>;
+
+export const packages = (c: Connection, signal?: AbortSignal): Promise<Result<PackageList>> =>
+  get(c, PATHS.packages, { schema: PackageList, signal });
 
 // --- agent registry ---------------------------------------------------------
 

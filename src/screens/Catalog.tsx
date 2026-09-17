@@ -174,7 +174,7 @@ function Rates() {
 
 function Packages() {
   const list = useResource("packages", packages, { refreshInterval: CADENCE.rateCard });
-  const rows = list.data ?? [];
+  const rows = list.data?.packages ?? [];
 
   if (list.loading && rows.length === 0) return <Skeleton height={60} />;
   if (rows.length === 0) {

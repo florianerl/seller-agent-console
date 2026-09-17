@@ -68,7 +68,7 @@ const OK = {
   "/registry/agents": { agents: [], total: 0 },
   "/products": { products: [], total_count: 0, limit: 50, offset: 0 },
   "/api/v1/rate-card": { entries: [], updated_at: null, source: "stored" },
-  "/packages": [],
+  "/packages": { packages: [] },
 } as const;
 
 /**
