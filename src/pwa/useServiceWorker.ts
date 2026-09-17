@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { registerSW } from "virtual:pwa-register";
 import { shouldReloadOnControllerChange } from "./reload-policy";
 
@@ -16,23 +16,20 @@ const UPDATE_CHECK_INTERVAL = 60 * 60 * 1000;
 export function useServiceWorker(): { updateReady: boolean; applyUpdate: () => void } {
   const [updateReady, setUpdateReady] = useState(false);
   const [update, setUpdate] = useState<{ run: () => Promise<void> } | undefined>();
+  // A ref, not state: the controllerchange listener is registered once and
+  // must see the current value, and nothing renders from it.
+  const requestedRef = useRef(false);
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
 
     let cleanup: (() => void) | undefined;
 
-    // Owning the reload rather than relying on the plugin's implicit one.
-    //
-    // Honest account of why: a deployed build once activated a new worker,
-    // took control, and left the page running the old build with the prompt
-    // still on screen. Adding this handler fixed it. But the end-to-end update
-    // test still passes with this handler disabled, so the plugin does reload
-    // on its own in that scenario — which means this is a belt whose
-    // contribution has not been isolated, not the demonstrated fix it was
-    // first described as. It stays because the `reloading` guard below is a
-    // real protection either way, and because the failure it addresses leaves
-    // an operator stranded on a stale build.
+    // Owning the reload rather than relying on the plugin's implicit one,
+    // which does not fire dependably: it reloads on a local Chromium and not
+    // on the Linux CI runner. Either way the failure is the same and it is the
+    // worst one this component has — the worker activates, the operator clicks
+    // Reload, and the page stays on the old build with the prompt still up.
     //
     // Only reload when this page was ALREADY controlled when we registered.
     // On a first install clientsClaim() also fires controllerchange, and
@@ -42,7 +39,15 @@ export function useServiceWorker(): { updateReady: boolean; applyUpdate: () => v
     let reloading = false;
 
     const onControllerChange = () => {
-      if (!shouldReloadOnControllerChange({ wasControlled, reloading })) return;
+      if (
+        !shouldReloadOnControllerChange({
+          updateRequested: requestedRef.current,
+          wasControlled,
+          reloading,
+        })
+      ) {
+        return;
+      }
       reloading = true;
       window.location.reload();
     };
@@ -85,6 +90,9 @@ export function useServiceWorker(): { updateReady: boolean; applyUpdate: () => v
   return {
     updateReady,
     applyUpdate: () => {
+      // Recorded before the worker is messaged, because the controller change
+      // can arrive immediately afterwards.
+      requestedRef.current = true;
       void update?.run();
     },
   };
