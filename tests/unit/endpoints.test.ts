@@ -12,7 +12,18 @@ const connection: Connection = { baseUrl: API, apiKey: "k-operator" };
  */
 const callers = Object.entries(endpoints).filter(
   ([, value]) => typeof value === "function",
-) as Array<[string, (c: Connection) => Promise<unknown>]>;
+) as Array<[string, (c: Connection, ...rest: never[]) => Promise<unknown>]>;
+
+/**
+ * Extra arguments for endpoints that take a path parameter. Everything else
+ * needs only the connection. Listed rather than guessed, so a new endpoint
+ * with an unusual signature fails loudly instead of being silently skipped.
+ */
+const EXTRA_ARGS: Record<string, unknown[]> = {
+  eventById: ["e1"],
+  orderById: ["ORD-1"],
+  orderHistory: ["ORD-1"],
+};
 
 describe("read-only: layer 2, every endpoint issues GET", () => {
   it("discovered every exported endpoint", () => {
@@ -23,6 +34,9 @@ describe("read-only: layer 2, every endpoint issues GET", () => {
       "health",
       "inventorySyncStatus",
       "inventorySyncWatermark",
+      "orderById",
+      "orderHistory",
+      "orders",
       "root",
     ]);
   });
@@ -40,11 +54,7 @@ describe("read-only: layer 2, every endpoint issues GET", () => {
       }),
     );
 
-    // eventById takes a path parameter; every other caller takes only the
-    // connection. Passing a placeholder keeps the table exhaustive.
-    await (name === "eventById"
-      ? (call as unknown as (c: Connection, id: string) => Promise<unknown>)(connection, "e1")
-      : call(connection));
+    await call(connection, ...((EXTRA_ARGS[name] ?? []) as never[]));
 
     expect(methods.length).toBeGreaterThan(0);
     expect(methods.every((m) => m === "GET")).toBe(true);
