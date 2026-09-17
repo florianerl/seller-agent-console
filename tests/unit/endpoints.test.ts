@@ -18,6 +18,7 @@ describe("read-only: layer 2, every endpoint issues GET", () => {
   it("discovered every exported endpoint", () => {
     expect(callers.map(([name]) => name).sort()).toEqual([
       "apiKeys",
+      "eventById",
       "events",
       "health",
       "inventorySyncStatus",
@@ -26,7 +27,7 @@ describe("read-only: layer 2, every endpoint issues GET", () => {
     ]);
   });
 
-  it.each(callers)("%s issues GET and nothing else", async (_name, call) => {
+  it.each(callers)("%s issues GET and nothing else", async (name, call) => {
     const methods: string[] = [];
     server.use(
       http.all(`${API}/*`, ({ request }) => {
@@ -39,7 +40,11 @@ describe("read-only: layer 2, every endpoint issues GET", () => {
       }),
     );
 
-    await call(connection);
+    // eventById takes a path parameter; every other caller takes only the
+    // connection. Passing a placeholder keeps the table exhaustive.
+    await (name === "eventById"
+      ? (call as unknown as (c: Connection, id: string) => Promise<unknown>)(connection, "e1")
+      : call(connection));
 
     expect(methods.length).toBeGreaterThan(0);
     expect(methods.every((m) => m === "GET")).toBe(true);
