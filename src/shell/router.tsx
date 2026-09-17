@@ -19,6 +19,10 @@ const Setup = lazy(() => import("../screens/Setup"));
 const Events = lazy(() => import("../screens/Events"));
 const Orders = lazy(() => import("../screens/Orders"));
 const Deals = lazy(() => import("../screens/Deals"));
+const Inbox = lazy(() => import("../screens/Inbox"));
+const Negotiation = lazy(() => import("../screens/Negotiation"));
+const Catalog = lazy(() => import("../screens/Catalog"));
+const Agents = lazy(() => import("../screens/Agents"));
 const NotFound = lazy(() => import("./NotFound"));
 
 export function Router() {
@@ -30,6 +34,10 @@ export function Router() {
           <Route path="events" element={<Events />} />
           <Route path="orders" element={<Orders />} />
           <Route path="deals" element={<Deals />} />
+          <Route path="inbox" element={<Inbox />} />
+          <Route path="negotiation" element={<Negotiation />} />
+          <Route path="catalog" element={<Catalog />} />
+          <Route path="agents" element={<Agents />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>

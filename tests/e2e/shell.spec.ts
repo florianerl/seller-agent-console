@@ -80,9 +80,13 @@ test("the manifest parses and its identity fields carry the prefix", async ({ pa
 
 const ROUTES = [
   { hash: "#/", heading: "Setup and health" },
+  { hash: "#/inbox", heading: "Inbox" },
   { hash: "#/events", heading: "Events" },
   { hash: "#/orders", heading: "Orders" },
   { hash: "#/deals", heading: "Deals" },
+  { hash: "#/negotiation", heading: "Negotiation" },
+  { hash: "#/catalog", heading: "Catalog" },
+  { hash: "#/agents", heading: "Agents" },
 ];
 
 for (const route of ROUTES) {

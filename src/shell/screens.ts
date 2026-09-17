@@ -17,13 +17,13 @@ export type Screen = {
 
 export const SCREENS: readonly Screen[] = [
   { id: "setup", path: "/", label: "Setup and health" },
-  { id: "inbox", path: "/inbox", label: "Inbox", soon: true },
+  { id: "inbox", path: "/inbox", label: "Inbox" },
   { id: "events", path: "/events", label: "Events", operatorOnly: true },
   { id: "orders", path: "/orders", label: "Orders" },
   { id: "deals", path: "/deals", label: "Deals" },
-  { id: "negotiation", path: "/negotiation", label: "Negotiation", soon: true },
-  { id: "catalog", path: "/catalog", label: "Catalog", soon: true },
-  { id: "agents", path: "/agents", label: "Agents", soon: true },
+  { id: "negotiation", path: "/negotiation", label: "Negotiation" },
+  { id: "catalog", path: "/catalog", label: "Catalog" },
+  { id: "agents", path: "/agents", label: "Agents" },
 ];
 
 export const BUILT_SCREENS = SCREENS.filter((s) => !s.soon);

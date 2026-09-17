@@ -15,6 +15,7 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { dealLineage, dealPerformance, deals, type Money } from "../api/endpoints";
 import { describe } from "../api/errors";
+import { Field, FieldGrid } from "../components/Field";
 import { GatedNotice } from "../components/GatedNotice";
 import { StatusChip } from "../components/StatusChip";
 import { day, plural, stamp } from "../lib/time";
@@ -54,17 +55,6 @@ function dollars(amount: number): string {
   return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(amount);
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <Box>
-      <Box sx={{ fontSize: 11, color: palette.textSecondary, textTransform: "uppercase" }}>
-        {label}
-      </Box>
-      <Box sx={{ fontSize: 13 }}>{children}</Box>
-    </Box>
-  );
-}
-
 /**
  * Delivery and lineage only. The deal itself is already in the list row — the
  * list returns the same envelope the single-deal route does — so there is
@@ -101,21 +91,14 @@ function Detail({ dealId }: { dealId: string }) {
             {perf.result ? describe(perf.result) : "no delivery data"}
           </Typography>
         ) : (
-          <Box
-            data-block="deal-performance"
-            sx={{
-              display: "grid",
-              gap: 1.5,
-              gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))",
-            }}
-          >
+          <FieldGrid data-block="deal-performance" min={120}>
             <Field label="Served">{perf.data.impressions_served.toLocaleString()}</Field>
             <Field label="Available">{perf.data.impressions_available.toLocaleString()}</Field>
             <Field label="Fill rate">{`${Math.round(perf.data.fill_rate * 100)}%`}</Field>
             <Field label="Win rate">{`${Math.round(perf.data.win_rate * 100)}%`}</Field>
             <Field label="Avg CPM">{dollars(perf.data.avg_cpm_actual)}</Field>
             <Field label="Pacing">{perf.data.delivery_pacing.replace(/_/g, " ")}</Field>
-          </Box>
+          </FieldGrid>
         )}
       </Box>
 

@@ -39,6 +39,11 @@ export const PATHS = {
   rateCard: "/api/v1/rate-card",
   orders: "/api/v1/orders",
   deals: "/api/v1/deals",
+  approvals: "/approvals",
+  sessions: "/sessions",
+  agents: "/registry/agents",
+  products: "/products",
+  packages: "/packages",
 } as const;
 
 // --- root -------------------------------------------------------------------
@@ -384,3 +389,268 @@ export const dealLineage = (
     schema: DealLineage,
     signal,
   });
+
+// --- approvals (any valid key; not operator-gated) --------------------------
+
+/**
+ * `GET /approvals` requires *a* key but not the operator role — a buyer key
+ * reads it too. It also writes: listing flips any pending approval past its
+ * `expires_at` to `timed_out` and persists that, so the screen discloses it.
+ */
+export const ApprovalRequestRecord = z
+  .object({
+    approval_id: z.string(),
+    flow_id: z.string().catch(""),
+    flow_type: z.string().catch(""),
+    gate_name: z.string().catch(""),
+    status: z.string().catch("pending"),
+    proposal_id: z.string().catch(""),
+    deal_id: z.string().catch(""),
+    created_at: z.string().nullable().catch(null),
+    expires_at: z.string().nullable().catch(null),
+  })
+  .loose();
+export type ApprovalRequestRecord = z.infer<typeof ApprovalRequestRecord>;
+
+export const ApprovalList = z
+  .object({ approvals: z.array(ApprovalRequestRecord) })
+  .loose();
+export type ApprovalList = z.infer<typeof ApprovalList>;
+
+export const approvals = (c: Connection, signal?: AbortSignal): Promise<Result<ApprovalList>> =>
+  get(c, PATHS.approvals, { schema: ApprovalList, signal });
+
+/**
+ * A decision carries two different claims about who made it.
+ * `decided_by_principal` is derived from the authenticated key;
+ * `decided_by` is free text the caller supplied and the agent never checked.
+ * The UI must not present them as the same kind of fact.
+ */
+export const ApprovalDecision = z
+  .object({
+    decision: z.string().catch(""),
+    decided_by: z.string().catch(""),
+    decided_by_principal: z.string().catch(""),
+    decided_at: z.string().nullable().catch(null),
+    reason: z.string().catch(""),
+  })
+  .loose();
+export type ApprovalDecision = z.infer<typeof ApprovalDecision>;
+
+export const ApprovalDetail = z
+  .object({
+    request: ApprovalRequestRecord,
+    response: ApprovalDecision.nullable().catch(null),
+  })
+  .loose();
+export type ApprovalDetail = z.infer<typeof ApprovalDetail>;
+
+export const approvalById = (
+  c: Connection,
+  approvalId: string,
+  signal?: AbortSignal,
+): Promise<Result<ApprovalDetail>> =>
+  get(c, `${PATHS.approvals}/${encodeURIComponent(approvalId)}`, {
+    schema: ApprovalDetail,
+    signal,
+  });
+
+// --- sessions (no auth dependency upstream at all) --------------------------
+
+/**
+ * These routes declare no auth dependency whatsoever: anonymous callers and
+ * garbage keys both get 200, and `buyer_key` is a filter rather than a
+ * boundary. Any caller can list every buyer's sessions. That is upstream's to
+ * fix, but the screen says so rather than implying the list is scoped to us.
+ *
+ * Listing also writes: it flips expired sessions to `expired` and persists it.
+ */
+export const SessionSummary = z
+  .object({
+    session_id: z.string(),
+    status: z.string().catch("unknown"),
+    buyer_pricing_key: z.string().catch(""),
+    message_count: z.number().catch(0),
+    negotiation_stage: z.string().catch(""),
+    created_at: z.string().nullable().catch(null),
+    updated_at: z.string().nullable().catch(null),
+  })
+  .loose();
+export type SessionSummary = z.infer<typeof SessionSummary>;
+
+export const SessionList = z.object({ sessions: z.array(SessionSummary) }).loose();
+export type SessionList = z.infer<typeof SessionList>;
+
+export const sessions = (
+  c: Connection,
+  query: { status?: string; buyer_key?: string } = {},
+  signal?: AbortSignal,
+): Promise<Result<SessionList>> =>
+  get(c, PATHS.sessions, { schema: SessionList, query, signal });
+
+/** Message payloads vary by role, so the body stays unknown and is shown raw. */
+export const SessionDetail = z
+  .object({
+    session_id: z.string(),
+    status: z.string().catch("unknown"),
+    buyer_pricing_key: z.string().catch(""),
+    messages: z.array(z.looseObject({})).catch([]),
+    linked_flow_ids: z.array(z.string()).catch([]),
+    created_at: z.string().nullable().catch(null),
+    updated_at: z.string().nullable().catch(null),
+    expires_at: z.string().nullable().catch(null),
+  })
+  .loose();
+export type SessionDetail = z.infer<typeof SessionDetail>;
+
+export const sessionById = (
+  c: Connection,
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<Result<SessionDetail>> =>
+  get(c, `${PATHS.sessions}/${encodeURIComponent(sessionId)}`, {
+    schema: SessionDetail,
+    signal,
+  });
+
+// --- catalog ----------------------------------------------------------------
+
+/**
+ * Products, the rate card and the media kit answer identically to every caller
+ * — no key, a bad key, an operator key, byte for byte. `/packages` does not:
+ * it declares an optional auth dependency and returns a *different view* when
+ * any valid key is presented. See `packages` below.
+ */
+export const Product = z
+  .object({
+    product_id: z.string(),
+    name: z.string().catch(""),
+    delivery_type: z.string().nullable().catch(null),
+    pricing_model: z.string().nullable().catch(null),
+    // Null for "pricing on request only" products. Not an error.
+    base_price: Money.nullable().catch(null),
+    ad_formats: z.array(z.string()).catch([]),
+    available_impressions: z.number().nullable().catch(null),
+  })
+  .loose();
+export type Product = z.infer<typeof Product>;
+
+export const ProductList = z
+  .object({
+    products: z.array(Product),
+    total_count: z.number().catch(0),
+    limit: z.number().catch(50),
+    offset: z.number().catch(0),
+  })
+  .loose();
+export type ProductList = z.infer<typeof ProductList>;
+
+export const products = (
+  c: Connection,
+  query: { limit?: number; offset?: number } = {},
+  signal?: AbortSignal,
+): Promise<Result<ProductList>> => get(c, PATHS.products, { schema: ProductList, query, signal });
+
+/**
+ * `source` is the field that matters. "stored" is a rate card an operator set;
+ * "defaults" is a hardcoded fallback list the agent invents when none exists.
+ * Rendering the fallback as though it were configured pricing would be the
+ * worst thing this screen could do.
+ */
+export const RateCardEntry = z
+  .object({
+    inventory_type: z.string(),
+    base_cpm: z.number().nullable().catch(null),
+    currency: z.string().catch("USD"),
+    effective_date: z.string().nullable().catch(null),
+    notes: z.string().nullable().catch(null),
+  })
+  .loose();
+export type RateCardEntry = z.infer<typeof RateCardEntry>;
+
+export const RateCard = z
+  .object({
+    entries: z.array(RateCardEntry),
+    updated_at: z.string().nullable().catch(null),
+    source: z.string().catch("defaults"),
+  })
+  .loose();
+export type RateCard = z.infer<typeof RateCard>;
+
+export const rateCard = (c: Connection, signal?: AbortSignal): Promise<Result<RateCard>> =>
+  get(c, PATHS.rateCard, { schema: RateCard, timeoutMs: TIMEOUTS.normal, signal });
+
+/**
+ * The one catalog route whose *content* depends on the credential. With no key
+ * it returns a public view carrying only a `price_range` band; with any valid
+ * key it returns exact_price, floor_price and placements. The screen labels
+ * what it shows as "as seen by this key" rather than as the catalog.
+ */
+export const Package = z
+  .object({
+    package_id: z.string(),
+    name: z.string().catch(""),
+    rate_type: z.string().nullable().catch(null),
+    is_featured: z.boolean().catch(false),
+    ad_formats: z.array(z.string()).catch([]),
+    // Public view only.
+    price_range: z.string().nullable().catch(null),
+    // Authenticated view only.
+    exact_price: z.number().nullable().catch(null),
+    floor_price: z.number().nullable().catch(null),
+    currency: z.string().nullable().catch(null),
+    negotiation_enabled: z.boolean().nullable().catch(null),
+  })
+  .loose();
+export type Package = z.infer<typeof Package>;
+
+export const packages = (c: Connection, signal?: AbortSignal): Promise<Result<Package[]>> =>
+  get(c, PATHS.packages, { schema: z.array(Package), signal });
+
+// --- agent registry ---------------------------------------------------------
+
+/**
+ * Two different kinds of claim, which the screen must not blend.
+ *
+ * `trust_status` is the operator's own decision — approved, preferred, blocked.
+ * `registry_sources[].verified_at` is an external registry confirming the agent
+ * is registered with it. One is our judgement, the other is someone else's
+ * verification, and an agent can have either without the other.
+ */
+export const RegistrySource = z
+  .object({
+    registry_id: z.string().catch(""),
+    registry_name: z.string().catch(""),
+    verified_at: z.string().nullable().catch(null),
+  })
+  .loose();
+export type RegistrySource = z.infer<typeof RegistrySource>;
+
+export const RegisteredAgent = z
+  .object({
+    agent_id: z.string(),
+    agent_type: z.string().catch("other"),
+    trust_status: z.string().catch("unknown"),
+    registry_sources: z.array(RegistrySource).catch([]),
+    registered_at: z.string().nullable().catch(null),
+    last_seen: z.string().nullable().catch(null),
+    interaction_count: z.number().catch(0),
+    agent_card: z
+      .object({ name: z.string().catch(""), url: z.string().catch("") })
+      .loose()
+      .nullable()
+      .catch(null),
+  })
+  .loose();
+export type RegisteredAgent = z.infer<typeof RegisteredAgent>;
+
+export const AgentList = z
+  .object({ agents: z.array(RegisteredAgent), total: z.number().catch(0) })
+  .loose();
+export type AgentList = z.infer<typeof AgentList>;
+
+export const agents = (
+  c: Connection,
+  query: { agent_type?: string; trust_status?: string } = {},
+  signal?: AbortSignal,
+): Promise<Result<AgentList>> => get(c, PATHS.agents, { schema: AgentList, query, signal });

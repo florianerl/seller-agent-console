@@ -25,12 +25,17 @@ const EXTRA_ARGS: Record<string, unknown[]> = {
   orderHistory: ["ORD-1"],
   dealPerformance: ["D-1"],
   dealLineage: ["D-1"],
+  approvalById: ["A-1"],
+  sessionById: ["S-1"],
 };
 
 describe("read-only: layer 2, every endpoint issues GET", () => {
   it("discovered every exported endpoint", () => {
     expect(callers.map(([name]) => name).sort()).toEqual([
+      "agents",
       "apiKeys",
+      "approvalById",
+      "approvals",
       "dealLineage",
       "dealPerformance",
       "deals",
@@ -42,7 +47,12 @@ describe("read-only: layer 2, every endpoint issues GET", () => {
       "orderById",
       "orderHistory",
       "orders",
+      "packages",
+      "products",
+      "rateCard",
       "root",
+      "sessionById",
+      "sessions",
     ]);
   });
 

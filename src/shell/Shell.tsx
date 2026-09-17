@@ -11,6 +11,7 @@ import { useTheme } from "@mui/material/styles";
 import { Outlet } from "react-router";
 import { DRAWER_WIDTH, Sidebar } from "./Sidebar";
 import { ConnectivityBanner } from "./ConnectivityBanner";
+import { ConnectionMenu } from "./ConnectionMenu";
 import { MenuIcon } from "../components/MenuIcon";
 import { palette } from "../theme/palette";
 
@@ -51,6 +52,7 @@ export function Shell() {
           >
             Seller Agent Console
           </Typography>
+          <ConnectionMenu />
         </Toolbar>
       </AppBar>
 

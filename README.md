@@ -35,7 +35,9 @@ modify storage when you read them:
 |---|---|---|
 | `GET /api/v1/deals/{id}` | expires a `proposed` deal past `expires_at` | **No.** The deal list returns the same envelope, so there is nothing to re-fetch. A test asserts this route is never called. |
 | `GET /api/v1/quotes/{id}` | marks an expired quote expired | No. |
-| `GET /sessions` | expires stale sessions | Not yet — the v1.1 Negotiation screen will, and will say so on the screen. |
+| `GET /sessions` | expires stale sessions | **Yes**, the Negotiation screen. It says so on the screen. |
+| `GET /approvals` | marks an expired pending gate `timed_out` | **Yes**, the Inbox screen. It says so on the screen. |
+| any authenticated route | bumps the key's `last_used_at` and `use_count` | Yes — presenting a valid key is itself a write, on every request. |
 
 ### What "read-only" is enforced by
 
@@ -92,10 +94,10 @@ differently, because they send you to different places.
 | Events | `/events`, `/events/{id}` | Operator-only. A tail, not a log — the API offers no cursor, so there is no way to page backwards |
 | Orders | `/api/v1/orders`, `/{id}/history` | Transition timeline. The actor is shown as a label, not as attribution: the API records whatever the caller claimed and does not verify it |
 | Deals | `/api/v1/deals`, `/{id}/performance`, `/{id}/lineage` | Operator-only, unpaginated, so it never polls. Delivery figures are **placeholders** upstream and are labelled as not measured |
-
-Inbox, Negotiation, Catalog and Agents are v1.1. They are shown in the sidebar
-as `soon` rather than hidden, because "not built" is information an operator
-can use.
+| Inbox | `/approvals`, `/approvals/{id}` | A monitoring view — approving is a write, so it says so rather than implying a dead button. A decision's verified principal and its unverified free-text name are shown as separate fields |
+| Negotiation | `/sessions`, `/sessions/{id}` | Discloses that listing writes, **and** that the upstream routes declare no authentication at all, so the list is not scoped to this key |
+| Catalog | `/products`, `/api/v1/rate-card`, `/packages` | Packages are labelled "as seen by this key" — that route alone changes content by credential. A rate card the agent invented is flagged as not the publisher's pricing |
+| Agents | `/registry/agents` | Trust status (this operator's decision) and registry verification (an external registry's claim) are separate columns |
 
 ### Freshness
 
