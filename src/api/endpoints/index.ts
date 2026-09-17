@@ -22,7 +22,6 @@ export const PATHS = {
   inventorySyncWatermark: "/api/v1/inventory-sync/watermark",
   rateCard: "/api/v1/rate-card",
   orders: "/api/v1/orders",
-  dealsExport: "/api/v1/deals/export",
   deals: "/api/v1/deals",
 } as const;
 
@@ -227,130 +226,94 @@ export const orderHistory = (
     signal,
   });
 
-// --- deals -------------------------------------------------------------------
+// --- deals (operator only) --------------------------------------------------
 
 /**
- * The list and the detail route do NOT speak the same vocabulary, and this is
- * the trap on this screen.
+ * `GET /api/v1/deals` is the list. It is operator-only and spans every buyer's
+ * deals, which is exactly what an operator console wants, and it answers in the
+ * same shared wire shape as the single-deal route — so the list and a detail
+ * never disagree about a status or a currency.
  *
- * `export?format=generic` returns the *raw stored* deal dicts
- * (deal_service.export_deals), so `status` is the internal value and prices are
- * floats in dollars. `GET /api/v1/deals/{id}` runs them through
- * contract_mappers.internal_deal_to_response first, which translates the status
- * to the shared wire enum (`confirmed` → `booked`, `deprecated` → `cancelled`)
- * and re-denominates money into micros. The same deal therefore reads
- * "confirmed" in the table and "booked" in its detail. The UI labels which
- * vocabulary it is showing rather than pretending they agree.
+ * Not `export?format=generic`, which was the obvious candidate: that route is a
+ * DSP connector feed returning the raw stored records, so its statuses are the
+ * internal vocabulary (`confirmed`, `deprecated`) and its prices are float
+ * dollars. Reading the list from it would have meant showing one deal under two
+ * different status words depending on where you looked.
+ *
+ * Unpaginated either way — it scans every `deal:*` key — so this gets the heavy
+ * timeout and never polls.
  */
-export const DealSummary = z
-  .object({
-    deal_id: z.string(),
-    status: z.string().catch("unknown"),
-    deal_type: z.string().nullable().catch(null),
-    actual_price_cpm: z.number().nullable().catch(null),
-    pricing: z
-      .object({
-        final_cpm: z.number().nullable().catch(null),
-        currency: z.string().catch("USD"),
-      })
-      .loose()
-      .nullable()
-      .catch(null),
-    created_at: z.string().nullable().catch(null),
-    expires_at: z.string().nullable().catch(null),
-  })
-  .loose();
-export type DealSummary = z.infer<typeof DealSummary>;
-
-export const DealExport = z
-  .object({
-    format: z.string().catch("generic"),
-    deals: z.array(DealSummary),
-    count: z.number().catch(0),
-  })
-  .loose();
-export type DealExport = z.infer<typeof DealExport>;
-
-/**
- * An unpaginated full scan of every deal in storage, so it gets the heavy
- * timeout and never polls. `status` filters on the *internal* vocabulary,
- * because this route reads storage directly.
- */
-export const dealsExport = (
-  c: Connection,
-  query: { status?: string } = {},
-  signal?: AbortSignal,
-): Promise<Result<DealExport>> =>
-  get(c, PATHS.dealsExport, {
-    schema: DealExport,
-    query: { format: "generic", ...query },
-    timeoutMs: TIMEOUTS.heavy,
-    signal,
-  });
-
-/** Shared Money: an integer count of millionths, not a float. */
 export const Money = z
   .object({ amount_micros: z.number(), currency: z.string().catch("USD") })
   .loose();
 export type Money = z.infer<typeof Money>;
 
-export const DealDetail = z
+export const Deal = z
   .object({
-    deal: z
+    deal_id: z.string(),
+    deal_type: z.string().catch("unknown"),
+    status: z.string().catch("unknown"),
+    quote_id: z.string().nullable().catch(null),
+    product: z
+      .object({ product_id: z.string().catch(""), name: z.string().catch("") })
+      .loose()
+      .nullable()
+      .catch(null),
+    pricing: z
       .object({
-        deal_id: z.string(),
-        deal_type: z.string().catch("unknown"),
-        status: z.string().catch("unknown"),
-        quote_id: z.string().nullable().catch(null),
-        product: z
-          .object({ product_id: z.string().catch(""), name: z.string().catch("") })
-          .loose()
-          .nullable()
-          .catch(null),
-        pricing: z
-          .object({
-            final_cpm: Money.nullable().catch(null),
-            pricing_model: z.string().catch("cpm"),
-          })
-          .loose()
-          .nullable()
-          .catch(null),
-        terms: z
-          .object({
-            impressions: z.number().nullable().catch(null),
-            flight_start: z.string().nullable().catch(null),
-            flight_end: z.string().nullable().catch(null),
-            guaranteed: z.boolean().catch(false),
-          })
-          .loose()
-          .nullable()
-          .catch(null),
-        buyer_tier: z.string().catch("public"),
-        expires_at: z.string().nullable().catch(null),
-        created_at: z.string().nullable().catch(null),
+        final_cpm: Money.nullable().catch(null),
+        base_cpm: Money.nullable().catch(null),
+        pricing_model: z.string().catch("cpm"),
       })
-      .loose(),
+      .loose()
+      .nullable()
+      .catch(null),
+    terms: z
+      .object({
+        impressions: z.number().nullable().catch(null),
+        flight_start: z.string().nullable().catch(null),
+        flight_end: z.string().nullable().catch(null),
+        guaranteed: z.boolean().catch(false),
+      })
+      .loose()
+      .nullable()
+      .catch(null),
+    buyer_tier: z.string().catch("public"),
+    expires_at: z.string().nullable().catch(null),
+    created_at: z.string().nullable().catch(null),
   })
   .loose();
-export type DealDetail = z.infer<typeof DealDetail>;
+export type Deal = z.infer<typeof Deal>;
+
+/** Each entry is the same envelope the single-deal route returns. */
+export const DealEnvelope = z.object({ deal: Deal }).loose();
+export type DealEnvelope = z.infer<typeof DealEnvelope>;
 
 /**
- * Reading one deal makes the agent write: the handler performs a lazy expiry
- * check on deals still in `proposed` and persists the result. This console
- * issues no unsafe methods, but this GET is not side-effect free and the screen
- * says so.
+ * `skipped` carries the ids of stored deals the agent could not map into the
+ * wire shape. Without showing it the list is silently short, which on a deal
+ * ledger is the kind of omission an operator has to be told about.
  */
-export const dealById = (
+export const DealList = z
+  .object({
+    deals: z.array(DealEnvelope),
+    count: z.number().catch(0),
+    skipped: z.array(z.string()).catch([]),
+  })
+  .loose();
+export type DealList = z.infer<typeof DealList>;
+
+export const deals = (
   c: Connection,
-  dealId: string,
+  query: { status?: string } = {},
   signal?: AbortSignal,
-): Promise<Result<DealDetail>> =>
-  get(c, `${PATHS.deals}/${encodeURIComponent(dealId)}`, { schema: DealDetail, signal });
+): Promise<Result<DealList>> =>
+  get(c, PATHS.deals, { schema: DealList, query, timeoutMs: TIMEOUTS.heavy, signal });
 
 /**
- * Upstream returns placeholder figures here — the docstring says real ad-server
- * integration comes later — so the screen labels these as not measured rather
- * than rendering them as delivery truth.
+ * Upstream returns placeholder figures here — its own docstring says real
+ * ad-server integration comes later — so the screen labels these as not
+ * measured rather than rendering them as delivery truth.
  */
 export const DealPerformance = z
   .object({

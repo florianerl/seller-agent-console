@@ -15,6 +15,7 @@ import Typography from "@mui/material/Typography";
 import { orderHistory, orders } from "../api/endpoints";
 import { describe } from "../api/errors";
 import { StatusChip } from "../components/StatusChip";
+import { plural, stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
 import { useResource } from "../query/useResource";
 import { palette } from "../theme/palette";
@@ -28,13 +29,6 @@ const STATUSES = [
   "rejected",
   "cancelled",
 ];
-
-function stamp(iso: string | null): string {
-  if (!iso) return "—";
-  const at = new Date(iso);
-  if (Number.isNaN(at.getTime())) return iso;
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" }).format(at);
-}
 
 function Timeline({ orderId }: { orderId: string }) {
   const history = useResource(
@@ -141,7 +135,7 @@ export default function OrdersScreen() {
           color: list.freshness === "stale" ? palette.warningText : palette.textSecondary,
         }}
       >
-        {list.freshness === "live" && `${list.data?.count ?? rows.length} orders`}
+        {list.freshness === "live" && plural(list.data?.count ?? rows.length, "order")}
         {list.freshness === "stale" && "couldn't refresh — showing the last list received"}
         {list.freshness === "blocked" && "access denied"}
         {list.freshness === "empty" &&

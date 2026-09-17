@@ -2,18 +2,14 @@ import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import { apiKeys, events, health, inventorySyncStatus, root } from "../api/endpoints";
 import { StatusCard } from "../components/StatusCard";
+import { stamp } from "../lib/time";
 import { useCredential } from "../credentials/context";
 import { CADENCE } from "../query/cadence";
 import { useResource } from "../query/useResource";
 
+/** "never" rather than an em dash: an unsynced agent has a meaning, not a gap. */
 function when(iso: string | null | undefined): string {
-  if (!iso) return "never";
-  const at = new Date(iso);
-  if (Number.isNaN(at.getTime())) return iso;
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(at);
+  return iso ? stamp(iso) : "never";
 }
 
 export function HealthCards() {

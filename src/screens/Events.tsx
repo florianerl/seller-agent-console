@@ -15,18 +15,10 @@ import Typography from "@mui/material/Typography";
 import { events, type EventRecord, type EventsQuery } from "../api/endpoints";
 import { describe } from "../api/errors";
 import { GatedNotice } from "../components/GatedNotice";
+import { clock as stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
 import { useResource } from "../query/useResource";
 import { palette } from "../theme/palette";
-
-function stamp(iso: string): string {
-  const at = new Date(iso);
-  if (Number.isNaN(at.getTime())) return iso;
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "short",
-    timeStyle: "medium",
-  }).format(at);
-}
 
 const LIMIT = 50;
 
@@ -63,7 +55,7 @@ export default function EventsScreen() {
       </Typography>
 
       {feed.freshness === "blocked" ? (
-        <GatedNotice what="The event stream" />
+        <GatedNotice what="The event stream" result={feed.result} />
       ) : (
         <>
           <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
