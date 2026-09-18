@@ -1,0 +1,215 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Seller Agent Console PWA",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "load-path",
+        "label": "Install and load",
+        "focus": ["operator", "pages", "sw", "precache", "shell"],
+        "note": "GitHub Pages serves the shell; the worker precaches it and never caches agent responses."
+      },
+      {
+        "id": "read-path",
+        "label": "Operator request",
+        "focus": ["shell", "query", "http", "agent"],
+        "note": "Screens read through SWR; only http.ts calls fetch, and the agent origin is NetworkOnly."
+      },
+      {
+        "id": "credential-writes",
+        "label": "Credential and writes",
+        "focus": ["idb", "policy", "http", "agent"],
+        "note": "The operator key lives in IndexedDB; the writes switch can refuse non-GET before a request leaves."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "operator",
+      "type": "external",
+      "label": "Operator",
+      "sublabel": "Browser / installed PWA",
+      "pos": [40, 300],
+      "size": [140, 64]
+    },
+    {
+      "id": "pages",
+      "type": "cloud",
+      "label": "GitHub Pages",
+      "sublabel": "/seller-agent-console/",
+      "pos": [250, 300],
+      "size": [150, 64],
+      "tag": "static origin"
+    },
+    {
+      "id": "sw",
+      "type": "frontend",
+      "label": "Service worker",
+      "sublabel": "injectManifest",
+      "pos": [470, 300],
+      "size": [150, 64],
+      "tag": "prompt updates"
+    },
+    {
+      "id": "shell",
+      "type": "frontend",
+      "label": "Console shell",
+      "sublabel": "hash router",
+      "pos": [690, 300],
+      "size": [150, 64]
+    },
+    {
+      "id": "query",
+      "type": "frontend",
+      "label": "Query layer",
+      "sublabel": "SWR + freshness",
+      "pos": [690, 140],
+      "size": [150, 64]
+    },
+    {
+      "id": "http",
+      "type": "frontend",
+      "label": "HTTP client",
+      "sublabel": "src/api/http.ts",
+      "pos": [910, 300],
+      "size": [150, 64],
+      "tag": "only fetch"
+    },
+    {
+      "id": "policy",
+      "type": "security",
+      "label": "Writes policy",
+      "sublabel": "src/api/policy.ts",
+      "pos": [910, 140],
+      "size": [150, 64]
+    },
+    {
+      "id": "idb",
+      "type": "database",
+      "label": "IndexedDB",
+      "sublabel": "Credential record",
+      "pos": [910, 460],
+      "size": [150, 64]
+    },
+    {
+      "id": "precache",
+      "type": "database",
+      "label": "Cache Storage",
+      "sublabel": "shell precache",
+      "pos": [470, 460],
+      "size": [150, 64],
+      "tag": "not API"
+    },
+    {
+      "id": "agent",
+      "type": "external",
+      "label": "Seller Agent API",
+      "sublabel": "operator-entered origin",
+      "pos": [1130, 300],
+      "size": [160, 64]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Browser origin (PWA)",
+      "wraps": ["sw", "shell", "query", "http", "policy", "idb", "precache"]
+    },
+    {
+      "kind": "security-group",
+      "label": "No BFF — browser holds the operator key",
+      "wraps": ["http", "policy", "idb"]
+    }
+  ],
+  "connections": [
+    {
+      "id": "operator-to-pages",
+      "from": "operator",
+      "to": "pages",
+      "label": "HTTPS",
+      "variant": "emphasis"
+    },
+    {
+      "id": "pages-to-sw",
+      "from": "pages",
+      "to": "sw",
+      "label": "register SW"
+    },
+    {
+      "id": "sw-to-shell",
+      "from": "sw",
+      "to": "shell",
+      "label": "serve shell"
+    },
+    {
+      "id": "sw-to-precache",
+      "from": "sw",
+      "to": "precache",
+      "label": "precache assets",
+      "labelDy": 24
+    },
+    {
+      "id": "shell-to-query",
+      "from": "shell",
+      "to": "query",
+      "label": "useResource"
+    },
+    {
+      "id": "query-to-http",
+      "from": "query",
+      "to": "http",
+      "label": "request / get"
+    },
+    {
+      "id": "policy-to-http",
+      "from": "policy",
+      "to": "http",
+      "label": "GET-only gate",
+      "variant": "security",
+      "labelDy": 24
+    },
+    {
+      "id": "idb-to-http",
+      "from": "idb",
+      "to": "http",
+      "label": "base URL + API key"
+    },
+    {
+      "id": "http-to-agent",
+      "from": "http",
+      "to": "agent",
+      "label": "fetch NetworkOnly",
+      "variant": "emphasis",
+      "labelDy": 56
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Static console",
+      "items": [
+        "No server, BFF, or serverless function",
+        "GitHub Pages prefix /seller-agent-console/; hash routing"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "HTTP seam",
+      "items": [
+        "Only src/api/http.ts calls fetch",
+        "Result values, refused redirects, credentials omit"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "PWA and key",
+      "items": [
+        "Updates offered, never unprompted skipWaiting",
+        "Agent origin NetworkOnly; sign-out deletes IndexedDB"
+      ]
+    }
+  ]
+}
