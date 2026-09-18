@@ -34,20 +34,25 @@ export function ConnectionMenu() {
 
   return (
     <>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexShrink: 0 }}>
         <Typography
           component="span"
+          title={`${credential.baseUrl} · ${credential.role}`}
           sx={{
             fontSize: 13,
             display: { xs: "none", sm: "inline" },
             color: palette.textSecondary,
+            maxWidth: { sm: 160, md: 180, lg: 220, xl: 300 },
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
           }}
           data-connection="summary"
         >
           {credential.baseUrl} · {credential.role}
         </Typography>
         <FormControlLabel
-          sx={{ mr: 0, "& .MuiFormControlLabel-label": { fontSize: 13, color: palette.brandBlack } }}
+          sx={{ mr: 0, flexShrink: 0, "& .MuiFormControlLabel-label": { fontSize: 13, color: palette.brandBlack } }}
           label="Writes"
           control={
             <Switch
@@ -72,7 +77,17 @@ export function ConnectionMenu() {
             />
           }
         />
-        <Button size="small" onClick={() => setConfirming(true)} sx={{ fontSize: 13, fontWeight: 600 }}>
+        <Button
+          size="small"
+          onClick={() => setConfirming(true)}
+          sx={{
+            fontSize: 13,
+            fontWeight: 600,
+            flexShrink: 0,
+            minWidth: "auto",
+            px: 1,
+          }}
+        >
           Sign out
         </Button>
       </Box>

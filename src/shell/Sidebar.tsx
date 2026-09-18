@@ -86,10 +86,13 @@ export function ConsoleNav({
         <Box
           sx={{
             display: "flex",
-            flexWrap: "wrap",
+            flexWrap: "nowrap",
             alignItems: "center",
-            columnGap: 2.5,
+            columnGap: { md: 1.25, lg: 1.5, xl: 2 },
             rowGap: 0,
+            overflowX: "auto",
+            scrollbarWidth: "none",
+            "&::-webkit-scrollbar": { display: "none" },
           }}
         >
           {SCREENS.map((screen) => {
@@ -109,7 +112,7 @@ export function ConsoleNav({
                 data-state={active ? "active" : "idle"}
                 sx={{
                   color: active ? palette.brandRedText : palette.brandBlack,
-                  fontSize: 14,
+                  fontSize: { md: 13, lg: 13.5, xl: 14 },
                   fontWeight: 600,
                   textDecoration: "none",
                   borderBottom: active
@@ -117,6 +120,7 @@ export function ConsoleNav({
                     : "2px solid transparent",
                   py: 1.25,
                   whiteSpace: "nowrap",
+                  flexShrink: 0,
                 }}
               >
                 {screen.label}

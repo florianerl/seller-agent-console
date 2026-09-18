@@ -9,7 +9,11 @@ export default function NotFound() {
       <PageHeader
         title="No such screen"
         subtitle={
-          <Link component={RouterLink} to="/" sx={{ color: palette.paper }}>
+          <Link
+            component={RouterLink}
+            to="/"
+            sx={{ color: palette.brandRedText, fontWeight: 600, textDecoration: "underline" }}
+          >
             Back to setup and health
           </Link>
         }

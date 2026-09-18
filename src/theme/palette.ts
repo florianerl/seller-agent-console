@@ -11,6 +11,7 @@ export const palette = {
   brandRedText: "#D42418",
 
   brandBlack: "#221F1F",
+  masthead: "#1A244C",
 
   text: "#3F3F3F",
   textSecondary: "#5D5D5D",
@@ -23,8 +24,8 @@ export const palette = {
   ground: "#F7F6F6",
   paper: "#FFFFFF",
   /**
-   * Subtitles on the dark masthead. Brand-black is near-black; this grey
-   * still clears 4.5:1 so the hero copy is readable, not decorative.
+   * Subtitles on the navy masthead. Still clears 4.5:1 so the hero copy
+   * is readable, not decorative.
    */
   onDarkMuted: "#C9C6C5",
   /**
@@ -72,8 +73,6 @@ export const CONTRAST_CONTRACT: ReadonlyArray<{
   { name: "overline on ground", fg: palette.brandRedText, bg: palette.ground, min: "body" },
   { name: "contained button label", fg: palette.paper, bg: palette.brandRedText, min: "body" },
   { name: "heading on paper", fg: palette.brandBlack, bg: palette.paper, min: "body" },
-  { name: "masthead title", fg: palette.paper, bg: palette.brandBlack, min: "body" },
-  { name: "masthead subtitle", fg: palette.onDarkMuted, bg: palette.brandBlack, min: "body" },
   { name: "table header on paper", fg: palette.textSecondary, bg: palette.paper, min: "body" },
   { name: "header actions on paper", fg: palette.brandBlack, bg: palette.paper, min: "body" },
   { name: "header secondary on paper", fg: palette.textSecondary, bg: palette.paper, min: "body" },

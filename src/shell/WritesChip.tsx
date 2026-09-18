@@ -23,12 +23,13 @@ export function WritesChip() {
       data-writes="on"
       sx={{
         mr: 0,
-        height: 28,
-        fontSize: 12,
+        height: 24,
+        fontSize: 11,
         fontWeight: 700,
-        letterSpacing: 0.3,
+        letterSpacing: 0.2,
         color: palette.brandBlack,
         backgroundColor: palette.attention,
+        flexShrink: 0,
       }}
     />
   );

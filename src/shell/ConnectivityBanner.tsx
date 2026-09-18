@@ -1,6 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
+import { CONTENT_MAX_WIDTH } from "../components/DataPanel";
 import { getAgentUnreachable, subscribeReachability } from "../query/reachability";
 
 function useOnline(): boolean {
@@ -36,10 +37,12 @@ export function ConnectivityBanner() {
 
   if (!online) {
     return (
-      <Box sx={{ mb: 2.5 }}>
-        <Alert severity="warning" variant="outlined" data-banner="offline">
-          No network connection. Values below are the last ones this device saw.
-        </Alert>
+      <Box sx={{ px: { xs: 2.5, md: 4 }, pt: 1.5 }}>
+        <Box sx={{ maxWidth: CONTENT_MAX_WIDTH, mx: "auto", mb: 2 }}>
+          <Alert severity="warning" variant="outlined" data-banner="offline">
+            No network connection. Values below are the last ones this device saw.
+          </Alert>
+        </Box>
       </Box>
     );
   }
@@ -48,10 +51,12 @@ export function ConnectivityBanner() {
   // is the card's business, not the shell's.
   if (agentUnreachable) {
     return (
-      <Box sx={{ mb: 2.5 }}>
-        <Alert severity="warning" variant="outlined" data-banner="unreachable">
-          Can't reach the seller agent. Showing the last values received.
-        </Alert>
+      <Box sx={{ px: { xs: 2.5, md: 4 }, pt: 1.5 }}>
+        <Box sx={{ maxWidth: CONTENT_MAX_WIDTH, mx: "auto", mb: 2 }}>
+          <Alert severity="warning" variant="outlined" data-banner="unreachable">
+            Can't reach the seller agent. Showing the last values received.
+          </Alert>
+        </Box>
       </Box>
     );
   }

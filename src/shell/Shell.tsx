@@ -12,7 +12,7 @@ import { ConnectionMenu } from "./ConnectionMenu";
 import { WritesChip } from "./WritesChip";
 import { InstallButton } from "../pwa/InstallButton";
 import { MenuIcon } from "../components/MenuIcon";
-import { CONTENT_MAX_WIDTH } from "../components/DataPanel";
+import { MastheadMotif } from "../components/MastheadMotif";
 import { palette } from "../theme/palette";
 import { DRAWER_WIDTH } from "./screens";
 
@@ -33,15 +33,19 @@ export function Shell() {
           borderBottom: `1px solid ${palette.line}`,
           color: palette.brandBlack,
           pt: "env(safe-area-inset-top)",
+          overflow: "hidden",
         }}
       >
+        <MastheadMotif />
         <Box
           sx={{
+            position: "relative",
             display: "flex",
             alignItems: "center",
-            gap: 3,
-            flexWrap: "wrap",
-            px: { xs: 2, md: 4 },
+            gap: { xs: 1.5, md: 2, xl: 2.5 },
+            flexWrap: "nowrap",
+            pl: { xs: 2, md: 4 },
+            pr: { xs: 8, md: 10.5 },
             py: 1,
             minHeight: 64,
           }}
@@ -59,11 +63,19 @@ export function Shell() {
           )}
           <BrandMark asHeading compact={!isDesktop} />
           {isDesktop && (
-            <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Box sx={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
               <ConsoleNav />
             </Box>
           )}
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, ml: "auto" }}>
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: { xs: 1, md: 1.25 },
+              ml: "auto",
+              flexShrink: 0,
+            }}
+          >
             <WritesChip />
             <InstallButton />
             <ConnectionMenu />
@@ -92,11 +104,7 @@ export function Shell() {
       )}
 
       <Box component="main" sx={{ flexGrow: 1, minWidth: 0 }}>
-        <Box sx={{ px: { xs: 2.5, md: 4 }, pt: 1.5 }}>
-          <Box sx={{ maxWidth: CONTENT_MAX_WIDTH }}>
-            <ConnectivityBanner />
-          </Box>
-        </Box>
+        <ConnectivityBanner />
         <Suspense
           fallback={
             <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>

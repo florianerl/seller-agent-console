@@ -147,4 +147,16 @@ describe("the write switch", () => {
     expect(toggle()).not.toBeChecked();
     expect(writesEnabled()).toBe(false);
   });
+
+  it("renders WritesChip and ConnectionMenu together when writes are enabled", async () => {
+    const stored = await loadCredential();
+    await saveCredential({ ...stored!, writesEnabled: true });
+
+    const { container } = renderMenu();
+    await waitFor(() => expect(toggle()).toBeChecked());
+
+    expect(container.querySelector('[data-writes="on"]')).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
+    expect(screen.getByText(/operator/)).toBeInTheDocument();
+  });
 });
