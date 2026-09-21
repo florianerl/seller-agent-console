@@ -20,9 +20,11 @@ browser holds the credential and calls the agent directly.
 - **Cost, and it is the big one:** the operator key lives in the browser. A BFF
   is the only design that fixes this, and we chose not to have one. The README
   says so plainly rather than implying that IndexedDB is a safeguard.
-- **Cost:** read-only is enforced by the client alone (ADR 4). A compromised
-  page can do anything the key permits. The layers exist to stop *us* from
-  regressing, not to stop an attacker.
+- **Cost:** whatever limits the console observes are enforced by the client
+  alone. That was read-only (ADR 4); it is now a write switch (ADR 11, ADR 12),
+  and the point is unchanged and now sharper — a compromised page can do
+  anything the key permits. The layers exist to stop *us* from regressing, not
+  to stop an attacker.
 - **Cost:** no analytics, ever, without reversing this (ADR 10).
 - **Cost:** no real CSP. GitHub Pages sets no response headers, so only a
   `<meta>` tag is available, which cannot express `frame-ancestors` or

@@ -4,9 +4,18 @@
 
 ## Context
 
-The app does polled, read-only GETs. No mutations, no invalidation, no
-optimistic updates — roughly ninety percent of TanStack Query's surface is
-unused here.
+The app did polled, read-only GETs when this was decided. No mutations, no
+invalidation, no optimistic updates — roughly ninety percent of TanStack
+Query's surface was unused.
+
+**That premise no longer holds.** ADR 11 permits writes and the console now
+issues dozens of them, which is exactly the surface TanStack covers and SWR
+does not: mutation state, invalidation, retries and optimistic updates are all
+hand-rolled here in `useMutation` and the endpoint layer. The decision still
+stands on the visibility grounds below, which remain true and were always the
+deciding factor — but it stands on one leg now rather than two, and a future
+reviewer should know the counting argument has expired rather than find it and
+believe it.
 
 ## Decision
 

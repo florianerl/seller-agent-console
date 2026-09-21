@@ -25,7 +25,7 @@ cleanupOutdatedCaches();
  */
 // createHandlerBoundToURL serves the precached document by its revisioned
 // cache key. Written by hand it would need a raw fetch fallback, and the
-// read-only guard rightly refuses any fetch outside src/api/http.ts.
+// fetch-seam guard rightly refuses any fetch outside src/api/http.ts.
 registerRoute(new NavigationRoute(createHandlerBoundToURL("index.html")));
 
 /**
