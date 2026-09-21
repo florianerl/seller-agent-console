@@ -1,0 +1,308 @@
+{
+  "capturedFrom": "http://127.0.0.1:8000",
+  "capturedAt": "2026-09-21T16:04:22.818Z",
+  "reportedAgentVersion": "1.0.0",
+  "pathCount": 75,
+  "paths": {
+    "/": {
+      "GET": []
+    },
+    "/.well-known/agent.json": {
+      "GET": []
+    },
+    "/agentic-audience/match": {
+      "POST": []
+    },
+    "/api/v1/change-requests": {
+      "POST": [],
+      "GET": [
+        "order_id",
+        "status"
+      ]
+    },
+    "/api/v1/change-requests/{cr_id}": {
+      "GET": []
+    },
+    "/api/v1/change-requests/{cr_id}/apply": {
+      "POST": []
+    },
+    "/api/v1/change-requests/{cr_id}/review": {
+      "POST": []
+    },
+    "/api/v1/curators": {
+      "GET": [],
+      "POST": []
+    },
+    "/api/v1/curators/{curator_id}": {
+      "GET": []
+    },
+    "/api/v1/deals": {
+      "POST": [],
+      "GET": [
+        "status"
+      ]
+    },
+    "/api/v1/deals/{deal_id}": {
+      "GET": []
+    },
+    "/api/v1/deals/{deal_id}/buyer-status": {
+      "GET": [
+        "buyer_url"
+      ]
+    },
+    "/api/v1/deals/{deal_id}/deprecate": {
+      "POST": []
+    },
+    "/api/v1/deals/{deal_id}/lineage": {
+      "GET": []
+    },
+    "/api/v1/deals/{deal_id}/migrate": {
+      "POST": []
+    },
+    "/api/v1/deals/{deal_id}/performance": {
+      "GET": []
+    },
+    "/api/v1/deals/{deal_id}/ssp-troubleshoot": {
+      "GET": [
+        "ssp_name"
+      ]
+    },
+    "/api/v1/deals/bulk": {
+      "POST": []
+    },
+    "/api/v1/deals/curated": {
+      "POST": []
+    },
+    "/api/v1/deals/distribute": {
+      "POST": []
+    },
+    "/api/v1/deals/export": {
+      "GET": [
+        "format",
+        "status"
+      ]
+    },
+    "/api/v1/deals/from-template": {
+      "POST": []
+    },
+    "/api/v1/deals/push": {
+      "POST": []
+    },
+    "/api/v1/inventory-sync/status": {
+      "GET": []
+    },
+    "/api/v1/inventory-sync/trigger": {
+      "POST": [
+        "incremental"
+      ]
+    },
+    "/api/v1/inventory-sync/watermark": {
+      "GET": []
+    },
+    "/api/v1/negotiations/messages": {
+      "POST": []
+    },
+    "/api/v1/orders": {
+      "POST": [],
+      "GET": [
+        "status"
+      ]
+    },
+    "/api/v1/orders/{order_id}": {
+      "GET": []
+    },
+    "/api/v1/orders/{order_id}/audit": {
+      "GET": [
+        "actor",
+        "from_date",
+        "to_date"
+      ]
+    },
+    "/api/v1/orders/{order_id}/history": {
+      "GET": []
+    },
+    "/api/v1/orders/{order_id}/transition": {
+      "POST": []
+    },
+    "/api/v1/orders/report": {
+      "GET": [
+        "from_date",
+        "to_date"
+      ]
+    },
+    "/api/v1/products/{product_id}/inventory-type": {
+      "POST": [],
+      "GET": [],
+      "DELETE": []
+    },
+    "/api/v1/quotes": {
+      "POST": []
+    },
+    "/api/v1/quotes/{quote_id}": {
+      "GET": []
+    },
+    "/api/v1/rate-card": {
+      "GET": [],
+      "PUT": []
+    },
+    "/api/v1/supply-chain": {
+      "GET": []
+    },
+    "/approvals": {
+      "GET": []
+    },
+    "/approvals/{approval_id}": {
+      "GET": []
+    },
+    "/approvals/{approval_id}/decide": {
+      "POST": []
+    },
+    "/approvals/{approval_id}/resume": {
+      "POST": []
+    },
+    "/auth/api-keys": {
+      "POST": [],
+      "GET": []
+    },
+    "/auth/api-keys/{key_id}": {
+      "GET": [],
+      "DELETE": []
+    },
+    "/auth/api-keys/operator": {
+      "POST": []
+    },
+    "/deals": {
+      "POST": []
+    },
+    "/discovery": {
+      "POST": []
+    },
+    "/events": {
+      "GET": [
+        "event_type",
+        "flow_id",
+        "limit",
+        "session_id"
+      ]
+    },
+    "/events/{event_id}": {
+      "GET": []
+    },
+    "/gam/orders": {
+      "GET": [
+        "agent_created_only",
+        "limit"
+      ]
+    },
+    "/gam/report": {
+      "GET": [
+        "days",
+        "order_ids"
+      ]
+    },
+    "/health": {
+      "GET": []
+    },
+    "/media-kit": {
+      "GET": []
+    },
+    "/media-kit/packages": {
+      "GET": [
+        "audience_id",
+        "audience_taxonomy_version",
+        "audience_type",
+        "featured_only",
+        "layer"
+      ]
+    },
+    "/media-kit/packages/{package_id}": {
+      "GET": []
+    },
+    "/media-kit/search": {
+      "POST": []
+    },
+    "/packages": {
+      "GET": [
+        "advertiser_id",
+        "agency_id",
+        "audience_id",
+        "audience_taxonomy_version",
+        "audience_type",
+        "buyer_tier",
+        "layer"
+      ],
+      "POST": []
+    },
+    "/packages/{package_id}": {
+      "GET": [
+        "advertiser_id",
+        "agency_id",
+        "buyer_tier"
+      ],
+      "PUT": [],
+      "DELETE": []
+    },
+    "/packages/assemble": {
+      "POST": []
+    },
+    "/packages/sync": {
+      "POST": []
+    },
+    "/pricing": {
+      "POST": []
+    },
+    "/products": {
+      "GET": [
+        "limit",
+        "offset"
+      ]
+    },
+    "/products/{product_id}": {
+      "GET": []
+    },
+    "/products/avails": {
+      "POST": []
+    },
+    "/proposals": {
+      "POST": []
+    },
+    "/proposals/{proposal_id}/counter": {
+      "POST": []
+    },
+    "/proposals/{proposal_id}/negotiation": {
+      "GET": []
+    },
+    "/registry/agents": {
+      "GET": [
+        "agent_type",
+        "trust_status"
+      ]
+    },
+    "/registry/agents/{agent_id}": {
+      "GET": [],
+      "DELETE": []
+    },
+    "/registry/agents/{agent_id}/trust": {
+      "PUT": []
+    },
+    "/registry/agents/discover": {
+      "POST": []
+    },
+    "/sessions": {
+      "POST": [],
+      "GET": [
+        "buyer_key",
+        "status"
+      ]
+    },
+    "/sessions/{session_id}": {
+      "GET": []
+    },
+    "/sessions/{session_id}/close": {
+      "POST": []
+    },
+    "/sessions/{session_id}/messages": {
+      "POST": []
+    }
+  }
+}

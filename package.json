@@ -17,7 +17,8 @@
     "test:watch": "vitest --project unit",
     "test:e2e": "playwright test",
     "test:lighthouse": "lhci autorun --config=lighthouserc.cjs",
-    "screenshots": "playwright test --config playwright.capture.config.ts"
+    "screenshots": "playwright test --config playwright.capture.config.ts",
+    "refresh:agent-surface": "node scripts/refresh-agent-surface.mjs"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

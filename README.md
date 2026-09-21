@@ -199,7 +199,8 @@ during an incident, so it is written down here.
 | `npm run lint` | type-aware ESLint; warnings fail |
 | `npm test` | unit and integration (Vitest, jsdom, MSW) |
 | `npm run build` | production build |
-| `npm run test:guards` | guards — these inspect `dist/`, so build first |
+| `npm run test:guards` | guards — some inspect `dist/`, so build first |
+| `npm run refresh:agent-surface` | recapture the agent's API surface from a running agent |
 | `npm run test:e2e` | Playwright, against a real build under the real prefix |
 | `npm run test:lighthouse` | performance budgets against a local preview |
 
@@ -208,7 +209,10 @@ dependence surfaces there rather than intermittently.
 
 ### What the tests are actually for
 
-- **Guards** assert properties of the built artifact: every URL under the
+- **Guards** assert properties of the source and the built artifact:
+  every path the endpoint layer calls exists in the agent's own OpenAPI
+  surface with the method used, none of them ends in a slash, and no agent
+  operation goes unreached without a recorded reason; every URL under the
   deploy prefix, decoded PNG dimensions matching declared icon sizes, the
   contrast contract, no `fetch` outside the client, a bundle-size tripwire.
 - **End-to-end** covers what jsdom structurally cannot: a real service worker,

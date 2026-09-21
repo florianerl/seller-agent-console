@@ -27,6 +27,8 @@ export default tseslint.config(
       // type-aware linting has nothing to say about them.
       "eslint.config.js",
       "lighthouserc.cjs",
+      // A plain Node script run by hand, outside any tsconfig project.
+      "scripts/*.mjs",
     ],
   },
 
