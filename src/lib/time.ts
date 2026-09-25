@@ -48,12 +48,33 @@ export function clock(iso: string | null | undefined): string {
   }).format(at);
 }
 
-/** Date only, for flight windows the agent stores without a time. */
+const BARE_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Date only, for flight windows the agent stores without a time.
+ *
+ * A bare date names a calendar day, not an instant, so it is formatted in UTC —
+ * the zone `new Date("2026-10-06")` parses it into. Formatted in the viewer's
+ * zone instead, it is UTC midnight shown west of Greenwich, and a deal's
+ * flight started the day before it does. East of UTC nothing looked wrong,
+ * which is how it shipped. A full timestamp is an instant and keeps the
+ * viewer's zone, like `stamp`.
+ */
 export function day(iso: string | null | undefined): string {
   if (!iso) return "—";
   const at = parse(iso);
   if (!at) return iso;
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(at);
+  const timeZone = BARE_DATE.test(iso.trim()) ? "UTC" : undefined;
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeZone }).format(at);
+}
+
+/**
+ * For fields that are sometimes a calendar day and sometimes an instant — the
+ * OpenProposal draft uses both (`flight_start` is a date, `valid_until` a
+ * timestamp). A bare date gets `day`, so it never gains a time it did not have.
+ */
+export function dateOrStamp(iso: string | null | undefined): string {
+  return iso && BARE_DATE.test(iso.trim()) ? day(iso) : stamp(iso);
 }
 
 /** "1 deal" / "2 deals" — a count next to a bare plural reads as a bug. */
