@@ -78,6 +78,15 @@ confirmation, idempotency and what a partial failure leaves behind, because the
 client answers none of that generically. Screens under `src/screens/` own those
 call sites, each behind `ConfirmAction` / `WriteForm`.
 
+**OpenProposal (AAMP 3.0) is provisional.** `src/api/endpoints/proposals.ts`
+calls `/api/v3` routes upstream does not serve yet; [ADR 14](docs/adr/0014-openproposal-provisional-contract.md)
+records the guessed contract. They are listed in `PROVISIONAL` in the drift
+guard, which fails once the captured surface declares one. The Proposals screen
+calls nothing there unless `openProposalSupport()` (`src/api/capabilities.ts`)
+finds the protocol on the agent card, which keeps a 2.x agent untouched. Pure
+helpers live in `src/api/openproposal/`, not in `endpoints/`, because every
+function the endpoints barrel exports is swept as an endpoint.
+
 **Results are values, never exceptions.** `src/api/errors.ts` defines
 `Result<T>` = `ok` | `rejected` (401/403 only) | `unavailable` (timeout,
 network, redirect, http, content-type, shape). Nothing in the client throws;

@@ -47,9 +47,29 @@ describe("the console calls only routes the agent declares", () => {
     expect(calls.filter((call) => call.path === "<unresolved>")).toEqual([]);
   });
 
+  /**
+   * Routes the console calls before the agent serves them. Only OpenProposal
+   * 3.0 today: the spec defines no transport, so ADR 14 proposes one, and the
+   * screen that calls it sends nothing unless the agent card advertises the
+   * protocol. An entry is a guess, and the two assertions after the main check
+   * keep it an honest one — it must still be absent upstream, and still be
+   * called here.
+   */
+  const PROVISIONAL = new Map<string, string>([
+    ["GET /api/v3/proposals", "OpenProposal 3.0 draft; ADR 14"],
+    ["GET /api/v3/proposals/{}", "OpenProposal 3.0 draft; ADR 14"],
+    ["POST /api/v3/proposals/{}/publish", "OpenProposal 3.0 draft; ADR 14"],
+    ["POST /api/v3/proposals/{}/withdraw", "OpenProposal 3.0 draft; ADR 14"],
+    ["POST /api/v3/proposals/{}/line-items/{}/hold", "OpenProposal 3.0 draft; ADR 14"],
+    ["POST /api/v3/proposals/{}/assent", "OpenProposal 3.0 draft; ADR 14"],
+  ]);
+  const provisional = (call: { method: string; path: string }) =>
+    PROVISIONAL.has(`${call.method} ${shape(call.path)}`);
+
   it("calls no path the agent does not declare", () => {
     const missing = [...new Set(
       calls
+        .filter((call) => !provisional(call))
         .filter((call) => !known.has(shape(call.path)))
         .map((call) => `${call.method} ${call.path} at ${call.file}:${call.line}`),
     )];
@@ -105,6 +125,28 @@ describe("the console calls only routes the agent declares", () => {
       "the agent exposes operations this console never calls. Either put them " +
         "on a screen, or add them to NOT_ADOPTED with the reason",
     ).toEqual([]);
+  });
+
+  /**
+   * The day upstream ships one of these, the entry has to go, so the real
+   * route is checked like every other — path, method, and whether the guess
+   * was right.
+   */
+  it("keeps provisional routes only while the agent still lacks them", () => {
+    const shipped = [...PROVISIONAL.keys()].filter((operation) => {
+      const [method = "", path = ""] = operation.split(" ");
+      return known.get(path)?.[method] !== undefined;
+    });
+
+    expect(
+      shipped,
+      "the agent now declares these; remove them from PROVISIONAL and check the contract against ADR 14",
+    ).toEqual([]);
+  });
+
+  it("lists no provisional route nothing calls", () => {
+    const called = new Set(calls.map((call) => `${call.method} ${shape(call.path)}`));
+    expect([...PROVISIONAL.keys()].filter((operation) => !called.has(operation))).toEqual([]);
   });
 
   /**

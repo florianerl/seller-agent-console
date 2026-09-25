@@ -15,6 +15,12 @@ const TONE: Record<string, string> = {
   failed: palette.error,
   pending_approval: palette.warningText,
   submitted: palette.warningText,
+  // OpenProposal lifecycle words; none collide with another screen's vocabulary.
+  published: palette.ok,
+  agreed: palette.ok,
+  under_review: palette.warningText,
+  withdrawn: palette.error,
+  sold_out: palette.error,
 };
 
 export function StatusChip({ status }: { status: string }) {

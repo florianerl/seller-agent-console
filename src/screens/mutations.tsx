@@ -54,9 +54,15 @@ import {
   triggerInventorySync,
   updateAgentTrust,
   updatePackage,
+  assentProposal,
+  holdLineItem,
+  publishProposal,
+  withdrawProposal,
   type CreatedApiKey,
+  type LineItem,
+  type Proposal,
 } from "../api/endpoints";
-import { describe } from "../api/errors";
+import { describe, type Result } from "../api/errors";
 import { FormFields, FormRow, WriteForm } from "../components/WriteForm";
 import { WritesNotice } from "../components/WritesNotice";
 import { useCredential } from "../credentials/context";
@@ -1362,6 +1368,211 @@ function AudienceMatchBody({ identifier }: { identifier: string }) {
           ? describe(match.result)
           : ""}
     </Typography>
+  );
+}
+
+// --- OpenProposal lifecycle (ADR 14) -----------------------------------------
+
+/**
+ * One idempotency key per attempt, kept across a retry whose outcome is
+ * unknown. The other call sites mint a key per run, which is right when every
+ * failure is a definite answer; here a timeout on publish or assent may have
+ * landed, and retrying with a fresh key would ask the agent to do it twice.
+ * Any definite answer — success, 409, 422 — ends the attempt.
+ */
+function useAttemptKey(): { key: string; settle: (result: Result<unknown>) => void } {
+  const [key, setKey] = useState(newKey);
+  return {
+    key,
+    settle: (result) => {
+      // Nothing was sent (writes-disabled, busy) or nobody knows (timeout,
+      // network, an unparseable body): keep the key.
+      const definite =
+        result.kind !== "unavailable" || result.reason === "http";
+      if (definite) setKey(newKey());
+    },
+  };
+}
+
+/** A 409 here means the record moved under the operator, not that the agent failed. */
+function StaleNote({ last }: { last: Result<unknown> | undefined }) {
+  if (last?.kind !== "unavailable" || last.reason !== "http" || last.status !== 409) return null;
+  return (
+    <Typography variant="body2" sx={{ mt: 0.5, color: palette.warningText }} data-state="stale-version">
+      The proposal changed since this screen loaded it, so nothing was applied. Review
+      the current version before trying again.
+    </Typography>
+  );
+}
+
+function proposalInvalidations(proposalId: string): string[] {
+  return [`open-proposal:${proposalId}`, "open-proposals:*"];
+}
+
+export function ProposalLifecycleWrites({ proposal }: { proposal: Proposal }) {
+  const { writesEnabled } = useCredential();
+  const id = proposal.proposal_id;
+  const version = proposal.version;
+  const status = proposal.status ?? "";
+  const [reason, setReason] = useState("");
+  const attempt = useAttemptKey();
+
+  type Guard = { idempotency_key: string; expected_version: number | null };
+  const publish = useMutation<Guard, unknown>((c, a) => publishProposal(c, id, a), {
+    invalidates: proposalInvalidations(id),
+  });
+  const withdraw = useMutation<Guard & { reason?: string }, unknown>(
+    (c, a) => withdrawProposal(c, id, a),
+    { invalidates: proposalInvalidations(id) },
+  );
+  const assent = useMutation<Guard & { decision: "accept" | "decline"; reason?: string }, unknown>(
+    (c, a) => assentProposal(c, id, a),
+    { invalidates: proposalInvalidations(id) },
+  );
+
+  const run = <A extends object>(m: { run: (a: A & Guard) => Promise<Result<unknown>> }, args: A) =>
+    void m
+      .run({ ...args, idempotency_key: attempt.key, expected_version: version })
+      .then(attempt.settle);
+
+  const blocked = !writesEnabled;
+  const lastAsk = [...proposal.negotiation_history].reverse().find((e) => e.actor === "buyer");
+  const withReason = reason.trim() ? { reason: reason.trim() } : {};
+
+  const canPublish = status === "draft";
+  const canWithdraw = status === "published" || status === "under_review";
+  const canAssent = status === "under_review";
+
+  if (!canPublish && !canWithdraw && !canAssent) {
+    return (
+      <Typography variant="body2" color="text.secondary" data-state="no-lifecycle-action">
+        No lifecycle action applies to a proposal that is {status ? status.replace(/_/g, " ") : "of unreported status"}.
+      </Typography>
+    );
+  }
+
+  return (
+    <Stack spacing={2} data-block="proposal-lifecycle">
+      {canPublish && (
+        <Box>
+          <WriteForm
+            title="Publish this proposal?"
+            confirmLabel="Publish"
+            action="publish-proposal"
+            blocked={blocked}
+            pending={publish.pending}
+            last={publish.last}
+            onConfirm={() => run(publish, {})}
+            consequence={`Buyer agents can discover version ${version ?? "?"} from this point. Seller-set fields stay revisable while it is published. Replay-safe: a retry after a timeout reuses the same idempotency key.`}
+          />
+          <StaleNote last={publish.last} />
+        </Box>
+      )}
+      {canAssent && (
+        <Box>
+          <Typography variant="body2" sx={{ mb: 1 }} data-block="assent-ask">
+            Under review: the buyer&apos;s last move was{" "}
+            {lastAsk ? `${lastAsk.action ?? "unreported"} on version ${lastAsk.version ?? "?"}` : "not recorded"}
+            {lastAsk && lastAsk.fields_changed.length > 0 && `, changing ${lastAsk.fields_changed.join(", ")}`}.
+          </Typography>
+          <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
+            <WriteForm
+              title="Accept this version and make it binding?"
+              confirmLabel="Accept"
+              action="assent-accept"
+              blocked={blocked}
+              pending={assent.pending}
+              last={assent.last}
+              onConfirm={() => run(assent, { decision: "accept" as const, ...withReason })}
+              consequence={`Your assent makes version ${version ?? "?"} binding: the proposal becomes agreed, held line items convert, and the stored record is frozen with every catalog reference resolved. This is the commercial commitment, and there is no undo from this console.`}
+            />
+            <WriteForm
+              title="Decline the version under review?"
+              confirmLabel="Decline"
+              action="assent-decline"
+              blocked={blocked}
+              pending={assent.pending}
+              last={assent.last}
+              onConfirm={() => run(assent, { decision: "decline" as const, ...withReason })}
+              consequence="Records a seller decline in the negotiation history, which is append-only. The buyer may propose again."
+            />
+          </Stack>
+          <StaleNote last={assent.last} />
+        </Box>
+      )}
+      {canWithdraw && (
+        <Box>
+          <WriteForm
+            title="Withdraw this proposal?"
+            confirmLabel="Withdraw"
+            action="withdraw-proposal"
+            blocked={blocked}
+            pending={withdraw.pending}
+            last={withdraw.last}
+            onConfirm={() => run(withdraw, withReason)}
+            consequence="Withdrawn is terminal. Buyer agents composing against it lose it, including any line items they were about to commit."
+          />
+          <StaleNote last={withdraw.last} />
+        </Box>
+      )}
+      {(canWithdraw || canAssent) && (
+        <TextField
+          size="small"
+          label="Reason (optional, sent with withdraw or assent)"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          disabled={blocked}
+          sx={{ maxWidth: 480 }}
+        />
+      )}
+    </Stack>
+  );
+}
+
+export function LineItemHoldWrites({ proposal, item }: { proposal: Proposal; item: LineItem }) {
+  const { writesEnabled } = useCredential();
+  const attempt = useAttemptKey();
+  const state = item.hold_status?.state ?? "none";
+  const hold = useMutation<
+    { action: "grant" | "release"; idempotency_key: string; expected_version: number | null },
+    unknown
+  >((c, a) => holdLineItem(c, proposal.proposal_id, item.line_item_id, a), {
+    invalidates: proposalInvalidations(proposal.proposal_id),
+  });
+  const run = (action: "grant" | "release") =>
+    void hold
+      .run({ action, idempotency_key: attempt.key, expected_version: proposal.version })
+      .then(attempt.settle);
+
+  if (state !== "requested" && state !== "held") return null;
+
+  return (
+    <Box data-block={`hold-writes:${item.line_item_id}`}>
+      {state === "requested" ? (
+        <WriteForm
+          title="Grant the requested hold?"
+          confirmLabel="Grant hold"
+          action="grant-hold"
+          blocked={!writesEnabled}
+          pending={hold.pending}
+          last={hold.last}
+          onConfirm={() => run("grant")}
+          consequence={`Reserves this inventory for ${item.hold_status?.hold_duration ?? "an unreported duration"}, scoped to the ${item.hold_status?.hold_scope ?? "unreported scope"}. Nobody else can commit it until the hold expires, is released, or converts on agreement.`}
+        />
+      ) : (
+        <WriteForm
+          title="Release this hold?"
+          confirmLabel="Release hold"
+          action="release-hold"
+          blocked={!writesEnabled}
+          pending={hold.pending}
+          last={hold.last}
+          onConfirm={() => run("release")}
+          consequence="The inventory returns to the shelf now, before the hold would have expired. The buyer loses its reservation."
+        />
+      )}
+      <StaleNote last={hold.last} />
+    </Box>
   );
 }
 

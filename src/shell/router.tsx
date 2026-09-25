@@ -20,6 +20,7 @@ const Events = lazy(() => import("../screens/Events"));
 const Orders = lazy(() => import("../screens/Orders"));
 const Deals = lazy(() => import("../screens/Deals"));
 const Inbox = lazy(() => import("../screens/Inbox"));
+const Proposals = lazy(() => import("../screens/Proposals"));
 const Negotiation = lazy(() => import("../screens/Negotiation"));
 const Catalog = lazy(() => import("../screens/Catalog"));
 const Agents = lazy(() => import("../screens/Agents"));
@@ -39,6 +40,7 @@ export function Router() {
           <Route path="orders" element={<Orders />} />
           <Route path="deals" element={<Deals />} />
           <Route path="inbox" element={<Inbox />} />
+          <Route path="proposals" element={<Proposals />} />
           <Route path="negotiation" element={<Negotiation />} />
           <Route path="catalog" element={<Catalog />} />
           <Route path="media-kit" element={<MediaKit />} />

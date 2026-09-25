@@ -120,6 +120,7 @@ differently, because they send you to different places.
 | Events | `/events`, `/events/{id}` | Operator-only. A tail, not a log — the API offers no cursor, so there is no way to page backwards |
 | Orders | `/api/v1/orders`, `/{id}`, `/{id}/history`, `/{id}/audit`; writes `POST /api/v1/orders`, `/{id}/transition` | Transition timeline plus change requests. The actor is shown as a label, not as attribution |
 | Deals | `/api/v1/deals`, `/{id}` (lazy expiry), `/{id}/performance`, `/{id}/lineage`, `/{id}/buyer-status`, `/{id}/ssp-troubleshoot`, `/export`; writes generate `/deals`, book, template, bulk, push, distribute, curated, migrate, deprecate | Operator-only list is unpaginated, so it never polls. Delivery figures are **placeholders** upstream |
+| Proposals | `/.well-known/agent.json`; only if it advertises `openproposal-3.0`: `/api/v3/proposals`, `/{id}`; writes `/{id}/publish`, `/{id}/withdraw`, `/{id}/line-items/{li}/hold`, `/{id}/assent` | OpenProposal (AAMP 3.0) against a **provisional** contract (ADR 14). Against any other agent it sends nothing to `/api/v3`. Mutability markers are quoted from spec `3.0-draft-1`, not received. Writes carry an idempotency key reused across an unknown-outcome retry, and the version on screen |
 | Inbox | `/approvals`, `/approvals/{id}`; writes `/{id}/decide`, `/{id}/resume` | Decide and resume share one busy lock. Controls unmount as soon as decide succeeds, before the detail re-read |
 | Negotiation | `/sessions`, `/sessions/{id}`, `/proposals/{id}/negotiation`; writes create/message/close session, submit/counter proposal, `POST /api/v1/negotiations/messages` | Discloses that listing writes, **and** that session routes declare no authentication |
 | Catalog | `/products`, `/products/{id}`, inventory-type override GET/POST/DELETE, `/api/v1/rate-card` GET/PUT, `/packages` CRUD + assemble/sync, `/api/v1/quotes`; query POSTs `/discovery`, `/products/avails`, `/pricing` | Override values carry their own freshness stamp. Rate-card PUT replaces the whole card |
@@ -279,7 +280,17 @@ covers the three ways it can go wrong.
    party, which is what the no-external-hosts guard and `connect-src` exist to
    prevent. Adding analytics later means deliberately removing two safety
    rails.
-7. **Initial load is ~195 kB gzipped**, mostly React and MUI. Above the 170 kB
+7. **OpenProposal support is built against a draft and a guess.** The spec
+   (`3.0-draft-1`) is open for comment until 2026-10-22, defines no transport
+   and publishes no schema; upstream serves none of the `/api/v3` routes the
+   Proposals screen calls. The paths, the list envelope, the write bodies and
+   the `openproposal-3.0` protocol token are this console's proposal (ADR 14).
+   The screen only calls them for an agent whose card advertises the token, and
+   the drift guard fails the day upstream ships one, so the guess is checked as
+   soon as there is something to check it against. Support is read from the
+   agent card on its five-minute cadence, so an agent upgraded mid-session
+   shows up on the next poll or reload.
+8. **Initial load is ~195 kB gzipped**, mostly React and MUI. Above the 170 kB
    figure the design aimed at; kept deliberately, since the console is an
    internal tool on a desk rather than a landing page.
 

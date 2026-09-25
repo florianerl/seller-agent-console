@@ -18,6 +18,8 @@ export const CADENCE = {
   mediaKit: 300_000,
   supplyChain: 300_000,
   agentCard: 300_000,
+  /** OpenProposal list. Paginated, unlike deals, so it can afford a poll. */
+  proposals: 60_000,
   /**
    * Manual refresh only. These proxy an external ad server, so a poll here
    * spends someone else's quota on a screen nobody may be looking at.

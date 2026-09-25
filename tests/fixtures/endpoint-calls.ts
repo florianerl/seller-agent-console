@@ -147,6 +147,20 @@ export const ENDPOINT_CALLS: Record<string, CallSpec> = {
   gamOrders: { method: "GET", args: [] },
   gamDeliveryReport: { method: "GET", args: [{ order_ids: "ORD-1" }] },
 
+  // --- OpenProposal 3.0, provisional paths (ADR 14)
+  openProposals: { method: "GET", args: [] },
+  openProposalById: { method: "GET", args: ["OP-1"] },
+  publishProposal: { method: "POST", args: ["OP-1", { idempotency_key: "idem-op", expected_version: 1 }] },
+  withdrawProposal: { method: "POST", args: ["OP-1", { idempotency_key: "idem-op", expected_version: 1 }] },
+  holdLineItem: {
+    method: "POST",
+    args: ["OP-1", "li-1", { action: "grant" as const, idempotency_key: "idem-op", expected_version: 1 }],
+  },
+  assentProposal: {
+    method: "POST",
+    args: ["OP-1", { decision: "accept" as const, idempotency_key: "idem-op", expected_version: 1 }],
+  },
+
   // --- writes. Each one is refused at the seam while the switch is off.
   decideApproval: { method: "POST", args: ["A-1", { decision: "approve" as const }] },
   resumeApproval: { method: "POST", args: ["A-1"] },

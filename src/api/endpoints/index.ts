@@ -38,3 +38,4 @@ export * from "./quotes";
 export * from "./change-requests";
 export * from "./reporting";
 export * from "./audience";
+export * from "./proposals";

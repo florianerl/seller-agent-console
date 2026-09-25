@@ -22,3 +22,4 @@ part worth reading.
 | [0011](0011-writes-permitted.md) | Writes are permitted; the seam takes a method | Accepted |
 | [0012](0012-writes-behind-a-runtime-switch.md) | Writes are gated by a runtime switch | Accepted |
 | [0013](0013-drift-guards-over-codegen.md) | Guard against API drift rather than generate a client | Accepted |
+| [0014](0014-openproposal-provisional-contract.md) | OpenProposal 3.0 against a provisional, detected contract | Accepted (provisional) |
