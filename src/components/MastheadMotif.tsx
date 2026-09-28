@@ -56,12 +56,18 @@ const MOTIF_CSS = `
 .sac-neuron.is-firing { animation: sac-neuron-fire ${FIRE_MS}ms ease-out both; }
 .sac-synapse.is-firing { animation: sac-synapse-fire ${FIRE_MS}ms ease-out both; }
 .sac-chip.is-firing { animation: sac-chip-fire ${FIRE_MS}ms ease-out both; }
+@keyframes sac-neuron-fire-still {
+  0% { fill: ${IDLE}; opacity: 0.45; }
+  18% { fill: ${FIRE}; opacity: 1; }
+  100% { fill: ${IDLE}; opacity: 0.45; }
+}
+/* Reduced motion drops only the scale, which is the one thing that moves.
+   The colour pulse stays and still returns to idle: an earlier version set
+   animation: none plus a static FIRE colour, which left every element that
+   had fired stuck red (the chip from first paint, since burst starts at 1)
+   on any Mac with Reduce Motion switched on. */
 @media (prefers-reduced-motion: reduce) {
-  .sac-neuron.is-firing, .sac-synapse.is-firing, .sac-chip.is-firing {
-    animation: none;
-    fill: ${FIRE};
-    stroke: ${FIRE};
-  }
+  .sac-neuron.is-firing { animation-name: sac-neuron-fire-still; }
 }
 `;
 
