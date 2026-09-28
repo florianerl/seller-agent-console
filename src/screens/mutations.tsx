@@ -60,13 +60,27 @@ import {
   publishProposal,
   withdrawProposal,
   type CreatedApiKey,
+  type BulkDealResponse,
   type LineItem,
   type Order,
   type Proposal,
 } from "../api/endpoints";
 import { describe, type Result } from "../api/errors";
 import { actorClaim, isOrderStatus, nextSteps, type NextStep, type OrderActor } from "../api/order-lifecycle";
-import { ACTOR_KINDS, CHANGE_TYPES, words } from "../api/vocabulary";
+import {
+  ACTOR_KINDS,
+  BULK_DEAL_ACTIONS,
+  CHANGE_TYPES,
+  DEAL_TYPES,
+  INVENTORY_TYPES,
+  LEGACY_DEAL_TYPES,
+  QUOTE_MEDIA_TYPES,
+  SSP_NAMES,
+  words,
+  type BulkDealAction,
+  type DealTypeCode,
+  type QuoteMediaType,
+} from "../api/vocabulary";
 import { EnumSelect } from "../components/EnumSelect";
 import { FormFields, FormRow, WriteForm } from "../components/WriteForm";
 import { WritesNotice } from "../components/WritesNotice";
@@ -244,7 +258,9 @@ export function ApiKeyWrites() {
 export function CatalogWrites() {
   const { writesEnabled } = useCredential();
   const [productId, setProductId] = useState("");
-  const [inventoryType, setInventoryType] = useState("display");
+  // Unvalidated upstream, so a typo would be stored and then match no
+  // product. The documented set is offered instead of a text box.
+  const [inventoryType, setInventoryType] = useState<string>("display");
   const [reason, setReason] = useState("");
   const [pkgName, setPkgName] = useState("");
   const [pkgPrice, setPkgPrice] = useState("10");
@@ -252,7 +268,7 @@ export function CatalogWrites() {
   const [pkgId, setPkgId] = useState("");
   const [productIds, setProductIds] = useState("");
   const [cpm, setCpm] = useState("12");
-  const [rateType, setRateType] = useState("display");
+  const [rateType, setRateType] = useState<string>("display");
 
   const setOverride = useMutation<
     { productId: string; inventory_type: string; reason?: string },
@@ -320,12 +336,13 @@ export function CatalogWrites() {
         }
       >
         <FormFields>
-          <TextField
-            size="small"
+          <EnumSelect
             label="Inventory type"
             value={rateType}
-            onChange={(e) => setRateType(e.target.value)}
+            options={INVENTORY_TYPES}
+            onChange={(v) => v && setRateType(v)}
             disabled={blocked}
+            sx={{ minWidth: 160 }}
           />
           <TextField
             size="small"
@@ -360,12 +377,13 @@ export function CatalogWrites() {
             onChange={(e) => setProductId(e.target.value)}
             disabled={blocked}
           />
-          <TextField
-            size="small"
+          <EnumSelect
             label="Inventory type"
             value={inventoryType}
-            onChange={(e) => setInventoryType(e.target.value)}
+            options={INVENTORY_TYPES}
+            onChange={(v) => v && setInventoryType(v)}
             disabled={blocked}
+            sx={{ minWidth: 160 }}
           />
           <TextField
             size="small"
@@ -505,20 +523,40 @@ function QuoteBody({ quoteId }: { quoteId: string }) {
 export function CreateQuoteWrite() {
   const { writesEnabled } = useCredential();
   const [productId, setProductId] = useState("");
-  const create = useMutation<{ product_id: string; idempotency_key: string }, unknown>(
-    (c, args) => createQuote(c, { ...args, media_type: "display" }),
-  );
+  const [dealType, setDealType] = useState<DealTypeCode>("PD");
+  const [mediaType, setMediaType] = useState<QuoteMediaType>("digital");
+  const [impressions, setImpressions] = useState("");
+  // `QuoteRequest` says impressions are required for PG; the others take none.
+  const volume = Number(impressions);
+  const needsVolume = dealType === "PG";
+  const volumeOk = Number.isInteger(volume) && volume > 0;
+  const create = useMutation<
+    {
+      product_id: string;
+      idempotency_key: string;
+      deal_type: DealTypeCode;
+      media_type: QuoteMediaType;
+      impressions?: number;
+    },
+    unknown
+  >((c, args) => createQuote(c, args));
 
   return (
     <WriteForm
       title="Request a quote?"
       confirmLabel="Create quote"
       action="create-quote"
-      blocked={!writesEnabled || !productId.trim()}
+      blocked={!writesEnabled || !productId.trim() || (needsVolume && !volumeOk)}
       pending={create.pending}
       last={create.last}
       onConfirm={() =>
-        void create.run({ product_id: productId.trim(), idempotency_key: newKey() })
+        void create.run({
+          product_id: productId.trim(),
+          idempotency_key: newKey(),
+          deal_type: dealType,
+          media_type: mediaType,
+          ...(needsVolume ? { impressions: volume } : {}),
+        })
       }
       consequence={
         <>
@@ -528,13 +566,41 @@ export function CreateQuoteWrite() {
         </>
       }
     >
-      <TextField
-        size="small"
-        label="Product id"
-        value={productId}
-        onChange={(e) => setProductId(e.target.value)}
-        disabled={!writesEnabled}
-      />
+      <FormFields>
+        <TextField
+          size="small"
+          label="Product id"
+          value={productId}
+          onChange={(e) => setProductId(e.target.value)}
+          disabled={!writesEnabled}
+        />
+        <EnumSelect
+          label="Deal type"
+          value={dealType}
+          options={DEAL_TYPES}
+          onChange={(v) => v && setDealType(v)}
+          disabled={!writesEnabled}
+          sx={{ minWidth: 220 }}
+        />
+        <EnumSelect
+          label="Media type"
+          value={mediaType}
+          options={QUOTE_MEDIA_TYPES}
+          onChange={(v) => v && setMediaType(v)}
+          disabled={!writesEnabled}
+          sx={{ minWidth: 140 }}
+        />
+        {needsVolume && (
+          <TextField
+            size="small"
+            type="number"
+            label="Impressions"
+            value={impressions}
+            onChange={(e) => setImpressions(e.target.value)}
+            disabled={!writesEnabled}
+          />
+        )}
+      </FormFields>
     </WriteForm>
   );
 }
@@ -901,7 +967,12 @@ export function DealWrites({ dealId }: { dealId?: string }) {
   const [curatorId, setCuratorId] = useState("");
   const [reason, setReason] = useState("");
   const [productId, setProductId] = useState("");
-  const [dealType, setDealType] = useState("preferred_deal");
+  // Short code: the template route maps PG/PD/PA and 400s on anything else,
+  // which is what the old "preferred_deal" default got every time.
+  const [dealType, setDealType] = useState<DealTypeCode>("PD");
+  const [bulkAction, setBulkAction] = useState<BulkDealAction>("cancel");
+  const [bulkQuote, setBulkQuote] = useState("");
+  const [bulkNotes, setBulkNotes] = useState("");
 
   const gen = useMutation<{ proposal_id: string }, unknown>((c, a) => generateDeal(c, a), {
     invalidates: ["deals:*"],
@@ -910,11 +981,14 @@ export function DealWrites({ dealId }: { dealId?: string }) {
     (c, a) => bookDeal(c, a),
     { invalidates: ["deals:*"] },
   );
-  const fromTpl = useMutation<{ deal_type: string; product_id: string }, unknown>(
+  const fromTpl = useMutation<{ deal_type: DealTypeCode; product_id: string }, unknown>(
     (c, a) => dealFromTemplate(c, a),
     { invalidates: ["deals:*"] },
   );
-  const bulk = useMutation<{ operations: { action: string; deal_id?: string }[] }, unknown>(
+  const bulk = useMutation<
+    { operations: { action: BulkDealAction; deal_id?: string; quote_id?: string; notes?: string }[] },
+    BulkDealResponse
+  >(
     (c, a) => bulkDealOperations(c, a),
     { invalidates: ["deals:*"] },
   );
@@ -931,7 +1005,8 @@ export function DealWrites({ dealId }: { dealId?: string }) {
     { invalidates: ["deals:*"] },
   );
   const migrate = useMutation<{ id: string; reason?: string }, unknown>(
-    (c, a) => migrateDeal(c, a.id, { ...(a.reason ? { reason: a.reason } : {}) }),
+    (c, a) =>
+      migrateDeal(c, a.id, { old_deal_id: a.id, ...(a.reason ? { reason: a.reason } : {}) }),
     { invalidates: ["deals:*", `deal-lineage:${id}`] },
   );
   const deprecate = useMutation<{ id: string; reason: string }, unknown>(
@@ -981,23 +1056,85 @@ export function DealWrites({ dealId }: { dealId?: string }) {
       >
         <FormFields>
           <TextField size="small" label="Product id" value={productId} onChange={(e) => setProductId(e.target.value)} disabled={blocked} />
-          <TextField size="small" label="Deal type" value={dealType} onChange={(e) => setDealType(e.target.value)} disabled={blocked} />
+          <EnumSelect
+            label="Deal type"
+            value={dealType}
+            options={DEAL_TYPES}
+            onChange={(v) => v && setDealType(v)}
+            disabled={blocked}
+            sx={{ minWidth: 220 }}
+          />
         </FormFields>
       </WriteForm>
-      <WriteForm
-        title="Run a bulk deal operation?"
-        confirmLabel="Bulk pause"
-        action="bulk-deals"
-        blocked={blocked || !id.trim()}
-        pending={bulk.pending}
-        last={bulk.last}
-        onConfirm={() =>
-          void bulk.run({ operations: [{ action: "pause", deal_id: id.trim() }] })
-        }
-        consequence="Partial success is possible: some operations may land while others fail. Re-read the list rather than repeating the batch blindly."
-      >
+      {/* One deal id feeds every form from here down. It used to sit inside
+          the bulk form, which left it unclear that push, distribute, migrate
+          and deprecate read it too. */}
+      <Box data-block="deal-target">
         <TextField size="small" label="Deal id" value={id} onChange={(e) => setId(e.target.value)} disabled={blocked} />
-      </WriteForm>
+        <Typography variant="caption" component="p" color="text.secondary" sx={{ mt: 0.5 }}>
+          Bulk update and cancel, push, distribute, migrate and deprecate all act on this deal.
+        </Typography>
+      </Box>
+      <Box>
+        <WriteForm
+          title={`Run a bulk ${bulkAction}?`}
+          confirmLabel={`Bulk ${bulkAction}`}
+          action="bulk-deals"
+          blocked={blocked || (bulkAction === "create" ? !bulkQuote.trim() : !id.trim())}
+          pending={bulk.pending}
+          // Reported below instead: a 200 here can still carry failures.
+          last={bulk.last?.kind === "ok" ? undefined : bulk.last}
+          onConfirm={() =>
+            void bulk.run({
+              operations: [
+                {
+                  action: bulkAction,
+                  ...(bulkAction === "create"
+                    ? { quote_id: bulkQuote.trim() }
+                    : { deal_id: id.trim() }),
+                  ...(bulkNotes.trim() ? { notes: bulkNotes.trim() } : {}),
+                },
+              ],
+            })
+          }
+          consequence={
+            bulkAction === "create"
+              ? "Books a deal from the quote and marks the quote booked. Not idempotent: a retry books a second deal if the first landed."
+              : bulkAction === "cancel"
+                ? "Sets the deal to cancelled, with the notes as the cancel reason. Nothing in this console reverses it."
+                : "Replaces the deal's notes and stamps updated_at. Partial success is possible in a batch: re-read the list rather than repeating it blindly."
+          }
+        >
+          <FormFields>
+            <EnumSelect
+              label="Bulk action"
+              value={bulkAction}
+              options={BULK_DEAL_ACTIONS}
+              onChange={(v) => v && setBulkAction(v)}
+              disabled={blocked}
+              sx={{ minWidth: 140 }}
+            />
+            {bulkAction === "create" && (
+              <TextField size="small" label="Quote id" value={bulkQuote} onChange={(e) => setBulkQuote(e.target.value)} disabled={blocked} />
+            )}
+            <TextField size="small" label="Notes (optional)" value={bulkNotes} onChange={(e) => setBulkNotes(e.target.value)} disabled={blocked} />
+          </FormFields>
+        </WriteForm>
+        {bulk.last?.kind === "ok" && (
+          <Box sx={{ mt: 1 }} data-block="bulk-results">
+            {bulk.last.data.results.map((r) => (
+              <Typography
+                key={r.index}
+                variant="body2"
+                sx={{ color: r.success ? undefined : palette.error }}
+                data-state={r.success ? "op-ok" : "op-failed"}
+              >
+                {r.action} {r.deal_id ?? ""}: {r.success ? "done" : r.error ?? "failed"}
+              </Typography>
+            ))}
+          </Box>
+        )}
+      </Box>
       <WriteForm
         title="Push this deal to a buyer?"
         confirmLabel="Push"
@@ -1022,7 +1159,7 @@ export function DealWrites({ dealId }: { dealId?: string }) {
         }
         consequence="A retry may push a second copy to the SSP."
       >
-        <TextField size="small" label="SSP name" value={ssp} onChange={(e) => setSsp(e.target.value)} disabled={blocked} />
+        <SspNameField label="SSP name (optional)" value={ssp} onChange={setSsp} disabled={blocked} />
       </WriteForm>
       <WriteForm
         title="Create a curated deal?"
@@ -1140,13 +1277,45 @@ function BuyerStatusBody({ dealId, buyerUrl }: { dealId: string; buyerUrl: strin
   );
 }
 
+/**
+ * Which connectors exist is deployment settings, not code, so the known
+ * names are suggestions and anything can be typed. An unknown name is a 400
+ * that lists the configured ones.
+ */
+function SspNameField({
+  label,
+  value,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <Autocomplete
+      freeSolo
+      size="small"
+      options={SSP_NAMES}
+      inputValue={value}
+      onInputChange={(_, next) => onChange(next)}
+      disabled={disabled}
+      sx={{ minWidth: 200 }}
+      renderInput={(params) => <TextField {...params} label={label} />}
+    />
+  );
+}
+
 function SspTrouble({ dealId }: { dealId: string }) {
-  const [ssp, setSsp] = useState("gam");
+  // Empty, not a guess: the old "gam" default is no SSP connector, so every
+  // troubleshoot sent with it was a 400.
+  const [ssp, setSsp] = useState("");
   const [submitted, setSubmitted] = useState<string | undefined>();
   return (
     <>
       <FormRow>
-        <TextField size="small" label="SSP" value={ssp} onChange={(e) => setSsp(e.target.value)} />
+        <SspNameField label="SSP" value={ssp} onChange={setSsp} />
         <WriteForm
           title="Troubleshoot this SSP?"
           confirmLabel="Troubleshoot"
@@ -1254,6 +1423,9 @@ export function ProposalWrites() {
   const [productId, setProductId] = useState("");
   const [proposalId, setProposalId] = useState("");
   const [price, setPrice] = useState("10");
+  // The legacy flow checks this against the product's core DealType values
+  // (long form, no underscores). "preferred_deal" matched none of them.
+  const [proposalDealType, setProposalDealType] = useState("preferreddeal");
   const submit = useMutation<
     { product_id: string; deal_type: string; price: number; impressions: number; start_date: string; end_date: string },
     unknown
@@ -1278,7 +1450,7 @@ export function ProposalWrites() {
         onConfirm={() =>
           void submit.run({
             product_id: productId.trim(),
-            deal_type: "preferred_deal",
+            deal_type: proposalDealType,
             price: Number(price),
             impressions: 100_000,
             start_date: "2026-10-01",
@@ -1289,6 +1461,14 @@ export function ProposalWrites() {
       >
         <FormFields>
           <TextField size="small" label="Product id" value={productId} onChange={(e) => setProductId(e.target.value)} disabled={!writesEnabled} />
+          <EnumSelect
+            label="Deal type"
+            value={proposalDealType}
+            options={LEGACY_DEAL_TYPES}
+            onChange={(v) => v && setProposalDealType(v)}
+            disabled={!writesEnabled}
+            sx={{ minWidth: 200 }}
+          />
           <TextField size="small" label="Price" value={price} onChange={(e) => setPrice(e.target.value)} disabled={!writesEnabled} />
         </FormFields>
       </WriteForm>

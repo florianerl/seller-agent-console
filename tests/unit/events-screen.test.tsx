@@ -77,7 +77,8 @@ describe("the events screen", () => {
     expect(seen[0]!.searchParams.get("limit")).toBe("50");
     expect(seen[0]!.searchParams.has("event_type")).toBe(false);
 
-    await user.type(screen.getByLabelText("Event type"), "deal.created");
+    await user.click(screen.getByLabelText("Event type"));
+    await user.click(await screen.findByRole("option", { name: "deal.created" }));
 
     await waitFor(() => {
       const last = seen[seen.length - 1]!;

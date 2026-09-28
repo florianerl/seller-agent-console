@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { get, request, TIMEOUTS, type Connection } from "../http";
 import type { Result } from "../errors";
+import type { BulkDealAction, DealTypeCode } from "../vocabulary";
 import { Money, MutationAck } from "./shared";
 
 const PATHS = {
@@ -279,17 +280,54 @@ export const bookDeal = (
 
 export const dealFromTemplate = (
   c: Connection,
-  body: { deal_type: string; product_id: string },
+  // Short codes only: the service uppercases this and looks it up in a
+  // PG/PD/PA map, so a long form like "preferred_deal" is a 400.
+  body: { deal_type: DealTypeCode; product_id: string },
   signal?: AbortSignal,
 ): Promise<Result<MutationAck>> =>
   request(c, `${PATHS.deals}/from-template`, { schema: MutationAck, method: "POST", body, signal });
 
+/**
+ * The batch answers 200 whatever happened to each operation: an unknown
+ * action or a missing deal is a `success: false` entry, not an error status.
+ * So the per-operation results are parsed, because a bare acknowledgement
+ * would report a batch where nothing landed as accepted.
+ */
+export const BulkDealResponse = z
+  .object({
+    total: z.number().catch(0),
+    succeeded: z.number().catch(0),
+    failed: z.number().catch(0),
+    results: z
+      .array(
+        z
+          .object({
+            index: z.number().catch(0),
+            action: z.string().catch(""),
+            success: z.boolean().catch(false),
+            deal_id: z.string().nullable().catch(null),
+            error: z.string().nullable().catch(null),
+          })
+          .loose(),
+      )
+      .catch([]),
+  })
+  .loose();
+export type BulkDealResponse = z.infer<typeof BulkDealResponse>;
+
 export const bulkDealOperations = (
   c: Connection,
-  body: { operations: readonly { action: string; deal_id?: string; quote_id?: string }[] },
+  body: {
+    operations: readonly {
+      action: BulkDealAction;
+      deal_id?: string;
+      quote_id?: string;
+      notes?: string;
+    }[];
+  },
   signal?: AbortSignal,
-): Promise<Result<MutationAck>> =>
-  request(c, `${PATHS.deals}/bulk`, { schema: MutationAck, method: "POST", body, signal });
+): Promise<Result<BulkDealResponse>> =>
+  request(c, `${PATHS.deals}/bulk`, { schema: BulkDealResponse, method: "POST", body, signal });
 
 export const pushDeal = (
   c: Connection,
@@ -315,7 +353,9 @@ export const createCuratedDeal = (
 export const migrateDeal = (
   c: Connection,
   dealId: string,
-  body: { reason?: string },
+  // `DealMigrationRequest` requires `old_deal_id` even though the service
+  // reads the deal from the path; without it the body is a 422.
+  body: { old_deal_id: string; reason?: string },
   signal?: AbortSignal,
 ): Promise<Result<MutationAck>> =>
   request(c, `${PATHS.deals}/${encodeURIComponent(dealId)}/migrate`, {

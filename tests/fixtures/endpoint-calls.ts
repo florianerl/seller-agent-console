@@ -56,12 +56,12 @@ export const ENDPOINT_CALLS: Record<string, CallSpec> = {
   dealSspTroubleshoot: { method: "GET", args: ["D-1", "ssp-name"] },
   generateDeal: { method: "POST", args: [{ proposal_id: "P-1" }] },
   bookDeal: { method: "POST", args: [{ quote_id: "Q-1", idempotency_key: "idem-1" }] },
-  dealFromTemplate: { method: "POST", args: [{ deal_type: "preferred_deal", product_id: "prod-1" }] },
-  bulkDealOperations: { method: "POST", args: [{ operations: [{ action: "pause", deal_id: "D-1" }] }] },
+  dealFromTemplate: { method: "POST", args: [{ deal_type: "PD", product_id: "prod-1" }] },
+  bulkDealOperations: { method: "POST", args: [{ operations: [{ action: "cancel", deal_id: "D-1" }] }] },
   pushDeal: { method: "POST", args: [{ deal_id: "D-1", buyer_urls: ["https://buyer.test"] }] },
   distributeDeal: { method: "POST", args: [{ deal_id: "D-1" }] },
   createCuratedDeal: { method: "POST", args: [{ curator_id: "cur-1" }] },
-  migrateDeal: { method: "POST", args: ["D-1", { reason: "move" }] },
+  migrateDeal: { method: "POST", args: ["D-1", { old_deal_id: "D-1", reason: "move" }] },
   deprecateDeal: { method: "POST", args: ["D-1", { reason: "sunset" }] },
 
   // --- approvals, sessions, negotiation
@@ -78,7 +78,7 @@ export const ENDPOINT_CALLS: Record<string, CallSpec> = {
     args: [
       {
         product_id: "prod-1",
-        deal_type: "preferred_deal",
+        deal_type: "preferreddeal",
         price: 10,
         impressions: 1000,
         start_date: "2026-01-01",
@@ -119,7 +119,7 @@ export const ENDPOINT_CALLS: Record<string, CallSpec> = {
   putRateCard: { method: "PUT", args: [[{ inventory_type: "display", base_cpm: 12 }]] },
   createQuote: {
     method: "POST",
-    args: [{ idempotency_key: "idem-q", product_id: "prod-1", media_type: "display" }],
+    args: [{ idempotency_key: "idem-q", product_id: "prod-1", deal_type: "PD", media_type: "digital" }],
   },
   mediaKit: { method: "GET", args: [] },
   mediaKitPackages: { method: "GET", args: [] },

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { get, request, type Connection } from "../http";
 import type { Result } from "../errors";
+import type { DealTypeCode, QuoteMediaType } from "../vocabulary";
 import { Money } from "./shared";
 
 const PATHS = {
@@ -96,8 +97,10 @@ export const createQuote = (
   body: {
     idempotency_key: string;
     product_id: string;
-    media_type?: string;
-    deal_type?: string;
+    // `QuoteRequest` (iab_agentic_primitives) requires a DealType and types
+    // media_type as MediaType; "display" is neither, so it was a 422.
+    deal_type: DealTypeCode;
+    media_type?: QuoteMediaType;
     impressions?: number;
   },
   signal?: AbortSignal,

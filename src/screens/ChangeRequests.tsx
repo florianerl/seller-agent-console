@@ -1,7 +1,6 @@
 import { Fragment, useState } from "react";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
 import Skeleton from "@mui/material/Skeleton";
 import Stack from "@mui/material/Stack";
@@ -28,14 +27,10 @@ import { useMutation } from "../query/useMutation";
 import { useResource } from "../query/useResource";
 import { FormRow } from "../components/WriteForm";
 import { ChangeRequestCreate, Panel } from "./mutations";
+import { EnumSelect } from "../components/EnumSelect";
+import { CHANGE_REQUEST_STATUSES } from "../api/vocabulary";
 import { palette } from "../theme/palette";
 
-/**
- * The list filter has to use the agent's words. Review requires
- * `pending_approval`; `failed` is a validation outcome at create time, not a
- * state this screen can act on.
- */
-const STATUSES = ["", "pending_approval", "approved", "rejected", "applied", "failed"];
 
 /** A diff value can be any JSON the agent stored; render it as text, not as a type error. */
 function formatValue(value: unknown): string {
@@ -295,20 +290,16 @@ export default function ChangeRequestsScreen() {
             <ChangeRequestCreate />
           </Panel>
           <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }}>
-            <TextField
-              select
-              size="small"
+            {/* The agent's words, all of them. Review requires
+                `pending_approval`; `failed` is a validation outcome at create
+                time, not a state this screen can act on. */}
+            <EnumSelect
               label="Status"
               value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              sx={{ minWidth: 200 }}
-            >
-              {STATUSES.map((s) => (
-                <MenuItem key={s || "any"} value={s}>
-                  {s ? s.replace(/_/g, " ") : "Any status"}
-                </MenuItem>
-              ))}
-            </TextField>
+              options={CHANGE_REQUEST_STATUSES}
+              onChange={setStatus}
+              any="Any status"
+            />
           </Paper>
 
           <FreshnessNote freshness={list.freshness}>

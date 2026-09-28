@@ -22,6 +22,8 @@ import { CADENCE } from "../query/cadence";
 import { useResource } from "../query/useResource";
 import { FormRow } from "../components/WriteForm";
 import { EventLookup } from "./mutations";
+import { EnumSelect } from "../components/EnumSelect";
+import { EVENT_TYPES } from "../api/vocabulary";
 import { palette } from "../theme/palette";
 
 const LIMIT = 50;
@@ -61,9 +63,18 @@ export default function EventsScreen() {
         <>
           <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }}>
             <FormRow>
+              {/* Matched exactly upstream, so a typed type that is nearly
+                  right returns nothing. Offer the set instead. */}
+              <EnumSelect
+                label="Event type"
+                value={filters.event_type}
+                options={EVENT_TYPES}
+                onChange={(v) => setFilters((f) => ({ ...f, event_type: v }))}
+                any="Any type"
+                sx={{ minWidth: 220 }}
+              />
               {(
                 [
-                  ["event_type", "Event type"],
                   ["flow_id", "Flow id"],
                   ["session_id", "Session id"],
                 ] as const

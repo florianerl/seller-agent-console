@@ -84,7 +84,8 @@ export const CHANGE_REQUEST_STATUSES = spelled([
  * encoding. Its docstring is explicit that the retired long forms
  * (`preferreddeal`, `preferred_deal`) are not valid wire values.
  */
-export const DEAL_TYPES: readonly Option<"PG" | "PD" | "PA">[] = [
+export type DealTypeCode = "PG" | "PD" | "PA";
+export const DEAL_TYPES: readonly Option<DealTypeCode>[] = [
   { value: "PG", label: "PG — programmatic guaranteed" },
   { value: "PD", label: "PD — preferred deal" },
   { value: "PA", label: "PA — private auction" },
@@ -107,6 +108,7 @@ export const LEGACY_DEAL_TYPES: readonly Option[] = [
  * form does not collect, so offering it would only ever produce a 422.
  */
 export const QUOTE_MEDIA_TYPES = spelled(["digital", "ctv"] as const);
+export type QuoteMediaType = (typeof QUOTE_MEDIA_TYPES)[number]["value"];
 
 /**
  * The set named in the comments on `InventoryTypeOverride` and
@@ -126,6 +128,7 @@ export const INVENTORY_TYPES = spelled([
 
 /** The actions `bulk_deal_operations` understands (services/deal_service.py). */
 export const BULK_DEAL_ACTIONS = spelled(["create", "update", "cancel"] as const);
+export type BulkDealAction = (typeof BULK_DEAL_ACTIONS)[number]["value"];
 
 /**
  * Connector names the SSP factories can build (clients/ssp_factory.py,
@@ -159,4 +162,6 @@ export const EVENT_TYPES: readonly Option[] = [
   "negotiation.started",
   "negotiation.round",
   "negotiation.concluded",
-].map((value) => ({ value, label: words(value) }));
+  // Labelled with the raw value: these are dotted identifiers people search
+  // logs for, and "timed out" reads worse than the name it stands for.
+].map((value) => ({ value, label: value }));
