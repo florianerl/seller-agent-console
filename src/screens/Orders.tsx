@@ -1,7 +1,9 @@
 import { Fragment, useState } from "react";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import MenuItem from "@mui/material/MenuItem";
+import Collapse from "@mui/material/Collapse";
+import IconButton from "@mui/material/IconButton";
+import Link from "@mui/material/Link";
 import Paper from "@mui/material/Paper";
 import Skeleton from "@mui/material/Skeleton";
 import Stack from "@mui/material/Stack";
@@ -10,56 +12,107 @@ import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
-import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { orderAudit, orders } from "../api/endpoints";
+import { changeRequests, orderAudit, orders, type Order, type OrderAudit } from "../api/endpoints";
 import { describe } from "../api/errors";
+import { HAPPY_PATH, STAGE, isOrderStatus, nextSteps, type OrderActor } from "../api/order-lifecycle";
+import { ORDER_STATUSES, words, type OrderStatus } from "../api/vocabulary";
 import { DataPanel, FreshnessNote } from "../components/DataPanel";
+import { EnumSelect } from "../components/EnumSelect";
 import { GatedNotice } from "../components/GatedNotice";
 import { PageHeader } from "../components/PageHeader";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { StatusChip } from "../components/StatusChip";
 import { useCredential } from "../credentials/context";
-import { OrderRecord, OrderWrites, Panel } from "./mutations";
+import { ChangeRequestCreate, OrderCreateWrite, OrderTransitionWrites } from "./mutations";
 import { plural, stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
+import type { ResourceHandle } from "../query/useResource";
 import { useResource } from "../query/useResource";
 import { palette } from "../theme/palette";
 
-const STATUSES = [
-  "",
-  "draft",
-  "submitted",
-  "pending_approval",
-  "approved",
-  "rejected",
-  "cancelled",
-];
+const sectionHeading = { fontSize: 12, fontWeight: 600, mb: 0.75 } as const;
 
-/**
- * A change request's per-entry shape has never been observed on the wire —
- * the local store has none, so `orderAudit`'s schema types each entry as a
- * loose, unvalidated object (see orders.ts). `cr_id` is the id field the
- * sibling `/change-requests` endpoint uses; check for it and a couple of
- * generic fallbacks before giving up and keying by position.
- */
-function changeRequestKey(entry: Record<string, unknown>, index: number): string {
-  const candidate = entry["cr_id"] ?? entry["id"] ?? entry["change_request_id"];
-  return typeof candidate === "string" || typeof candidate === "number"
-    ? String(candidate)
-    : `${index}`;
+function asOf(at: number | undefined): string {
+  return at === undefined ? "" : `as of ${stamp(new Date(at).toISOString())}`;
 }
 
-function Timeline({ orderId }: { orderId: string }) {
-  const audit = useResource(
-    `order-audit:${orderId}`,
-    (connection, signal) => orderAudit(connection, orderId, {}, signal),
+/** Hand-drawn for the same reason as MenuIcon: no icon package. */
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+      style={{ transform: open ? "rotate(90deg)" : "none", transition: "transform 120ms" }}
+    >
+      <polyline points="9 6 15 12 9 18" />
+    </svg>
   );
+}
 
-  if (audit.freshness === "blocked") {
-    return <GatedNotice what="Order audit trail" result={audit.result} />;
-  }
+/**
+ * The next-step column, so the list itself answers "what does this order
+ * need". Forward moves only where there are any: listing "cancel" against
+ * every open order would make the column say the same thing on every row.
+ */
+function nextStepSummary(status: string): string {
+  const steps = nextSteps(status);
+  const forward = steps.filter((s) => s.kind === "forward");
+  const shown = forward.length > 0 ? forward : steps;
+  return shown.length > 0 ? shown.map((s) => s.label).join(" or ") : "—";
+}
 
+/**
+ * Where the order is on the happy path. An off-path status (rejected, failed,
+ * cancelled, unbooked) is named beside the strip rather than squeezed into it,
+ * since it is a detour, not a step.
+ */
+function LifecycleStrip({ status }: { status: string }) {
+  const onPath = HAPPY_PATH.includes(status as OrderStatus);
+  return (
+    <Box
+      component="ol"
+      aria-label="Order lifecycle"
+      data-block="lifecycle"
+      sx={{ m: 0, p: 0, listStyle: "none", display: "flex", flexWrap: "wrap", gap: 0.5, fontSize: 12 }}
+    >
+      {HAPPY_PATH.map((step, index) => {
+        const current = step === status;
+        return (
+          <Box
+            component="li"
+            key={step}
+            aria-current={current ? "step" : undefined}
+            sx={{ color: current ? palette.text : palette.textSecondary }}
+          >
+            {index > 0 && <span aria-hidden="true">→ </span>}
+            <Box
+              component="span"
+              sx={current ? { fontWeight: 700, textDecoration: "underline", textUnderlineOffset: 3 } : undefined}
+            >
+              {words(step)}
+            </Box>
+          </Box>
+        );
+      })}
+      {!onPath && (
+        <Box component="li" sx={{ ml: 1, color: palette.textSecondary }}>
+          · now off the path: <strong>{words(status)}</strong>
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+function Timeline({ audit }: { audit: ResourceHandle<OrderAudit> }) {
   if (audit.loading && !audit.data) return <Skeleton height={24} />;
 
   if (!audit.data) {
@@ -70,10 +123,10 @@ function Timeline({ orderId }: { orderId: string }) {
     );
   }
 
-  const { transitions, change_requests, change_request_count, created_at } = audit.data;
+  const { transitions, created_at } = audit.data;
 
   return (
-    <Stack spacing={1.5}>
+    <Stack spacing={1}>
       <Box sx={{ fontSize: 12, color: palette.textSecondary }}>Created {stamp(created_at)}</Box>
 
       {transitions.length === 0 ? (
@@ -98,8 +151,7 @@ function Timeline({ orderId }: { orderId: string }) {
                 {stamp(t.timestamp)}
               </Box>
               <Box sx={{ fontSize: 13 }}>
-                {t.from_status.replace(/_/g, " ")} →{" "}
-                <strong>{t.to_status.replace(/_/g, " ")}</strong>
+                {words(t.from_status)} → <strong>{words(t.to_status)}</strong>
               </Box>
               <Box sx={{ fontSize: 12, color: palette.textSecondary }}>
                 {/* The actor is whatever the caller claimed; the API does not
@@ -111,73 +163,196 @@ function Timeline({ orderId }: { orderId: string }) {
           ))}
         </Box>
       )}
+    </Stack>
+  );
+}
+
+/**
+ * Read from `/change-requests?order_id=` rather than the audit's embedded
+ * list: the audit types its entries as unvalidated objects (see orders.ts),
+ * while the change-requests route has a schema this console already renders
+ * on its own screen. The key sits under `change-requests:` so a review or
+ * apply there invalidates it here too.
+ */
+function OrderChangeRequests({ orderId, count }: { orderId: string; count: number | undefined }) {
+  const [raising, setRaising] = useState(false);
+  const { writesEnabled } = useCredential();
+  const list = useResource(`change-requests:order:${orderId}`, (c, signal) =>
+    changeRequests(c, { order_id: orderId }, signal),
+  );
+  const rows = list.data?.change_requests ?? [];
+
+  return (
+    <Box data-block="order-change-requests">
+      <Stack direction="row" spacing={1.5} alignItems="baseline" sx={{ mb: 0.75 }}>
+        <Typography sx={{ ...sectionHeading, mb: 0 }}>
+          {plural(count ?? rows.length, "change request")}
+        </Typography>
+        <Link href="#/change-requests" sx={{ fontSize: 12 }}>
+          Review on Change requests
+        </Link>
+        <Button
+          size="small"
+          onClick={() => setRaising((v) => !v)}
+          aria-expanded={raising}
+          data-action="raise-change-request"
+          disabled={!writesEnabled}
+        >
+          {raising ? "Close" : "Request a change"}
+        </Button>
+      </Stack>
+
+      {list.freshness === "blocked" ? (
+        <GatedNotice what="Change requests" result={list.result} />
+      ) : list.loading && !list.data ? (
+        <Skeleton height={24} />
+      ) : !list.data ? (
+        <Typography variant="body2" color="text.secondary">
+          {list.result ? describe(list.result) : ""}
+        </Typography>
+      ) : rows.length === 0 ? (
+        <Typography variant="body2" color="text.secondary" data-state="no-change-requests">
+          No change requests recorded yet.
+        </Typography>
+      ) : (
+        <Box component="ol" sx={{ m: 0, pl: 0, listStyle: "none" }} data-list="change-requests">
+          {rows.map((cr, index) => (
+            <Box
+              component="li"
+              key={cr.cr_id}
+              sx={{
+                display: "flex",
+                gap: 1.5,
+                alignItems: "center",
+                flexWrap: "wrap",
+                py: 0.75,
+                borderTop: index === 0 ? "none" : `1px solid ${palette.line}`,
+              }}
+            >
+              <Box sx={{ fontFamily: "monospace", fontSize: 12 }}>{cr.cr_id}</Box>
+              <Box sx={{ fontSize: 13 }}>{words(cr.change_type) || "unspecified change"}</Box>
+              <StatusChip status={cr.status} />
+              <Box sx={{ fontSize: 12, color: palette.textSecondary }}>
+                {cr.created_at ? stamp(cr.created_at) : ""}
+                {cr.reason ? ` — ${cr.reason}` : ""}
+              </Box>
+            </Box>
+          ))}
+        </Box>
+      )}
+      {list.data && (
+        <Typography
+          variant="caption"
+          component="p"
+          data-freshness={list.freshness}
+          sx={{ mt: 0.5, color: list.freshness === "stale" ? palette.warningText : palette.textSecondary }}
+        >
+          {list.freshness === "stale" ? "couldn't refresh — showing the last list received" : asOf(list.asOf)}
+        </Typography>
+      )}
+
+      <Collapse in={raising} unmountOnExit>
+        <Box sx={{ mt: 1.5 }}>
+          <ChangeRequestCreate orderId={orderId} />
+        </Box>
+      </Collapse>
+    </Box>
+  );
+}
+
+function OrderDetail({
+  order,
+  actor,
+  onActorChange,
+  onListStale,
+  accepted,
+  onAccepted,
+}: {
+  order: Order;
+  actor: OrderActor;
+  onActorChange: (actor: OrderActor) => void;
+  onListStale: () => void;
+  accepted: string | undefined;
+  onAccepted: (to: string | undefined) => void;
+}) {
+  const audit = useResource(`order-audit:${order.order_id}`, (connection, signal) =>
+    orderAudit(connection, order.order_id, {}, signal),
+  );
+
+  if (audit.freshness === "blocked") {
+    return <GatedNotice what="Order audit trail" result={audit.result} />;
+  }
+
+  // The audit is read when the row opens, so it is fresher than the list,
+  // which may be up to a poll interval old. The buttons derive from it.
+  const status = audit.data?.current_status ?? order.status;
+  const drifted = audit.data?.current_status != null && audit.data.current_status !== order.status;
+
+  return (
+    <Stack spacing={2.5} data-block="order-detail">
+      <Box>
+        <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 1 }}>
+          <StatusChip status={status} />
+          <Typography variant="body2" data-block="stage">
+            {isOrderStatus(status) ? STAGE[status] : "This console does not recognise this status."}
+          </Typography>
+        </Stack>
+        <LifecycleStrip status={status} />
+        <Typography
+          variant="caption"
+          component="p"
+          data-freshness={audit.freshness}
+          sx={{ mt: 0.5, color: audit.freshness === "stale" ? palette.warningText : palette.textSecondary }}
+        >
+          {audit.freshness === "stale"
+            ? "couldn't refresh — showing the last audit received"
+            : audit.data
+              ? asOf(audit.asOf)
+              : audit.loading
+                ? "reading the order…"
+                : ""}
+          {drifted && ` · the list still shows ${words(order.status)}; the agent now reports ${words(status)}`}
+        </Typography>
+      </Box>
 
       <Box>
-        <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 0.5 }}>
-          {plural(change_request_count, "change request")}
-        </Typography>
-        {change_requests.length === 0 ? (
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            data-state="no-change-requests"
-          >
-            No change requests recorded yet.
-          </Typography>
+        <Typography sx={sectionHeading}>Next step</Typography>
+        {audit.data || audit.result ? (
+          <OrderTransitionWrites
+            orderId={order.order_id}
+            status={status}
+            actor={actor}
+            onActorChange={onActorChange}
+            onStale={() => {
+              audit.refresh();
+              onListStale();
+            }}
+            accepted={accepted}
+            onAccepted={onAccepted}
+          />
         ) : (
-          <Box
-            component="ol"
-            sx={{ m: 0, pl: 0, listStyle: "none" }}
-            data-list="change-requests"
-          >
-            {change_requests.map((entry, index) => (
-              <Box
-                component="li"
-                key={changeRequestKey(entry, index)}
-                sx={{
-                  py: 0.75,
-                  borderTop: index === 0 ? "none" : `1px solid ${palette.line}`,
-                }}
-              >
-                {/* The shape was never confirmed against a populated order
-                    (see orders.ts), so nothing beyond "it is an object" is
-                    assumed — shown raw rather than mapped into fields that
-                    might not exist. */}
-                <Box
-                  component="pre"
-                  sx={{
-                    m: 0,
-                    fontSize: 12,
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word",
-                  }}
-                >
-                  {JSON.stringify(entry, null, 2)}
-                </Box>
-              </Box>
-            ))}
-          </Box>
+          <Skeleton height={32} />
         )}
       </Box>
 
-      <Typography
-        variant="caption"
-        component="p"
-        data-freshness={audit.freshness}
-        sx={{ color: audit.freshness === "stale" ? palette.warningText : palette.textSecondary }}
-      >
-        {audit.freshness === "live" &&
-          audit.asOf !== undefined &&
-          `as of ${stamp(new Date(audit.asOf).toISOString())}`}
-        {audit.freshness === "stale" && "couldn't refresh — showing the last audit received"}
-      </Typography>
+      <Box>
+        <Typography sx={sectionHeading}>Timeline</Typography>
+        <Timeline audit={audit} />
+      </Box>
+
+      <OrderChangeRequests orderId={order.order_id} count={audit.data?.change_request_count} />
     </Stack>
   );
 }
 
 export default function OrdersScreen() {
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState<OrderStatus | "">("");
   const [openOrder, setOpenOrder] = useState<string | undefined>();
+  const [creating, setCreating] = useState(false);
+  // Kept at screen level so the name typed once carries across every order
+  // moved in this visit, rather than being asked for per row.
+  const [actor, setActor] = useState<OrderActor>({ kind: "human", id: "" });
+  const [accepted, setAccepted] = useState<{ orderId: string; to: string } | undefined>();
   const { writesEnabled } = useCredential();
 
   const list = useResource(
@@ -187,38 +362,65 @@ export default function OrdersScreen() {
   );
 
   const rows = list.data?.orders ?? [];
+  const toggle = (orderId: string) =>
+    setOpenOrder((current) => (current === orderId ? undefined : orderId));
 
   return (
     <section data-screen="orders">
       <PageHeader
         title="Orders"
-        subtitle="Order lifecycle and its audit trail. Transitions are writes."
+        subtitle="Every order the agent has stored. Open one to see where it is in its lifecycle and move it on; each move is a write, recorded with who made it."
+        actions={
+          <Button
+            variant={creating ? "outlined" : "contained"}
+            size="small"
+            onClick={() => setCreating((v) => !v)}
+            aria-expanded={creating}
+            data-action="new-order"
+          >
+            {creating ? "Close" : "New order"}
+          </Button>
+        }
       >
 
-      {!writesEnabled && <ReadOnlyNotice what="Creating or transitioning an order" />}
-      <Panel title="Create and transition">
-        <OrderWrites />
-      </Panel>
+      {!writesEnabled && <ReadOnlyNotice what="Creating or moving an order" />}
 
-      <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }}>
-        <TextField
-          select
-          size="small"
+      {/* Inline rather than a dialog: the create button opens its own
+          confirmation, and a dialog over a dialog loses the operator. */}
+      <Collapse in={creating} unmountOnExit>
+        <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }} data-block="new-order">
+          <Typography variant="h3" sx={{ mb: 0.5 }}>
+            New order
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+            Orders start in draft. Attach the deal it executes, if there is one; you can submit it
+            from its row once it exists.
+          </Typography>
+          <OrderCreateWrite
+            onCreated={(orderId) => {
+              // Land the operator on the new order's next step. A filter that
+              // would hide a fresh draft is cleared first.
+              if (status && status !== "draft") setStatus("");
+              setOpenOrder(orderId);
+              setCreating(false);
+            }}
+          />
+        </Paper>
+      </Collapse>
+
+      <Box sx={{ mb: 2 }}>
+        <EnumSelect
           label="Status"
           value={status}
-          onChange={(e) => setStatus(e.target.value)}
-          sx={{ minWidth: 200 }}
-        >
-          {STATUSES.map((s) => (
-            <MenuItem key={s || "any"} value={s}>
-              {s ? s.replace(/_/g, " ") : "Any status"}
-            </MenuItem>
-          ))}
-        </TextField>
-      </Paper>
+          options={ORDER_STATUSES}
+          onChange={setStatus}
+          any="Any status"
+        />
+      </Box>
 
       <FreshnessNote freshness={list.freshness}>
-        {list.freshness === "live" && plural(list.data?.count ?? rows.length, "order")}
+        {list.freshness === "live" &&
+          `${plural(list.data?.count ?? rows.length, "order")} · ${asOf(list.asOf)}`}
         {list.freshness === "stale" && "couldn't refresh — showing the last list received"}
         {list.freshness === "blocked" && "access denied"}
         {list.freshness === "empty" &&
@@ -237,67 +439,80 @@ export default function OrdersScreen() {
               {list.freshness === "empty" && list.result?.kind === "unavailable"
                 ? describe(list.result)
                 : status
-                  ? `No orders with status "${status.replace(/_/g, " ")}".`
-                  : "No orders yet."}
+                  ? `No orders with status "${words(status)}".`
+                  : "No orders yet. Use New order to create a draft."}
             </Typography>
           </Box>
         ) : (
           <Table size="small" data-state="rows">
             <TableHead>
               <TableRow>
+                <TableCell padding="checkbox" />
                 <TableCell sx={{ fontWeight: 600 }}>Order</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>Next step</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>Deal</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>Created</TableCell>
-                <TableCell />
               </TableRow>
             </TableHead>
             <TableBody>
-              {rows.map((order) => (
-                <Fragment key={order.order_id}>
-                  <TableRow hover data-row="order">
-                    <TableCell sx={{ fontFamily: "monospace", fontSize: 12 }}>
-                      {order.order_id}
-                    </TableCell>
-                    <TableCell>
-                      <StatusChip status={order.status} />
-                    </TableCell>
-                    <TableCell sx={{ fontSize: 12, color: palette.textSecondary }}>
-                      {order.deal_id || "—"}
-                    </TableCell>
-                    <TableCell sx={{ fontSize: 12, color: palette.textSecondary }}>
-                      {stamp(order.created_at)}
-                    </TableCell>
-                    <TableCell align="right">
-                      <Button
-                        size="small"
-                        onClick={() =>
-                          setOpenOrder((current) =>
-                            current === order.order_id ? undefined : order.order_id,
-                          )
-                        }
-                        aria-expanded={openOrder === order.order_id}
-                      >
-                        {openOrder === order.order_id ? "Hide history" : "History"}
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                  {openOrder === order.order_id && (
-                    <TableRow>
-                      <TableCell colSpan={5} sx={{ backgroundColor: palette.ground }}>
-                        <Stack spacing={1}>
-                          <Typography sx={{ fontSize: 12, fontWeight: 600 }}>
-                            Transition history
-                          </Typography>
-                          <OrderRecord orderId={order.order_id} />
-                          <Timeline orderId={order.order_id} />
-                          <OrderWrites orderId={order.order_id} />
-                        </Stack>
+              {rows.map((order) => {
+                const open = openOrder === order.order_id;
+                return (
+                  <Fragment key={order.order_id}>
+                    <TableRow
+                      hover
+                      data-row="order"
+                      onClick={() => toggle(order.order_id)}
+                      sx={{ cursor: "pointer", "& > td": open ? { borderBottom: "none" } : {} }}
+                    >
+                      <TableCell padding="checkbox">
+                        <IconButton
+                          size="small"
+                          aria-label={`${open ? "Hide" : "Show"} ${order.order_id}`}
+                          aria-expanded={open}
+                          onClick={(e) => {
+                            // The row handles the click; without this it would toggle twice.
+                            e.stopPropagation();
+                            toggle(order.order_id);
+                          }}
+                        >
+                          <Chevron open={open} />
+                        </IconButton>
+                      </TableCell>
+                      <TableCell sx={{ fontFamily: "monospace", fontSize: 12 }}>
+                        {order.order_id}
+                      </TableCell>
+                      <TableCell>
+                        <StatusChip status={order.status} />
+                      </TableCell>
+                      <TableCell sx={{ fontSize: 12 }} data-cell="next-step">
+                        {nextStepSummary(order.status)}
+                      </TableCell>
+                      <TableCell sx={{ fontSize: 12, color: palette.textSecondary }}>
+                        {order.deal_id || "—"}
+                      </TableCell>
+                      <TableCell sx={{ fontSize: 12, color: palette.textSecondary }}>
+                        {stamp(order.created_at)}
                       </TableCell>
                     </TableRow>
-                  )}
-                </Fragment>
-              ))}
+                    {open && (
+                      <TableRow>
+                        <TableCell colSpan={6} sx={{ backgroundColor: palette.ground, py: 2.5, px: 3 }}>
+                          <OrderDetail
+                            order={order}
+                            actor={actor}
+                            onActorChange={setActor}
+                            onListStale={list.refresh}
+                            accepted={accepted?.orderId === order.order_id ? accepted.to : undefined}
+                            onAccepted={(to) => setAccepted(to ? { orderId: order.order_id, to } : undefined)}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </Fragment>
+                );
+              })}
             </TableBody>
           </Table>
         )}

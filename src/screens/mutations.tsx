@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from "react";
+import Autocomplete from "@mui/material/Autocomplete";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
 import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
@@ -25,6 +27,7 @@ import {
   dealBuyerStatus,
   dealById,
   dealFromTemplate,
+  deals,
   dealsExport,
   dealSspTroubleshoot,
   deleteInventoryTypeOverride,
@@ -36,8 +39,6 @@ import {
   generateDeal,
   migrateDeal,
   negotiationStatus,
-  orderById,
-  orderHistory,
   packageById,
   postNegotiationMessage,
   pushDeal,
@@ -60,15 +61,18 @@ import {
   withdrawProposal,
   type CreatedApiKey,
   type LineItem,
+  type Order,
   type Proposal,
 } from "../api/endpoints";
 import { describe, type Result } from "../api/errors";
+import { actorClaim, isOrderStatus, nextSteps, type NextStep, type OrderActor } from "../api/order-lifecycle";
+import { ACTOR_KINDS, CHANGE_TYPES, words } from "../api/vocabulary";
+import { EnumSelect } from "../components/EnumSelect";
 import { FormFields, FormRow, WriteForm } from "../components/WriteForm";
 import { WritesNotice } from "../components/WritesNotice";
 import { useCredential } from "../credentials/context";
 import { useMutation } from "../query/useMutation";
 import { useResource } from "../query/useResource";
-import { stamp } from "../lib/time";
 import { palette } from "../theme/palette";
 
 function newKey(): string {
@@ -567,91 +571,323 @@ function PackageBody({ packageId }: { packageId: string }) {
   );
 }
 
-export function OrderWrites({ orderId }: { orderId?: string }) {
-  const { writesEnabled } = useCredential();
-  const [dealId, setDealId] = useState("");
-  const [target, setTarget] = useState(orderId ?? "");
-  const [toStatus, setToStatus] = useState("submitted");
-  const [actor, setActor] = useState("");
-  const [reason, setReason] = useState("");
-
-  const create = useMutation<{ deal_id: string }, unknown>(
-    (c, args) => createOrder(c, args),
-    { invalidates: ["orders:*"] },
-  );
-  const transition = useMutation<{ id: string; to_status: string; actor?: string; reason?: string }, unknown>(
-    (c, args) =>
-      transitionOrder(c, args.id, {
-        to_status: args.to_status,
-        ...(args.actor ? { actor: args.actor } : {}),
-        ...(args.reason ? { reason: args.reason } : {}),
-      }),
-    { invalidates: ["orders:*", `order-audit:${target}`] },
-  );
-
+/**
+ * Deal ids are long and opaque, so the create form offers the stored deals —
+ * but only once asked. The deals list is an unpaginated full scan
+ * (`CADENCE.deals` is 0), and opening "New order" should not trigger one.
+ * Mounting this component is the request; it shares the Deals screen's cache
+ * entry, so a list already loaded there costs nothing here.
+ */
+function StoredDealOptions({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  disabled: boolean;
+}) {
+  const list = useResource("deals:", (c, signal) => deals(c, {}, signal));
+  const stored = list.data?.deals.map((e) => e.deal) ?? [];
+  const byId = new Map(stored.map((d) => [d.deal_id, d]));
   return (
-    <Stack spacing={2}>
-      <WriteForm
-        title="Create a draft order?"
-        confirmLabel="Create order"
-        action="create-order"
-        blocked={!writesEnabled}
-        pending={create.pending}
-        last={create.last}
-        onConfirm={() => void create.run({ deal_id: dealId.trim() })}
-        consequence="Not idempotent: each call mints a new order id. A failure leaves a draft or does not."
-      >
+    <Autocomplete
+      freeSolo
+      size="small"
+      options={stored.map((d) => d.deal_id)}
+      inputValue={value}
+      onInputChange={(_, next) => onChange(next)}
+      loading={list.loading}
+      disabled={disabled}
+      sx={{ minWidth: 320 }}
+      renderOption={(props, id) => {
+        const deal = byId.get(id);
+        return (
+          <li {...props} key={id}>
+            <Box>
+              <Box sx={{ fontFamily: "monospace", fontSize: 12 }}>{id}</Box>
+              <Box sx={{ fontSize: 12, color: palette.textSecondary }}>
+                {[deal?.product?.name, deal?.deal_type, deal?.status].filter(Boolean).join(" · ")}
+              </Box>
+            </Box>
+          </li>
+        );
+      }}
+      renderInput={(params) => (
         <TextField
-          size="small"
-          label="Deal id (optional)"
-          value={dealId}
-          onChange={(e) => setDealId(e.target.value)}
-          disabled={!writesEnabled}
+          {...params}
+          label="Deal"
+          helperText={
+            list.result && list.result.kind !== "ok"
+              ? describe(list.result)
+              : list.data
+                ? `${stored.length} stored deals`
+                : "loading deals…"
+          }
         />
-      </WriteForm>
-      <WriteForm
-        title="Transition this order?"
-        confirmLabel="Transition"
-        action="transition-order"
-        blocked={!writesEnabled || !target.trim()}
-        pending={transition.pending}
-        last={transition.last}
-        onConfirm={() =>
-          void transition.run({
-            id: target.trim(),
-            to_status: toStatus,
-            ...(actor ? { actor } : {}),
-            ...(reason ? { reason } : {}),
-          })
-        }
-        consequence="Not idempotent. A 409 names the allowed next states. Re-read the order before retrying."
-      >
-        <FormFields>
-          <TextField size="small" label="Order id" value={target} onChange={(e) => setTarget(e.target.value)} disabled={!writesEnabled} />
-          <TextField size="small" label="To status" value={toStatus} onChange={(e) => setToStatus(e.target.value)} disabled={!writesEnabled} />
-          <TextField size="small" label="Actor" value={actor} onChange={(e) => setActor(e.target.value)} disabled={!writesEnabled} />
-          <TextField size="small" label="Reason" value={reason} onChange={(e) => setReason(e.target.value)} disabled={!writesEnabled} />
-        </FormFields>
-      </WriteForm>
-    </Stack>
+      )}
+    />
   );
 }
 
-export function OrderRecord({ orderId }: { orderId: string }) {
-  const order = useResource(`order:${orderId}`, (c, signal) => orderById(c, orderId, signal));
-  const history = useResource(`order-history:${orderId}`, (c, signal) =>
-    orderHistory(c, orderId, signal),
+export function OrderCreateWrite({ onCreated }: { onCreated?: (orderId: string) => void }) {
+  const { writesEnabled } = useCredential();
+  const [dealId, setDealId] = useState("");
+  const [quoteId, setQuoteId] = useState("");
+  const [pickDeal, setPickDeal] = useState(false);
+
+  const create = useMutation<{ deal_id?: string; quote_id?: string }, Order>(
+    (c, args) => createOrder(c, args),
+    { invalidates: ["orders:*", "orders-report"] },
   );
+
   return (
-    <Box data-block="order-record">
-      <Typography variant="body2">
-        Current: {order.data?.status ?? (order.result ? describe(order.result) : "…")}
+    <WriteForm
+      title="Create a draft order?"
+      confirmLabel="Create order"
+      action="create-order"
+      blocked={!writesEnabled}
+      pending={create.pending}
+      last={create.last}
+      onConfirm={() =>
+        void create
+          .run({
+            ...(dealId.trim() ? { deal_id: dealId.trim() } : {}),
+            ...(quoteId.trim() ? { quote_id: quoteId.trim() } : {}),
+          })
+          .then((result) => {
+            if (result.kind === "ok") onCreated?.(result.data.order_id);
+          })
+      }
+      consequence={
+        <>
+          Creates an order in <strong>draft</strong>
+          {dealId.trim() ? <> for deal {dealId.trim()}</> : <> with no deal attached</>}. Not
+          idempotent: each call mints a new order id, so a retry after a timeout may leave two
+          drafts.
+        </>
+      }
+    >
+      <FormFields>
+        {pickDeal ? (
+          <StoredDealOptions value={dealId} onChange={setDealId} disabled={!writesEnabled} />
+        ) : (
+          <TextField
+            size="small"
+            label="Deal id (optional)"
+            value={dealId}
+            onChange={(e) => setDealId(e.target.value)}
+            disabled={!writesEnabled}
+          />
+        )}
+        <TextField
+          size="small"
+          label="Quote id (optional)"
+          value={quoteId}
+          onChange={(e) => setQuoteId(e.target.value)}
+          disabled={!writesEnabled}
+        />
+        {!pickDeal && (
+          <Button
+            size="small"
+            onClick={() => setPickDeal(true)}
+            disabled={!writesEnabled}
+            data-action="choose-deal"
+            sx={{ flexShrink: 0 }}
+          >
+            Choose from deals
+          </Button>
+        )}
+      </FormFields>
+    </WriteForm>
+  );
+}
+
+/**
+ * The legal next moves for one order, one button each. The move table is a
+ * copy of upstream's (see order-lifecycle.ts), so a 409 means the order moved
+ * under the operator or the table drifted; either way nothing was applied and
+ * the order is re-read.
+ */
+export function OrderTransitionWrites({
+  orderId,
+  status,
+  actor,
+  onActorChange,
+  onStale,
+  accepted,
+  onAccepted,
+}: {
+  orderId: string;
+  status: string;
+  actor: OrderActor;
+  onActorChange: (actor: OrderActor) => void;
+  onStale: () => void;
+  /** The last move the agent accepted here. Owned by the caller: see onAccepted. */
+  accepted: string | undefined;
+  /**
+   * A successful move invalidates the order list, which empties it until the
+   * re-read lands and unmounts this row with it. Anything said about the move
+   * has to live above the table to still be on screen afterwards.
+   */
+  onAccepted: (to: string | undefined) => void;
+}) {
+  const { writesEnabled, credential } = useCredential();
+  const [reason, setReason] = useState("");
+  const [chosen, setChosen] = useState<string | undefined>();
+  const steps = nextSteps(status);
+  const claim = actorClaim(actor);
+
+  const transition = useMutation<{ to_status: string; actor: string; reason?: string }, unknown>(
+    (c, args) => transitionOrder(c, orderId, args),
+    { invalidates: ["orders:*", `order-audit:${orderId}`, "orders-report"] },
+  );
+
+  if (steps.length === 0) {
+    return (
+      <Typography variant="body2" color="text.secondary" data-state="no-next-step">
+        {isOrderStatus(status)
+          ? "No further transitions from here."
+          : `This console does not know the status "${words(status)}", so it offers no transition.`}
       </Typography>
-      <Typography variant="caption" color="text.secondary">
-        History entries: {history.data?.transitions.length ?? "—"}
-        {history.asOf !== undefined ? ` · as of ${stamp(new Date(history.asOf).toISOString())}` : ""}
+    );
+  }
+
+  // Upstream gates this route on an operator key. A buyer key would only
+  // ever collect a 403, so say that instead of offering the buttons.
+  if (credential?.role === "buyer") {
+    return (
+      <Typography variant="body2" color="text.secondary" data-state="operator-only">
+        Moving an order needs an operator key; this one is a buyer key.
       </Typography>
-    </Box>
+    );
+  }
+
+  const moved =
+    transition.last?.kind === "unavailable" &&
+    transition.last.reason === "http" &&
+    transition.last.status === 409;
+
+  const go = (to: string) => {
+    if (!claim) return;
+    setChosen(to);
+    // A new attempt supersedes whatever the last one said.
+    onAccepted(undefined);
+    void transition
+      .run({ to_status: to, actor: claim, ...(reason.trim() ? { reason: reason.trim() } : {}) })
+      .then((result) => {
+        if (result.kind === "ok") {
+          setReason("");
+          onAccepted(to);
+        }
+        if (result.kind === "unavailable" && result.reason === "http" && result.status === 409) {
+          onStale();
+        }
+      });
+  };
+
+  const button = (step: NextStep) => (
+    <WriteForm
+      key={step.to}
+      title={`${step.label}?`}
+      confirmLabel={step.label}
+      action={`transition-order:${step.to}`}
+      blocked={!writesEnabled || !claim || (transition.pending && chosen !== step.to)}
+      pending={transition.pending && chosen === step.to}
+      // Success is reported below the buttons: the button that was pressed
+      // is gone once the order has moved.
+      last={chosen === step.to && !moved && transition.last?.kind !== "ok" ? transition.last : undefined}
+      onConfirm={() => go(step.to)}
+      consequence={
+        <>
+          Moves {orderId} from <strong>{words(status)}</strong> to{" "}
+          <strong>{words(step.to)}</strong>, recorded as {claim ?? "?"}
+          {reason.trim() ? <> with the reason &ldquo;{reason.trim()}&rdquo;</> : null}. The agent
+          describes this move as &ldquo;{step.description}&rdquo;.
+          {step.kind === "stop" && " It takes the order off its path."}
+          {(step.to === "cancelled" || step.to === "completed") &&
+            " This is terminal: no transition leads out of it."}{" "}
+          Not idempotent: re-read the order before retrying after a timeout.
+        </>
+      }
+    />
+  );
+
+  const forward = steps.filter((s) => s.kind === "forward");
+  const other = steps.filter((s) => s.kind !== "forward");
+
+  return (
+    <Stack spacing={1.5} data-block="order-transitions">
+      <Stack direction="row" spacing={3} flexWrap="wrap" useFlexGap alignItems="flex-start">
+        {forward.length > 0 && (
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap data-group="forward">
+            {forward.map(button)}
+          </Stack>
+        )}
+        {other.length > 0 && (
+          <Stack
+            direction="row"
+            spacing={1}
+            flexWrap="wrap"
+            useFlexGap
+            alignItems="center"
+            data-group="off-path"
+            sx={forward.length > 0 ? { pl: 3, borderLeft: `1px solid ${palette.line}` } : undefined}
+          >
+            {forward.length > 0 && (
+              <Typography variant="caption" color="text.secondary">
+                or
+              </Typography>
+            )}
+            {other.map(button)}
+          </Stack>
+        )}
+      </Stack>
+      <FormRow>
+        <EnumSelect
+          label="Acting as"
+          value={actor.kind}
+          options={ACTOR_KINDS}
+          onChange={(kind) => kind && onActorChange({ ...actor, kind })}
+          disabled={!writesEnabled}
+          sx={{ minWidth: 140 }}
+        />
+        {actor.kind !== "system" && (
+          <TextField
+            size="small"
+            label={actor.kind === "human" ? "Your name or id" : "Agent id"}
+            value={actor.id}
+            onChange={(e) => onActorChange({ ...actor, id: e.target.value })}
+            disabled={!writesEnabled}
+          />
+        )}
+        <TextField
+          size="small"
+          label="Reason (optional)"
+          placeholder={steps[0]?.description}
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          disabled={!writesEnabled}
+          sx={{ flex: "1 1 240px" }}
+        />
+      </FormRow>
+      <Typography variant="caption" color="text.secondary" data-note="actor">
+        {/* The API stores whatever actor it is sent and verifies none of it. */}
+        {writesEnabled && !claim && `Enter ${actor.kind === "human" ? "your name" : "the agent's id"} to enable these moves. `}
+        The actor is recorded as claimed; the agent does not verify it.
+      </Typography>
+      {accepted && (
+        <Typography variant="body2" data-state="write-ok">
+          The agent accepted the move to {words(accepted)}.
+        </Typography>
+      )}
+      {moved && (
+        <Typography variant="body2" sx={{ color: palette.warningText }} data-state="order-moved">
+          The agent refused the move because the order is no longer in{" "}
+          {words(status)}. Nothing was applied; the order has been re-read.
+        </Typography>
+      )}
+    </Stack>
   );
 }
 
@@ -1238,15 +1474,22 @@ export function CuratorWrite() {
   );
 }
 
-export function ChangeRequestCreate() {
+/** With `orderId`, the order is fixed — the form is being raised from that order's row. */
+export function ChangeRequestCreate({ orderId: fixedOrder }: { orderId?: string } = {}) {
   const { writesEnabled } = useCredential();
-  const [orderId, setOrderId] = useState("");
-  const [changeType, setChangeType] = useState("flight_extension");
+  const [typedOrder, setOrderId] = useState("");
+  // `flight_extension` was the default here once; it is not a ChangeType, so
+  // every request sent with it was a 400.
+  const [changeType, setChangeType] = useState<string>("flight_dates");
   const [reason, setReason] = useState("");
+  const orderId = fixedOrder ?? typedOrder;
   const create = useMutation<
     { idempotency_key: string; order_id: string; change_type: string; reason?: string },
     unknown
-  >((c, a) => createChangeRequest(c, a), { invalidates: ["change-requests:*"] });
+  >((c, a) => createChangeRequest(c, a), {
+    // The order's audit counts its change requests, so it goes stale too.
+    invalidates: ["change-requests:*", `order-audit:${orderId.trim()}`],
+  });
 
   return (
     <WriteForm
@@ -1264,11 +1507,27 @@ export function ChangeRequestCreate() {
           ...(reason ? { reason } : {}),
         })
       }
-      consequence="Idempotent per order and key for 24 hours. Same key + different body is 409."
+      consequence={
+        <>
+          Raises a <strong>{words(changeType)}</strong> change request against {orderId.trim()}.
+          It then waits for review on the Change requests screen; nothing on the order changes
+          until it is approved and applied. Idempotent per order and key for 24 hours. Same key +
+          different body is 409.
+        </>
+      }
     >
       <FormFields>
-        <TextField size="small" label="Order id" value={orderId} onChange={(e) => setOrderId(e.target.value)} disabled={!writesEnabled} />
-        <TextField size="small" label="Change type" value={changeType} onChange={(e) => setChangeType(e.target.value)} disabled={!writesEnabled} />
+        {fixedOrder === undefined && (
+          <TextField size="small" label="Order id" value={typedOrder} onChange={(e) => setOrderId(e.target.value)} disabled={!writesEnabled} />
+        )}
+        <EnumSelect
+          label="Change type"
+          value={changeType}
+          options={CHANGE_TYPES}
+          onChange={(v) => v && setChangeType(v)}
+          disabled={!writesEnabled}
+          sx={{ minWidth: 180 }}
+        />
         <TextField size="small" label="Request reason" value={reason} onChange={(e) => setReason(e.target.value)} disabled={!writesEnabled} />
       </FormFields>
     </WriteForm>
