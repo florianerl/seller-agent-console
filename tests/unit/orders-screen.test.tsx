@@ -410,14 +410,14 @@ describe("the orders screen", () => {
         return HttpResponse.json({
           change_requests: [
             {
-              cr_id: "CR-1",
+              change_request_id: "CR-1",
               order_id: "ORD-ABC123",
               change_type: "flight_dates",
               status: "pending_approval",
               diffs: [],
               reason: "two more weeks",
               requested_by: "agent:buyer-7",
-              created_at: "2026-09-15T10:00:00Z",
+              requested_at: "2026-09-15T10:00:00Z",
             },
           ],
           count: 1,

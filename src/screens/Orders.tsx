@@ -219,7 +219,7 @@ function OrderChangeRequests({ orderId, count }: { orderId: string; count: numbe
           {rows.map((cr, index) => (
             <Box
               component="li"
-              key={cr.cr_id}
+              key={cr.id}
               sx={{
                 display: "flex",
                 gap: 1.5,
@@ -229,11 +229,11 @@ function OrderChangeRequests({ orderId, count }: { orderId: string; count: numbe
                 borderTop: index === 0 ? "none" : `1px solid ${palette.line}`,
               }}
             >
-              <Box sx={{ fontFamily: "monospace", fontSize: 12 }}>{cr.cr_id}</Box>
+              <Box sx={{ fontFamily: "monospace", fontSize: 12 }}>{cr.id}</Box>
               <Box sx={{ fontSize: 13 }}>{words(cr.change_type) || "unspecified change"}</Box>
               <StatusChip status={cr.status} />
               <Box sx={{ fontSize: 12, color: palette.textSecondary }}>
-                {cr.created_at ? stamp(cr.created_at) : ""}
+                {cr.requested_at ? stamp(cr.requested_at) : ""}
                 {cr.reason ? ` — ${cr.reason}` : ""}
               </Box>
             </Box>

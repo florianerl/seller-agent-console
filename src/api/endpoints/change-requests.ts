@@ -11,15 +11,17 @@ const PATHS = {
 /**
  * A change request proposes edits to a live order and moves through its own
  * approve/reject/apply flow (`POST …/review` and `POST …/apply`). Review is
- * operator-only upstream; apply writes the proposed values onto the order.
+ * operator-only upstream; apply writes the proposed values into the order's
+ * metadata (never its status — see order-lifecycle.ts).
  *
- * Both GET responses carry an empty schema in openapi.json, and the local
- * instance has no change requests to observe live (`{"change_requests":[],
- * "count":0}`), so this shape is inferred rather than confirmed: it mirrors
- * the fields openapi.json *does* define for creating and reviewing one
- * (`CreateChangeRequestModel`, `ReviewChangeRequestModel`) plus the identifiers
- * a list/detail pair would need to exist at all. Treat every field here as
- * provisional until it's been seen on the wire.
+ * Both GET responses carry an empty schema in openapi.json. This shape was
+ * first inferred, and the inference was wrong where it mattered: it keyed on
+ * `cr_id`, which is only the *path parameter's* name, while the record says
+ * `change_request_id` (models/change_request.py), and it read `created_at`
+ * where the record says `requested_at`. Against a real agent every list
+ * failed to parse. The fields below are the ones seen on the wire from a
+ * live agent (tests/fixtures/change-request.live.json); the inferred names
+ * are still read as fallbacks so an older fixture or proxy keeps working.
  */
 export const FieldDiff = z
   .object({
@@ -30,25 +32,49 @@ export const FieldDiff = z
   .loose();
 export type FieldDiff = z.infer<typeof FieldDiff>;
 
-export const ChangeRequest = z
+const nullableString = z.string().nullable().catch(null);
+
+const ChangeRequestWire = z
   .object({
-    cr_id: z.string(),
+    change_request_id: z.string().optional(),
+    cr_id: z.string().optional(),
     order_id: z.string().catch(""),
+    deal_id: nullableString,
     change_type: z.string().catch(""),
     status: z.string().catch("pending_approval"),
+    // minor | material | critical — decides whether it was auto-approved.
+    severity: nullableString,
     diffs: z.array(FieldDiff).catch([]),
+    proposed_values: z.record(z.string(), z.unknown()).nullable().catch(null),
     reason: z.string().catch(""),
     requested_by: z.string().catch("system"),
+    requested_at: nullableString,
+    created_at: nullableString,
     // The review route stamps `approved_by` / `approved_at` for both approve
-    // and reject. `decided_by` was the name this console inferred before that
-    // body was observed; keep reading it so an older payload still shows.
-    decided_by: z.string().nullable().catch(null),
-    decided_at: z.string().nullable().catch(null),
-    approved_by: z.string().nullable().catch(null),
-    approved_at: z.string().nullable().catch(null),
-    created_at: z.string().nullable().catch(null),
+    // and reject; a minor change carries `system:auto-approve` here.
+    approved_by: nullableString,
+    approved_at: nullableString,
+    decided_by: nullableString,
+    decided_at: nullableString,
+    rejection_reason: z.string().catch(""),
+    // Set when validation refused the request at create time (status failed).
+    validation_errors: z.array(z.string()).catch([]),
+    applied_at: nullableString,
+    applied_by: nullableString,
   })
   .loose();
+
+export const ChangeRequest = ChangeRequestWire.refine(
+  (v) => Boolean(v.change_request_id ?? v.cr_id),
+  { message: "change request carries no id" },
+).transform((v) => ({
+  ...v,
+  /** The one id the rest of the console uses, whichever name it arrived under. */
+  id: (v.change_request_id ?? v.cr_id) as string,
+  requested_at: v.requested_at ?? v.created_at,
+  decided_by: v.approved_by ?? v.decided_by,
+  decided_at: v.approved_at ?? v.decided_at,
+}));
 export type ChangeRequest = z.infer<typeof ChangeRequest>;
 
 export const ChangeRequestList = z

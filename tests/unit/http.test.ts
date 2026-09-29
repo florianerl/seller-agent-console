@@ -3,6 +3,7 @@ import { http, HttpResponse, delay } from "msw";
 import { z } from "zod";
 import { API, server } from "../setup/msw";
 import { get, TIMEOUTS, type Connection } from "../../src/api/http";
+import { describe as describeResult } from "../../src/api/errors";
 
 const connection: Connection = { baseUrl: API, apiKey: "k-operator" };
 const schema = z.object({ status: z.string() }).loose();
@@ -124,6 +125,77 @@ describe("the result taxonomy", () => {
 
     server.use(http.get(url, () => new HttpResponse(null, { status: 500 })));
     await expect(call()).resolves.toBeDefined();
+  });
+});
+
+describe("what a refused call said", () => {
+  it("carries the agent's code, message and facts from a FastAPI detail object", async () => {
+    server.use(
+      http.get(url, () =>
+        HttpResponse.json(
+          {
+            detail: {
+              error: "invalid_transition",
+              message: "Cannot transition order ORD-1 from approved to draft: no matching transition rule",
+              current_status: "approved",
+              allowed_transitions: ["in_progress", "cancelled"],
+            },
+          },
+          { status: 409 },
+        ),
+      ),
+    );
+
+    const result = await call();
+    expect(result).toMatchObject({
+      kind: "unavailable",
+      reason: "http",
+      status: 409,
+      code: "invalid_transition",
+      detail: expect.stringMatching(/no matching transition rule/) as unknown,
+      problem: { current_status: "approved", allowed_transitions: ["in_progress", "cancelled"] },
+    });
+    expect(describeResult(result)).toMatch(/^the agent returned 409: Cannot transition/);
+  });
+
+  it("reads a plain string detail", async () => {
+    server.use(http.get(url, () => HttpResponse.json({ detail: "Not Found" }, { status: 404 })));
+    expect(await call()).toMatchObject({ reason: "http", status: 404, detail: "Not Found" });
+  });
+
+  it("joins pydantic's validation messages", async () => {
+    server.use(
+      http.get(url, () =>
+        HttpResponse.json(
+          { detail: [{ loc: ["body", "old_deal_id"], msg: "Field required" }] },
+          { status: 422 },
+        ),
+      ),
+    );
+    expect(await call()).toMatchObject({ status: 422, detail: "Field required" });
+  });
+
+  it("reports the status alone when the body is not JSON", async () => {
+    server.use(
+      http.get(url, () => new HttpResponse("<html>bad gateway</html>", { status: 502, headers: { "content-type": "text/html" } })),
+    );
+    const result = await call();
+    expect(result).toMatchObject({ reason: "http", status: 502 });
+    expect(result).not.toHaveProperty("detail");
+    expect(describeResult(result)).toBe("the agent returned 502");
+  });
+
+  it("ignores an oversized body rather than rendering it", async () => {
+    server.use(
+      http.get(url, () => HttpResponse.json({ detail: "x".repeat(20_000) }, { status: 500 })),
+    );
+    expect(await call()).not.toHaveProperty("detail");
+  });
+
+  it("clips a long message", async () => {
+    server.use(http.get(url, () => HttpResponse.json({ detail: "y".repeat(1_000) }, { status: 500 })));
+    const result = await call();
+    expect(result.kind === "unavailable" && result.detail!.length).toBeLessThanOrEqual(300);
   });
 });
 

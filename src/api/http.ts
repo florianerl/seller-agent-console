@@ -79,7 +79,12 @@ function buildUrl(
 function unavailable(
   reason: UnavailableReason,
   fetchedAt: number,
-  extra?: { status?: number; detail?: string },
+  extra?: {
+    status?: number;
+    detail?: string;
+    code?: string;
+    problem?: Readonly<Record<string, unknown>>;
+  },
 ): Result<never> {
   return {
     kind: "unavailable",
@@ -87,7 +92,67 @@ function unavailable(
     fetchedAt,
     ...(extra?.status !== undefined ? { status: extra.status } : {}),
     ...(extra?.detail !== undefined ? { detail: extra.detail } : {}),
+    ...(extra?.code !== undefined ? { code: extra.code } : {}),
+    ...(extra?.problem !== undefined ? { problem: extra.problem } : {}),
   };
+}
+
+/** Enough for any error body the agent writes; more is a proxy page or a bug. */
+const MAX_PROBLEM_BYTES = 16_384;
+const MAX_DETAIL_CHARS = 300;
+
+function clip(text: string): string {
+  return text.length > MAX_DETAIL_CHARS ? `${text.slice(0, MAX_DETAIL_CHARS - 1)}…` : text;
+}
+
+/**
+ * What a refused call said about itself. FastAPI wraps every HTTPException as
+ * `{"detail": …}`, and the agent puts a code, a sentence and the facts behind
+ * them inside it — a 409 names the allowed next states, a 422 lists why the
+ * change request failed validation. Without this the operator got "the agent
+ * returned 409" and had to guess.
+ *
+ * Best effort and never throws: a body that is not JSON, too large, or in
+ * some other shape yields nothing, and the status alone is reported as before.
+ */
+async function readProblem(
+  response: Response,
+): Promise<{ detail?: string; code?: string; problem?: Record<string, unknown> }> {
+  if (!(response.headers.get("content-type") ?? "").toLowerCase().includes("json")) return {};
+  let raw: string;
+  try {
+    raw = await response.text();
+  } catch {
+    return {};
+  }
+  if (raw.length > MAX_PROBLEM_BYTES) return {};
+  let body: unknown;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    return {};
+  }
+  const detail = body && typeof body === "object" ? (body as { detail?: unknown }).detail : undefined;
+
+  if (typeof detail === "string") return { detail: clip(detail) };
+
+  // Pydantic's own 422: a list of {loc, msg}.
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((d) => (d && typeof d === "object" ? (d as { msg?: unknown }).msg : undefined))
+      .filter((m): m is string => typeof m === "string");
+    return messages.length ? { detail: clip(messages.slice(0, 3).join("; ")) } : {};
+  }
+
+  if (detail && typeof detail === "object") {
+    const { error, message, ...rest } = detail as Record<string, unknown>;
+    return {
+      ...(typeof message === "string" ? { detail: clip(message) } : {}),
+      ...(typeof error === "string" ? { code: error } : {}),
+      problem: rest,
+    };
+  }
+  return {};
 }
 
 /** A read. The method is fixed here so a caller cannot make it anything else. */
@@ -182,7 +247,7 @@ export async function request<T>(
   }
 
   if (!response.ok) {
-    return unavailable("http", fetchedAt, { status: response.status });
+    return unavailable("http", fetchedAt, { status: response.status, ...(await readProblem(response)) });
   }
 
   // A mutation that returns nothing is a 204, and a 204 has no content-type to

@@ -11,31 +11,32 @@ import { CredentialProvider } from "../../src/credentials/context";
 import { clearCredential, saveCredential } from "../../src/credentials/store";
 import { sameResult } from "../../src/query/freshness";
 import { resetReachability } from "../../src/query/reachability";
+import LIVE from "../fixtures/change-request.live.json";
 
 const CHANGE_REQUESTS = [
   {
-    cr_id: "CR-ABC123",
+    change_request_id: "CR-ABC123",
     order_id: "ORD-1",
-    change_type: "flight_extension",
+    change_type: "flight_dates",
     status: "pending_approval",
     diffs: [{ field: "flight_end", old_value: "2026-09-30", new_value: "2026-10-15" }],
     reason: "buyer asked for two extra weeks",
     requested_by: "agent:buyer-7",
-    decided_by: null,
-    decided_at: null,
-    created_at: "2026-09-15T09:00:00Z",
+    approved_by: null,
+    approved_at: null,
+    requested_at: "2026-09-15T09:00:00Z",
   },
   {
-    cr_id: "CR-DEF456",
+    change_request_id: "CR-DEF456",
     order_id: "ORD-2",
-    change_type: "budget_increase",
+    change_type: "impressions",
     status: "approved",
     diffs: [],
     reason: "",
     requested_by: "system",
-    decided_by: "operator:jane",
-    decided_at: "2026-09-16T10:00:00Z",
-    created_at: "2026-09-16T09:00:00Z",
+    approved_by: "operator:jane",
+    approved_at: "2026-09-16T10:00:00Z",
+    requested_at: "2026-09-16T09:00:00Z",
   },
 ];
 
@@ -124,7 +125,7 @@ describe("the change requests screen", () => {
     });
 
     expect(detail.textContent).toContain("ORD-1");
-    expect(detail.textContent).toContain("flight extension");
+    expect(detail.textContent).toContain("flight dates");
     expect(detail.textContent).toContain("buyer asked for two extra weeks");
 
     const diffs = document.querySelector('[data-list="diffs"]')!;
@@ -219,7 +220,7 @@ describe("the change requests screen", () => {
   it("degrades the list without crashing when a field changes upstream", async () => {
     server.use(
       http.get(`${API}/api/v1/change-requests`, () =>
-        // cr_id renamed upstream.
+        // The id field renamed upstream.
         HttpResponse.json({ change_requests: [{ id: "CR-X", status: "pending" }], count: 1 }),
       ),
     );
@@ -228,6 +229,32 @@ describe("the change requests screen", () => {
     await waitFor(() =>
       expect(document.body.textContent).toMatch(/unexpected response shape/i),
     );
+  });
+
+  // The shape a real agent sends, captured verbatim. The console's first
+  // guess keyed on cr_id and failed every list against it.
+  it("parses the change requests a live agent actually sends", async () => {
+    server.use(
+      http.get(`${API}/api/v1/change-requests`, () => HttpResponse.json(LIVE)),
+    );
+    renderScreen();
+
+    await waitFor(() => expect(screen.getByText("CR-F4B8FC266EE3")).toBeInTheDocument());
+    expect(document.body.textContent).not.toMatch(/unexpected response shape/i);
+  });
+
+  it("still reads the id and time under the names it once guessed", async () => {
+    server.use(
+      http.get(`${API}/api/v1/change-requests`, () =>
+        HttpResponse.json({
+          change_requests: [{ cr_id: "CR-OLD1", status: "approved", created_at: "2026-09-15T09:00:00Z" }],
+          count: 1,
+        }),
+      ),
+    );
+    renderScreen();
+
+    await waitFor(() => expect(screen.getByText("CR-OLD1")).toBeInTheDocument());
   });
 
   it("renders no React key warnings", async () => {

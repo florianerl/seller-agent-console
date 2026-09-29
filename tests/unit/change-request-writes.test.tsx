@@ -14,18 +14,16 @@ import { resetWritePolicy } from "../../src/api/policy";
 import { resetReachability } from "../../src/query/reachability";
 
 const PENDING = {
-  cr_id: "CR-ABC123",
+  change_request_id: "CR-ABC123",
   order_id: "ORD-1",
-  change_type: "flight_extension",
+  change_type: "flight_dates",
   status: "pending_approval",
   diffs: [{ field: "flight_end", old_value: "2026-09-30", new_value: "2026-10-15" }],
   reason: "buyer asked for two extra weeks",
   requested_by: "agent:buyer-7",
-  decided_by: null,
-  decided_at: null,
   approved_by: null,
   approved_at: null,
-  created_at: "2026-09-15T09:00:00Z",
+  requested_at: "2026-09-15T09:00:00Z",
 };
 
 function renderScreen() {

@@ -50,6 +50,19 @@ export type Result<T> =
       reason: UnavailableReason;
       status?: number;
       detail?: string;
+      /**
+       * For `http` only: the agent's own error code, when its body carried
+       * one (`{"detail": {"error": "invalid_transition", …}}`). Lets a
+       * screen tell a stale move from a missing deal without matching prose.
+       */
+      code?: string;
+      /**
+       * For `http` only: the other fields of that error body — the 409's
+       * `allowed_transitions`, a 422's `validation_errors`. Untyped on
+       * purpose: each screen reads the one field it knows about, and a
+       * field that is missing or reshaped is simply not shown.
+       */
+      problem?: Readonly<Record<string, unknown>>;
       fetchedAt: number;
     };
 
@@ -75,7 +88,9 @@ export function describe(r: Result<unknown>): string {
         case "redirect":
           return "the agent redirected the request";
         case "http":
-          return `the agent returned ${r.status ?? "an error"}`;
+          return r.detail
+            ? `the agent returned ${r.status ?? "an error"}: ${r.detail}`
+            : `the agent returned ${r.status ?? "an error"}`;
         case "content-type":
           return "the agent returned something that was not JSON";
         case "shape":

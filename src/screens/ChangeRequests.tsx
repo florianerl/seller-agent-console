@@ -219,8 +219,8 @@ function Detail({ crId }: { crId: string }) {
 
   const cr = detail.data;
 
-  const decidedBy = cr.approved_by || cr.decided_by;
-  const decidedAt = cr.approved_at || cr.decided_at;
+  const decidedBy = cr.decided_by;
+  const decidedAt = cr.decided_at;
 
   return (
     <Stack spacing={2} sx={{ py: 1 }}>
@@ -233,7 +233,7 @@ function Detail({ crId }: { crId: string }) {
         <Field label="Change type">{cr.change_type ? cr.change_type.replace(/_/g, " ") : "—"}</Field>
         <Field label="Requested by">{cr.requested_by || "—"}</Field>
         <Field label="Reason">{cr.reason || "—"}</Field>
-        <Field label="Created">{stamp(cr.created_at)}</Field>
+        <Field label="Requested">{stamp(cr.requested_at)}</Field>
         {/* The review route stamps approved_by for both approve and reject,
             and does not verify the string. Shown as a label, not attribution. */}
         <Field label="Decided">
@@ -340,10 +340,10 @@ export default function ChangeRequestsScreen() {
                 </TableHead>
                 <TableBody>
                   {rows.map((cr) => (
-                    <Fragment key={cr.cr_id}>
+                    <Fragment key={cr.id}>
                       <TableRow hover data-row="change-request">
                         <TableCell sx={{ fontFamily: "monospace", fontSize: 12 }}>
-                          {cr.cr_id}
+                          {cr.id}
                         </TableCell>
                         <TableCell>
                           <StatusChip status={cr.status} />
@@ -352,24 +352,24 @@ export default function ChangeRequestsScreen() {
                           {cr.order_id || "—"}
                         </TableCell>
                         <TableCell sx={{ fontSize: 12, color: palette.textSecondary }}>
-                          {stamp(cr.created_at)}
+                          {stamp(cr.requested_at)}
                         </TableCell>
                         <TableCell align="right">
                           <Button
                             size="small"
                             onClick={() =>
-                              setOpenId((current) => (current === cr.cr_id ? undefined : cr.cr_id))
+                              setOpenId((current) => (current === cr.id ? undefined : cr.id))
                             }
-                            aria-expanded={openId === cr.cr_id}
+                            aria-expanded={openId === cr.id}
                           >
-                            {openId === cr.cr_id ? "Hide details" : "Details"}
+                            {openId === cr.id ? "Hide details" : "Details"}
                           </Button>
                         </TableCell>
                       </TableRow>
-                      {openId === cr.cr_id && (
+                      {openId === cr.id && (
                         <TableRow>
                           <TableCell colSpan={5} sx={{ backgroundColor: palette.ground }}>
-                            <Detail crId={cr.cr_id} />
+                            <Detail crId={cr.id} />
                           </TableCell>
                         </TableRow>
                       )}
