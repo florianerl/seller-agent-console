@@ -283,6 +283,8 @@ export function CatalogWrites() {
   const [cpm, setCpm] = useState("12");
   const [rateType, setRateType] = useState<string>("display");
 
+  // The name must be the one ProductDetail (Catalog.tsx) reads, built from
+  // the id the call acted on — the trimmed one — not the raw field.
   const setOverride = useMutation<
     { productId: string; inventory_type: string; reason?: string },
     unknown
@@ -293,11 +295,11 @@ export function CatalogWrites() {
         inventory_type: args.inventory_type,
         ...(args.reason ? { reason: args.reason } : {}),
       }),
-    { invalidates: [`inventory-override:${productId}`] },
+    { invalidates: (args) => [`inventory-type:${args.productId}`] },
   );
   const clearOverride = useMutation<{ productId: string }, unknown>(
     (c, args) => deleteInventoryTypeOverride(c, args.productId),
-    { invalidates: [`inventory-override:${productId}`] },
+    { invalidates: (args) => [`inventory-type:${args.productId}`] },
   );
   const rate = useMutation<
     { inventory_type: string; base_cpm: number },
@@ -312,7 +314,7 @@ export function CatalogWrites() {
   >((c, args) => createPackage(c, args), { invalidates: ["packages"] });
   const updatePkg = useMutation<{ id: string; name: string }, unknown>(
     (c, args) => updatePackage(c, args.id, { name: args.name }),
-    { invalidates: ["packages", `package:${pkgId}`] },
+    { invalidates: (args) => ["packages", `package:${args.id}`] },
   );
   const deletePkg = useMutation<{ id: string }, unknown>(
     (c, args) => deletePackage(c, args.id),
