@@ -135,19 +135,20 @@ describe("the orders screen", () => {
     });
   });
 
-  it("filters by status and asks the agent for it", async () => {
+  // Upstream scans every order whatever the filter, and the summary needs
+  // them all, so the list is read once and filtered here.
+  it("filters by status without asking the agent again", async () => {
     const seen: URL[] = [];
     server.use(
       http.get(`${API}/api/v1/orders`, ({ request }) => {
         seen.push(new URL(request.url));
-        return HttpResponse.json({ orders: [ORDERS[1]], count: 1 });
+        return HttpResponse.json({ orders: ORDERS, count: ORDERS.length });
       }),
     );
 
     const user = userEvent.setup();
     renderScreen();
-    await waitFor(() => expect(seen.length).toBeGreaterThan(0));
-    expect(seen[0]!.searchParams.has("status")).toBe(false);
+    await waitFor(() => expect(screen.getByText("ORD-ABC123")).toBeInTheDocument());
 
     await user.click(screen.getByLabelText("Status"));
     // Every upstream status is offered, not a hand-picked few.
@@ -155,9 +156,70 @@ describe("the orders screen", () => {
     expect(offered).toEqual(["Any status", ...ORDER_STATUSES.map((o) => o.label)]);
     await user.click(screen.getByRole("option", { name: "approved" }));
 
-    await waitFor(() =>
-      expect(seen[seen.length - 1]!.searchParams.get("status")).toBe("approved"),
+    await waitFor(() => expect(screen.queryByText("ORD-ABC123")).toBeNull());
+    expect(screen.getByText("ORD-DEF456")).toBeInTheDocument();
+    expect(seen.every((u) => !u.searchParams.has("status"))).toBe(true);
+  });
+
+  it("counts orders by stage, and filters by a stage when its chip is pressed", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    const summary = await waitFor(() => {
+      const el = document.querySelector('[data-block="stage-summary"]');
+      expect(el).toBeTruthy();
+      return el as HTMLElement;
+    });
+
+    const count = (id: string) =>
+      summary.querySelector(`[data-chip="${id}"] [data-count]`)?.getAttribute("data-count");
+    expect(count("approval")).toBe("1");
+    expect(count("execution")).toBe("1");
+    expect(count("closed")).toBe("0");
+    // An order waiting on the seller is marked as such, not only counted.
+    expect(summary.querySelector('[data-chip="approval"]')).toHaveAttribute("data-attention", "true");
+    expect(summary.querySelector('[data-chip="execution"]')).not.toHaveAttribute("data-attention");
+
+    await user.click(summary.querySelector('[data-chip="approval"]') as HTMLElement);
+    await waitFor(() => expect(screen.queryByText("ORD-DEF456")).toBeNull());
+    expect(screen.getByText("ORD-ABC123")).toBeInTheDocument();
+    expect(summary.querySelector('[data-chip="approval"]')).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("says in the list how long each order has sat, and where it came from", async () => {
+    server.use(
+      http.get(`${API}/api/v1/orders`, () =>
+        HttpResponse.json({
+          orders: [
+            {
+              ...ORDERS[0],
+              metadata: { source: "test-buyer", persona: "advertiser" },
+              audit_log: {
+                transitions: [
+                  {
+                    from_status: "submitted",
+                    to_status: "pending_approval",
+                    timestamp: new Date(Date.now() - 3 * 3_600_000).toISOString().replace("Z", ""),
+                    actor: "system",
+                    reason: "",
+                  },
+                ],
+              },
+            },
+            ORDERS[1],
+          ],
+          count: 2,
+        }),
+      ),
     );
+    renderScreen();
+    await waitFor(() => expect(screen.getByText("ORD-ABC123")).toBeInTheDocument());
+
+    const row = (id: string) => screen.getByText(id).closest("tr")!;
+    expect(row("ORD-ABC123").querySelector('[data-cell="in-status"]')?.textContent).toBe("for 3 h");
+    expect(row("ORD-ABC123").querySelector('[data-cell="source"]')?.textContent).toBe(
+      "test-buyer (advertiser)",
+    );
+    expect(row("ORD-DEF456").querySelector('[data-cell="source"]')?.textContent).toBe("not recorded");
   });
 
   it("shows the transition history when a row is opened", async () => {
@@ -240,8 +302,18 @@ describe("the orders screen", () => {
     await waitFor(() => expect(transitionButtons().length).toBeGreaterThan(0));
     // pending_approval → approved | rejected | cancelled, forward move first.
     expect(transitionButtons()).toEqual(["approved", "rejected", "cancelled"]);
-    expect(within(detail).getByText(/held at the approval gate/i)).toBeInTheDocument();
-    expect(detail.querySelector('[aria-current="step"]')?.textContent).toMatch(/pending approval/);
+    expect(within(detail).getByText(/waiting for a human decision/i)).toBeInTheDocument();
+    // No approval queue lists orders; the screen has to say so.
+    expect(detail.querySelector('[data-block="moved-by"]')?.textContent).toMatch(/no approval queue/i);
+    const map = detail.querySelector('[data-block="state-map"]')!;
+    expect(map.querySelector('[data-node="current"]')?.getAttribute("data-state-node")).toBe("pending_approval");
+    expect([...map.querySelectorAll('[data-node="next"]')].map((n) => n.getAttribute("data-state-node")).sort()).toEqual(
+      ["approved", "cancelled", "rejected"],
+    );
+    // Visited, from the audit: draft → submitted → pending approval.
+    expect([...map.querySelectorAll('[data-node="visited"]')].map((n) => n.getAttribute("data-state-node")).sort()).toEqual(
+      ["draft", "submitted"],
+    );
   });
 
   it("offers nothing from a terminal status", async () => {
@@ -433,7 +505,8 @@ describe("the orders screen", () => {
       expect(el).toBeTruthy();
       return el!;
     });
-    expect(seen.some((u) => u.searchParams.get("order_id") === "ORD-ABC123")).toBe(true);
+    // One read of every change request serves the badges and every row.
+    expect(seen.every((u) => !u.searchParams.has("order_id"))).toBe(true);
     expect(list.textContent).toContain("CR-1");
     expect(list.textContent).toContain("flight dates");
   });
@@ -499,7 +572,7 @@ describe("the orders screen", () => {
     await user.click(document.querySelector('[data-action="create-order"]') as HTMLElement);
     await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Create order" }));
 
-    await waitFor(() => expect(sent).toEqual([{ deal_id: "deal-9" }]));
+    await waitFor(() => expect(sent).toEqual([{ deal_id: "deal-9", metadata: { source: "seller-console" } }]));
     await waitFor(() => expect(transitionButtons()).toEqual(["submitted", "cancelled"]));
     // By role, so it has to wait out the confirmation's exit, which hides the page meanwhile.
     expect(await screen.findByRole("button", { name: "Hide ORD-NEW1" })).toHaveAttribute(
@@ -516,5 +589,335 @@ describe("the orders screen", () => {
     const keyWarnings = warn.mock.calls.filter((c) => String(c[0]).includes("unique \"key\""));
     expect(keyWarnings).toEqual([]);
     warn.mockRestore();
+  });
+});
+
+/** A change request as a live agent sends it; see tests/fixtures/change-request.live.json. */
+function cr(overrides: Record<string, unknown>) {
+  return {
+    change_request_id: "CR-1",
+    order_id: "ORD-ABC123",
+    deal_id: "deal-1",
+    change_type: "creative",
+    status: "approved",
+    severity: "minor",
+    diffs: [{ field: "creative_id", old_value: "cr-001", new_value: "cr-002" }],
+    proposed_values: { creative_id: "cr-002" },
+    reason: "swap to autumn creative",
+    requested_by: "test-buyer:advertiser",
+    requested_at: "2026-09-15T10:00:00",
+    approved_by: "system:auto-approve",
+    approved_at: "2026-09-15T10:00:00",
+    rejection_reason: "",
+    validation_errors: [],
+    applied_at: null,
+    applied_by: "",
+    ...overrides,
+  };
+}
+
+describe("an order's change requests", () => {
+  beforeEach(async () => {
+    resetReachability();
+    await connect({ writesEnabled: true });
+    server.use(
+      http.get(`${API}/api/v1/orders`, () => HttpResponse.json({ orders: ORDERS, count: ORDERS.length })),
+      http.get(`${API}/api/v1/orders/ORD-ABC123/audit`, () => HttpResponse.json(AUDIT)),
+    );
+  });
+
+  function serve(...list: Record<string, unknown>[]) {
+    server.use(
+      http.get(`${API}/api/v1/change-requests`, () =>
+        HttpResponse.json({ change_requests: list, count: list.length }),
+      ),
+    );
+  }
+
+  it("badges the order in the list with what is waiting", async () => {
+    serve(cr({}), cr({ change_request_id: "CR-2", status: "pending_approval", severity: "critical", change_type: "pricing" }));
+    renderScreen();
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("ORD-ABC123").closest("tr")!.querySelector('[data-cell="changes"]')?.textContent,
+      ).toBe("1 to review, 1 to apply"),
+    );
+    expect(
+      document.querySelector('[data-chip="waiting"] [data-count]')?.getAttribute("data-count"),
+    ).toBe("2");
+  });
+
+  it("says an auto-approved request only needs applying, and applies it", async () => {
+    serve(cr({}));
+    const applied: string[] = [];
+    server.use(
+      http.post(`${API}/api/v1/change-requests/CR-1/apply`, () => {
+        applied.push("CR-1");
+        return HttpResponse.json({ change_request_id: "CR-1", status: "applied", order_id: "ORD-ABC123" });
+      }),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+    await expand(user, "ORD-ABC123");
+
+    const entry = await waitFor(() => {
+      const el = document.querySelector('[data-cr="CR-1"]');
+      expect(el).toBeTruthy();
+      return el as HTMLElement;
+    });
+    expect(entry.textContent).toMatch(/approved, not applied yet/i);
+    expect(entry.textContent).toMatch(/agent approved it itself/i);
+    // Only what an approved request allows: nothing to review, one thing to do.
+    expect(entry.querySelector('[data-action="approve"]')).toBeNull();
+
+    await user.click(entry.querySelector('[data-action="apply"]') as HTMLElement);
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toMatch(/status does not change/i);
+    await user.click(within(dialog).getByRole("button", { name: "Apply" }));
+
+    await waitFor(() => expect(applied).toEqual(["CR-1"]));
+  });
+
+  it("reviews a request that waits for review, signing with the stored name", async () => {
+    await connect({ writesEnabled: true });
+    const { saveCredential: save, loadCredential } = await import("../../src/credentials/store");
+    await save({ ...(await loadCredential())!, actorName: "anna" });
+    serve(cr({ status: "pending_approval", severity: "critical", change_type: "pricing", approved_by: null, approved_at: null }));
+    const bodies: unknown[] = [];
+    server.use(
+      http.post(`${API}/api/v1/change-requests/CR-1/review`, async ({ request }) => {
+        bodies.push(await request.json());
+        return HttpResponse.json({});
+      }),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+    await expand(user, "ORD-ABC123");
+
+    const entry = await waitFor(() => {
+      const el = document.querySelector('[data-cr="CR-1"]');
+      expect(el).toBeTruthy();
+      return el as HTMLElement;
+    });
+    expect(entry.textContent).toMatch(/waiting for review/i);
+    expect(entry.textContent).toMatch(/no approval queue and no MCP tool/i);
+
+    await user.click(entry.querySelector('[data-action="approve"]') as HTMLElement);
+    await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Approve" }));
+    await waitFor(() => expect(bodies).toEqual([{ decision: "approve", decided_by: "anna" }]));
+  });
+
+  it("says applying a cancellation did not cancel the order, and points at the move that does", async () => {
+    let status = "approved";
+    const cancellation = () =>
+      cr({ change_type: "cancellation", severity: "critical", approved_by: "human:anna", diffs: [], proposed_values: {}, status });
+    server.use(
+      http.get(`${API}/api/v1/change-requests`, () =>
+        HttpResponse.json({ change_requests: [cancellation()], count: 1 }),
+      ),
+      http.post(`${API}/api/v1/change-requests/CR-1/apply`, () => {
+        status = "applied";
+        return HttpResponse.json({ status: "applied" });
+      }),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+    await expand(user, "ORD-ABC123");
+
+    const apply = await waitFor(() => {
+      const el = document.querySelector('[data-cr="CR-1"] [data-action="apply"]');
+      expect(el).toBeEnabled();
+      return el as HTMLElement;
+    });
+    await user.click(apply);
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toMatch(/does not cancel the order/i);
+    await user.click(within(dialog).getByRole("button", { name: "Apply" }));
+
+    const note = await waitFor(() => {
+      const el = document.querySelector('[data-state="cancel-prompt"]');
+      expect(el).toBeTruthy();
+      return el!;
+    });
+    expect(note.textContent).toMatch(/still pending approval/);
+    expect(note.textContent).toMatch(/Cancel order/);
+  });
+
+  it("shows what applied requests wrote onto the order", async () => {
+    serve(cr({ status: "applied", applied_at: "2026-09-15T11:00:00", applied_by: "system" }));
+    server.use(
+      http.get(`${API}/api/v1/orders`, () =>
+        HttpResponse.json({
+          orders: [
+            {
+              ...ORDERS[0],
+              metadata: { source: "test-buyer", creative_id: "cr-002", _changed_creative_id: "cr-002" },
+            },
+          ],
+          count: 1,
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+    await expand(user, "ORD-ABC123");
+
+    const applied = await waitFor(() => {
+      const el = document.querySelector('[data-list="applied-values"]');
+      expect(el?.textContent).toMatch(/cr-002/);
+      return el!;
+    });
+    expect(applied.textContent).toMatch(/from CR-1/);
+    expect(applied.textContent).toMatch(/changed creative_id/);
+  });
+
+  it("does not offer a change request the agent would refuse", async () => {
+    serve();
+    server.use(
+      http.get(`${API}/api/v1/orders`, () =>
+        HttpResponse.json({ orders: [{ ...ORDERS[0], deal_id: "" }], count: 1 }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+    await expand(user, "ORD-ABC123");
+
+    await user.click(await screen.findByRole("button", { name: "Request a change" }));
+    await waitFor(() =>
+      expect(document.querySelector('[data-state="change-refused"]')?.textContent).toMatch(/no deal attached/),
+    );
+    expect(document.querySelector('[data-action="create-change-request"]')).toBeNull();
+  });
+
+  it("predicts the severity, sends the field change, and says what happens next", async () => {
+    serve();
+    const sent: Record<string, unknown>[] = [];
+    server.use(
+      http.post(`${API}/api/v1/change-requests`, async ({ request }) => {
+        sent.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json(cr({ change_request_id: "CR-9" }));
+      }),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+    await expand(user, "ORD-ABC123");
+
+    await user.click(await screen.findByRole("button", { name: "Request a change" }));
+    await user.click(screen.getByLabelText("Change type"));
+    await user.click(await screen.findByRole("option", { name: "creative" }));
+    expect(document.querySelector('[data-note="severity"]')?.textContent).toMatch(/minor.*auto-approved/i);
+    expect(screen.getByLabelText("Field")).toHaveValue("creative_id");
+    await user.type(screen.getByLabelText("New value"), "cr-777");
+    await user.click(document.querySelector('[data-action="create-change-request"]') as HTMLElement);
+    await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Create request" }));
+
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0]).toMatchObject({
+      order_id: "ORD-ABC123",
+      change_type: "creative",
+      diffs: [{ field: "creative_id", new_value: "cr-777" }],
+      proposed_values: { creative_id: "cr-777" },
+    });
+    await waitFor(() =>
+      expect(document.querySelector('[data-state="change-created"]')?.textContent).toMatch(/CR-9: auto-approved/),
+    );
+  });
+
+  it("lists why the agent refused a change request at validation", async () => {
+    serve();
+    server.use(
+      http.post(`${API}/api/v1/change-requests`, () =>
+        HttpResponse.json(
+          {
+            detail: {
+              error: "validation_failed",
+              change_request_id: "CR-F",
+              validation_errors: ["Impressions must be greater than 0"],
+            },
+          },
+          { status: 422 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+    await expand(user, "ORD-ABC123");
+
+    await user.click(await screen.findByRole("button", { name: "Request a change" }));
+    await user.click(document.querySelector('[data-action="create-change-request"]') as HTMLElement);
+    await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Create request" }));
+
+    await waitFor(() =>
+      expect(document.querySelector('[data-state="change-validation-failed"]')?.textContent).toMatch(
+        /saved it as a failed request.*greater than 0/,
+      ),
+    );
+  });
+});
+
+describe("moving an order, round two", () => {
+  beforeEach(async () => {
+    resetReachability();
+    await connect({ writesEnabled: true });
+    server.use(
+      http.get(`${API}/api/v1/orders`, () => HttpResponse.json({ orders: ORDERS, count: ORDERS.length })),
+      http.get(`${API}/api/v1/orders/ORD-ABC123/audit`, () => HttpResponse.json(AUDIT)),
+      http.get(`${API}/api/v1/change-requests`, () => HttpResponse.json({ change_requests: [], count: 0 })),
+    );
+  });
+
+  it("names the moves the agent allows now when it refuses one", async () => {
+    server.use(
+      http.post(`${API}/api/v1/orders/ORD-ABC123/transition`, () =>
+        HttpResponse.json(
+          { detail: { error: "invalid_transition", message: "no", current_status: "approved", allowed_transitions: ["in_progress", "cancelled"] } },
+          { status: 409 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+    await expand(user, "ORD-ABC123");
+    await waitFor(() => expect(transitionButtons().length).toBeGreaterThan(0));
+
+    await user.click(screen.getByLabelText("Acting as"));
+    await user.click(await screen.findByRole("option", { name: "system" }));
+    await user.click(document.querySelector('[data-action="transition-order:approved"]') as HTMLElement);
+    await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Approve" }));
+
+    await waitFor(() =>
+      expect(document.querySelector('[data-state="order-moved"]')?.textContent).toMatch(
+        /allows in progress, cancelled/,
+      ),
+    );
+  });
+
+  it("remembers the operator's name with the credential", async () => {
+    const user = userEvent.setup();
+    const first = renderScreen();
+    await expand(user, "ORD-ABC123");
+    await user.type(await screen.findByLabelText("Your name or id"), "anna");
+    await user.tab();
+
+    const { loadCredential } = await import("../../src/credentials/store");
+    await waitFor(async () => expect((await loadCredential())?.actorName).toBe("anna"));
+
+    first.unmount();
+    renderScreen();
+    await expand(user, "ORD-ABC123");
+    expect(await screen.findByLabelText("Your name or id")).toHaveValue("anna");
+  });
+
+  it("explains that system includes moves made from Claude Code", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await expand(user, "ORD-ABC123");
+
+    await waitFor(() =>
+      expect(document.querySelector('[data-note="system-actor"]')?.textContent).toMatch(/transition_order/),
+    );
+    expect(document.querySelector('[data-actor-kind="agent"]')).toBeTruthy();
+    expect(document.querySelector('[data-note="mcp"]')?.textContent).toMatch(/transition_order/);
   });
 });

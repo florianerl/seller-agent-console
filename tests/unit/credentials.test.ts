@@ -65,6 +65,19 @@ describe("the credential store", () => {
     expect((await loadCredential())?.credId).toBe(replaced.credId);
   });
 
+  it("keeps the name the operator acts under with the credential", async () => {
+    const saved = await saveCredential(base);
+    expect((await loadCredential())?.actorName).toBeUndefined();
+
+    await saveCredential({ ...saved, actorName: "anna" });
+    expect((await loadCredential())?.actorName).toBe("anna");
+
+    // Sign-out takes it with the key: it belongs to whoever held that key.
+    await clearCredential();
+    await saveCredential(base);
+    expect((await loadCredential())?.actorName).toBeUndefined();
+  });
+
   it("deletes the whole database on sign-out, not just the record", async () => {
     await saveCredential(base);
     expect(await databaseNames()).toContain(DB_NAME);

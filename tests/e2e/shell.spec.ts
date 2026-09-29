@@ -167,3 +167,21 @@ test("no axe violations with the drawer open", async ({ page }) => {
 
   expect(violations.map((v) => v.id)).toEqual([]);
 });
+
+// The route sweep above sees the Orders list only. An open row is where the
+// state map, the summary chips' pressed state and the review controls live.
+test("an open order row is free of axe violations", async ({ page }) => {
+  await connect(page, server, unhandled);
+  await page.goto(`${server.appUrl}#/orders`);
+  await page.getByRole("button", { name: "Show ORD-8ECAA495B7EF" }).click();
+  await expect(page.locator('[data-block="state-map"]')).toBeVisible();
+  await expect(page.locator('[data-list="transitions"]')).toBeVisible();
+
+  const { violations } = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+    .analyze();
+
+  expect(
+    violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`),
+  ).toEqual([]);
+});

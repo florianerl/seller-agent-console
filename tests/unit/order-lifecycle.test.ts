@@ -1,12 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
+  CR_STAGE,
   HAPPY_PATH,
+  MOVED_BY,
   ORDER_TRANSITIONS,
   STAGE,
+  STAGE_GROUPS,
   actorClaim,
+  actorKind,
+  enteredStatusAt,
   nextSteps,
+  predictSeverity,
+  refuseChange,
+  stageGroupOf,
 } from "../../src/api/order-lifecycle";
-import { ORDER_STATUSES } from "../../src/api/vocabulary";
+import { CHANGE_REQUEST_STATUSES, CHANGE_TYPES, ORDER_STATUSES } from "../../src/api/vocabulary";
 
 const STATUSES = ORDER_STATUSES.map((o) => o.value);
 
@@ -104,5 +112,93 @@ describe("actorClaim", () => {
 
   it("refuses a named actor with no name", () => {
     expect(actorClaim({ kind: "human", id: "  " })).toBeUndefined();
+  });
+});
+
+describe("stage groups", () => {
+  it("place every status in exactly one group", () => {
+    const grouped = STAGE_GROUPS.flatMap((g) => g.statuses);
+    expect([...grouped].sort()).toEqual([...STATUSES].sort());
+    expect(new Set(grouped).size).toBe(grouped.length);
+  });
+
+  it("say who moves every status", () => {
+    expect(Object.keys(MOVED_BY).sort()).toEqual([...STATUSES].sort());
+  });
+
+  it("find the group of a status", () => {
+    expect(stageGroupOf("syncing")?.id).toBe("execution");
+    expect(stageGroupOf("archived")).toBeUndefined();
+  });
+});
+
+describe("enteredStatusAt", () => {
+  it("is the last transition", () => {
+    expect(
+      enteredStatusAt({
+        created_at: "2026-09-28T13:00:00Z",
+        audit_log: { transitions: [{ timestamp: "2026-09-28T14:00:00" }, { timestamp: "2026-09-28T15:00:00" }] },
+      }),
+    ).toBe("2026-09-28T15:00:00");
+  });
+
+  // Creation writes no transition, so a draft has only its creation time.
+  it("falls back to creation for an order that never moved", () => {
+    expect(enteredStatusAt({ created_at: "2026-09-28T13:00:00Z", audit_log: { transitions: [] } })).toBe(
+      "2026-09-28T13:00:00Z",
+    );
+    expect(enteredStatusAt({ created_at: null })).toBeNull();
+  });
+});
+
+describe("actorKind", () => {
+  it.each([
+    ["system", "system"],
+    ["system:auto-approve", "system"],
+    ["human:anna", "human"],
+    ["agent:buyer-7", "agent"],
+    ["test-buyer:advertiser", "other"],
+  ] as const)("reads %s as %s", (actor, kind) => {
+    expect(actorKind(actor)).toBe(kind);
+  });
+});
+
+describe("change-request rules", () => {
+  it.each([
+    ["creative", "minor"],
+    ["flight_dates", "material"],
+    ["impressions", "material"],
+    ["targeting", "material"],
+    ["other", "material"],
+    ["pricing", "critical"],
+    ["cancellation", "critical"],
+  ] as const)("classifies %s as %s", (type, severity) => {
+    expect(predictSeverity(type).severity).toBe(severity);
+  });
+
+  it("covers every change type", () => {
+    for (const { value } of CHANGE_TYPES) expect(predictSeverity(value).note).toBeTruthy();
+  });
+
+  it("refuses an order with no deal", () => {
+    expect(refuseChange({ status: "booked", deal_id: "" })).toMatch(/no deal/);
+    expect(refuseChange({ status: "booked", deal_id: null })).toMatch(/no deal/);
+  });
+
+  it.each(["completed", "cancelled", "failed"])("refuses a %s order", (status) => {
+    expect(refuseChange({ status, deal_id: "D-1" })).toMatch(/does not modify/);
+  });
+
+  it.each(["syncing", "rejected", "unbooked"])("refuses a cancellation while %s", (status) => {
+    expect(refuseChange({ status, deal_id: "D-1" }, "cancellation")).toMatch(/cancellation/);
+    expect(refuseChange({ status, deal_id: "D-1" }, "creative")).toBeUndefined();
+  });
+
+  it("takes a change to a live order", () => {
+    expect(refuseChange({ status: "booked", deal_id: "D-1" }, "cancellation")).toBeUndefined();
+  });
+
+  it("describes every change-request status", () => {
+    for (const { value } of CHANGE_REQUEST_STATUSES) expect(CR_STAGE[value]).toBeTruthy();
   });
 });

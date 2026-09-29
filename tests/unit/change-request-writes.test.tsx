@@ -171,7 +171,10 @@ describe("reviewing a change request", () => {
     expect(document.querySelector('[data-action="approve"]')).toBeDisabled();
     await user.click(document.querySelector('[data-action="apply"]') as HTMLElement);
     const dialog = await screen.findByRole("dialog");
-    expect(dialog.textContent).toMatch(/writes the proposed values onto the order/i);
+    // Apply lands in the order's metadata only; saying "onto the order" let an
+    // operator believe a cancellation request would cancel it.
+    expect(dialog.textContent).toMatch(/into the order.s metadata/i);
+    expect(dialog.textContent).toMatch(/status does not change/i);
     await user.click(document.querySelector('[data-action="confirm-mutation"]') as HTMLElement);
 
     await waitFor(() => expect(applied).toEqual(["apply"]));

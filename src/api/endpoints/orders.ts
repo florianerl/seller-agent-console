@@ -22,6 +22,7 @@ export const StateTransition = z
     actor: z.string().catch("system"),
     reason: z.string().catch(""),
     transition_id: z.string().optional(),
+    metadata: z.record(z.string(), z.unknown()).catch({}),
   })
   .loose();
 export type StateTransition = z.infer<typeof StateTransition>;
@@ -31,7 +32,22 @@ export const Order = z
     order_id: z.string(),
     status: z.string(),
     deal_id: z.string().nullable().catch(null),
+    quote_id: z.string().nullable().catch(null),
     created_at: z.string().nullable().catch(null),
+    /**
+     * Whatever the creator attached (a buyer agent sends `source`, `persona`),
+     * plus what applying a change request writes: its `proposed_values`
+     * merged in, and a `_changed_<field>` key per diff. It is the only place
+     * an applied change is visible, because apply never touches the status.
+     */
+    metadata: z.record(z.string(), z.unknown()).catch({}),
+    // The list carries each order's full audit, which is what lets a row say
+    // how long the order has sat in its status without a fetch per row.
+    audit_log: z
+      .object({ transitions: z.array(StateTransition).catch([]) })
+      .loose()
+      .nullable()
+      .catch(null),
   })
   .loose();
 export type Order = z.infer<typeof Order>;

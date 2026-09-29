@@ -1,4 +1,4 @@
-import type { ActorKind, OrderStatus } from "./vocabulary";
+import { words, type ActorKind, type OrderStatus } from "./vocabulary";
 
 /**
  * The order state machine's move table, so the Orders screen can offer the
@@ -96,11 +96,11 @@ export function nextSteps(status: string): readonly NextStep[] {
  */
 export const STAGE: Readonly<Record<OrderStatus, string>> = {
   draft: "Not yet submitted. Submit it for review, or cancel it.",
-  submitted: "Submitted and waiting for review. Route it to human approval, approve it directly, or cancel it.",
-  pending_approval: "Held at the approval gate for a human decision: approve or reject it.",
+  submitted: "Submitted and waiting for review. Send it for approval, approve it directly, or cancel it.",
+  pending_approval: "Waiting for a human decision: approve or reject it.",
   approved: "Approved and ready to execute. Start execution when the order should go live.",
   in_progress: "Executing. Mark it syncing once it is being pushed to the ad server.",
-  syncing: "Being synced to the ad server. Mark it booked when the ad server confirms, or failed.",
+  syncing: "Being pushed to the ad server. Mark it booked when the ad server confirms, or failed if it did not take.",
   booked: "Booked in the ad server. Mark it completed once fulfilled, or unbooked if the booking was reversed.",
   completed: "Fulfilled. This is terminal; no further transitions.",
   rejected: "Rejected at approval. Return it to draft to revise and resubmit.",
@@ -108,6 +108,89 @@ export const STAGE: Readonly<Record<OrderStatus, string>> = {
   cancelled: "Cancelled. This is terminal; no further transitions.",
   unbooked: "The ad server reversed the booking. Return it to draft to rebook.",
 };
+
+/**
+ * Who moves an order out of this status — the part the status name does not
+ * say, and that an operator would otherwise assume. Upstream moves no order
+ * on its own: no flow, ad-server sync, approval or change request calls the
+ * state machine (services/order_service.py is the only caller, reached from
+ * the REST transition route and the MCP `transition_order` tool). So every
+ * waiting order waits on a person, and the ad-server states in particular are
+ * a claim someone makes, not a reading of the ad server.
+ */
+export const MOVED_BY: Readonly<Record<OrderStatus, string>> = {
+  draft: "Waits on the seller: nothing submits a draft automatically.",
+  submitted: "Waits on the seller. The agent has no approval gate for orders; whoever moves it decides whether it needs approval.",
+  pending_approval:
+    "Waits on the seller. No approval queue lists orders — the Inbox and the MCP approval tools cover proposals only — so this screen is where it gets decided.",
+  approved: "Waits on the seller to start execution.",
+  in_progress: "Set by hand. Nothing in the agent watches the ad server, so mark each step when it happens there.",
+  syncing: "Set by hand. The agent does not check the ad server; mark booked or failed from what the ad server shows.",
+  booked: "Set by hand, from the ad server's side of the booking.",
+  completed: "Nothing moves it again.",
+  rejected: "Waits on the seller to return it to draft, or leave it.",
+  failed: "Waits on the seller to return it to draft, or leave it.",
+  cancelled: "Nothing moves it again.",
+  unbooked: "Waits on the seller to return it to draft to rebook.",
+};
+
+/**
+ * Statuses grouped by what they ask of the operator. The list's summary chips
+ * and the state map both read this, so "where is everything" and "where is
+ * this one" use the same vocabulary.
+ */
+export const STAGE_GROUPS: readonly {
+  readonly id: "intake" | "approval" | "execution" | "rework" | "closed";
+  readonly label: string;
+  readonly statuses: readonly OrderStatus[];
+  /** Whether an order here is waiting on the seller to act. */
+  readonly needsAction: boolean;
+}[] = [
+  { id: "intake", label: "Intake", statuses: ["draft", "submitted"], needsAction: true },
+  { id: "approval", label: "Approval", statuses: ["pending_approval"], needsAction: true },
+  {
+    id: "execution",
+    label: "Execution",
+    statuses: ["approved", "in_progress", "syncing", "booked"],
+    needsAction: false,
+  },
+  { id: "rework", label: "Rework", statuses: ["rejected", "failed", "unbooked"], needsAction: true },
+  { id: "closed", label: "Closed", statuses: ["completed", "cancelled"], needsAction: false },
+];
+
+export type StageGroupId = (typeof STAGE_GROUPS)[number]["id"];
+
+export function stageGroupOf(status: string): (typeof STAGE_GROUPS)[number] | undefined {
+  return STAGE_GROUPS.find((g) => (g.statuses as readonly string[]).includes(status));
+}
+
+/**
+ * When the order entered its current status: the last transition, or its
+ * creation if it has never moved (creation writes no transition). The agent
+ * reports no time-in-state of its own — the report route's docstring promises
+ * one it does not compute — so this is derived here from the audit the list
+ * already carries.
+ */
+export function enteredStatusAt(order: {
+  readonly created_at: string | null;
+  readonly audit_log?: { readonly transitions: readonly { readonly timestamp: string }[] } | null;
+}): string | null {
+  const transitions = order.audit_log?.transitions ?? [];
+  return transitions.length > 0 ? transitions[transitions.length - 1]!.timestamp : order.created_at;
+}
+
+/**
+ * The actor prefix convention (models/order_state_machine.py). `system` is
+ * ambiguous on purpose to say so: it is what the REST route stores when no
+ * actor is sent, and what every MCP `transition_order` call stores, because
+ * that tool passes none — so a move made from Claude Code reads as system.
+ */
+export function actorKind(actor: string): "human" | "agent" | "system" | "other" {
+  if (actor === "system" || actor.startsWith("system:")) return "system";
+  if (actor.startsWith("human:")) return "human";
+  if (actor.startsWith("agent:")) return "agent";
+  return "other";
+}
 
 /** The happy path, for the lifecycle strip. Off-path statuses are shown beside it, not in it. */
 export const HAPPY_PATH: readonly OrderStatus[] = [
@@ -133,3 +216,67 @@ export function actorClaim(actor: OrderActor): string | undefined {
   const id = actor.id.trim();
   return id ? `${actor.kind}:${id}` : undefined;
 }
+
+// --- change requests ---------------------------------------------------------
+
+export type Severity = "minor" | "material" | "critical";
+
+/**
+ * `classify_severity` in models/change_request.py. Minor requests are
+ * auto-approved the moment they are created (`approved_by:
+ * "system:auto-approve"`); material and critical ones wait for review, and
+ * upstream routes the two identically despite the names.
+ */
+export function predictSeverity(changeType: string): { severity: Severity; note: string } {
+  switch (changeType) {
+    case "creative":
+      return { severity: "minor", note: "Auto-approved as soon as it is created; it then only needs applying." };
+    case "flight_dates":
+      return {
+        severity: "material",
+        note: "Material, so it waits for review — unless the diffs shift the flight by 3 days or less, which makes it minor and auto-approved.",
+      };
+    case "pricing":
+    case "cancellation":
+      return { severity: "critical", note: "Critical: it waits for review before it can be applied." };
+    default:
+      return { severity: "material", note: "Material: it waits for review before it can be applied." };
+  }
+}
+
+/**
+ * Why the agent would refuse a change request against this order, or
+ * undefined when it would take it. Mirrors `create_change_request` (services/order_service.py) and
+ * `validate_change_request` (models/change_request.py). A refusal at
+ * validation is still *saved*, as a failed request, so it is worth catching
+ * before the call rather than after.
+ */
+export function refuseChange(
+  order: { readonly status: string; readonly deal_id: string | null },
+  changeType?: string,
+): string | undefined {
+  if (!order.deal_id) {
+    return "This order has no deal attached, and the agent only takes change requests for orders with one.";
+  }
+  if (order.status === "completed" || order.status === "cancelled" || order.status === "failed") {
+    return `The agent does not modify an order that is ${words(order.status)}.`;
+  }
+  if (
+    changeType === "cancellation" &&
+    !["draft", "submitted", "pending_approval", "approved", "in_progress", "booked"].includes(order.status)
+  ) {
+    return `The agent refuses a cancellation request while the order is ${words(order.status)}.`;
+  }
+  return undefined;
+}
+
+/** What a change request in each status is waiting for. */
+export const CR_STAGE: Readonly<Record<string, string>> = {
+  pending: "Created; not yet classified.",
+  validating: "Being validated.",
+  pending_approval: "Waiting for review. Nothing else lists it — no approval queue and no MCP tool — so review it here.",
+  approved: "Approved, not applied yet. Nothing on the order changes until someone applies it.",
+  rejected: "Rejected. Nothing on the order changed.",
+  applied: "Applied: its values were written into the order's metadata.",
+  failed: "Refused at validation when it was created. Nothing on the order changed.",
+};

@@ -9,6 +9,7 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import {
   agentById,
+  applyChangeRequest,
   apiKeyById,
   assemblePackage,
   audienceMatch,
@@ -46,6 +47,7 @@ import {
   quoteById,
   registerCurator,
   removeRegisteredAgent,
+  reviewChangeRequest,
   revokeApiKey,
   sendSessionMessage,
   setInventoryTypeOverride,
@@ -61,12 +63,22 @@ import {
   withdrawProposal,
   type CreatedApiKey,
   type BulkDealResponse,
+  type ChangeRequestAck,
+  type ChangeRequestReviewInput,
   type LineItem,
   type Order,
   type Proposal,
 } from "../api/endpoints";
 import { describe, type Result } from "../api/errors";
-import { actorClaim, isOrderStatus, nextSteps, type NextStep, type OrderActor } from "../api/order-lifecycle";
+import {
+  actorClaim,
+  isOrderStatus,
+  nextSteps,
+  predictSeverity,
+  refuseChange,
+  type NextStep,
+  type OrderActor,
+} from "../api/order-lifecycle";
 import {
   ACTOR_KINDS,
   BULK_DEAL_ACTIONS,
@@ -81,6 +93,7 @@ import {
   type DealTypeCode,
   type QuoteMediaType,
 } from "../api/vocabulary";
+import { ConfirmAction } from "../components/ConfirmAction";
 import { EnumSelect } from "../components/EnumSelect";
 import { FormFields, FormRow, WriteForm } from "../components/WriteForm";
 import { WritesNotice } from "../components/WritesNotice";
@@ -702,7 +715,10 @@ export function OrderCreateWrite({ onCreated }: { onCreated?: (orderId: string) 
   const [quoteId, setQuoteId] = useState("");
   const [pickDeal, setPickDeal] = useState(false);
 
-  const create = useMutation<{ deal_id?: string; quote_id?: string }, Order>(
+  const create = useMutation<
+    { deal_id?: string; quote_id?: string; metadata: Record<string, unknown> },
+    Order
+  >(
     (c, args) => createOrder(c, args),
     { invalidates: ["orders:*", "orders-report"] },
   );
@@ -720,6 +736,9 @@ export function OrderCreateWrite({ onCreated }: { onCreated?: (orderId: string) 
           .run({
             ...(dealId.trim() ? { deal_id: dealId.trim() } : {}),
             ...(quoteId.trim() ? { quote_id: quoteId.trim() } : {}),
+            // Buyer agents tag their orders with a source; so does the
+            // console, or its orders would read as "source not recorded".
+            metadata: { source: "seller-console" },
           })
           .then((result) => {
             if (result.kind === "ok") onCreated?.(result.data.order_id);
@@ -798,7 +817,7 @@ export function OrderTransitionWrites({
    */
   onAccepted: (to: string | undefined) => void;
 }) {
-  const { writesEnabled, credential } = useCredential();
+  const { writesEnabled, credential, setActorName } = useCredential();
   const [reason, setReason] = useState("");
   const [chosen, setChosen] = useState<string | undefined>();
   const steps = nextSteps(status);
@@ -833,6 +852,9 @@ export function OrderTransitionWrites({
     transition.last?.kind === "unavailable" &&
     transition.last.reason === "http" &&
     transition.last.status === 409;
+  // The 409 body names the moves that are legal now; the screen's own table
+  // may be the thing that is out of date.
+  const allowedNow = problemList(transition.last, "allowed_transitions");
 
   const go = (to: string) => {
     if (!claim) return;
@@ -924,6 +946,11 @@ export function OrderTransitionWrites({
             label={actor.kind === "human" ? "Your name or id" : "Agent id"}
             value={actor.id}
             onChange={(e) => onActorChange({ ...actor, id: e.target.value })}
+            // Only a person's name is remembered: an agent id is a one-off
+            // claim about someone else.
+            onBlur={() => {
+              if (actor.kind === "human") void setActorName(actor.id);
+            }}
             disabled={!writesEnabled}
           />
         )}
@@ -949,10 +976,15 @@ export function OrderTransitionWrites({
       )}
       {moved && (
         <Typography variant="body2" sx={{ color: palette.warningText }} data-state="order-moved">
-          The agent refused the move because the order is no longer in{" "}
-          {words(status)}. Nothing was applied; the order has been re-read.
+          The agent refused the move: the order is no longer in {words(status)}
+          {allowedNow.length > 0 ? `, and from where it is now it allows ${allowedNow.map(words).join(", ")}` : ""}.
+          Nothing was applied; the order has been re-read.
         </Typography>
       )}
+      <Typography variant="caption" color="text.secondary" data-note="mcp">
+        From Claude Code, the same move is the MCP tool <code>transition_order</code>. It records
+        the actor as &ldquo;system&rdquo; whoever calls it, and cannot read this timeline back.
+      </Typography>
     </Stack>
   );
 }
@@ -1654,63 +1686,362 @@ export function CuratorWrite() {
   );
 }
 
-/** With `orderId`, the order is fixed — the form is being raised from that order's row. */
-export function ChangeRequestCreate({ orderId: fixedOrder }: { orderId?: string } = {}) {
-  const { writesEnabled } = useCredential();
+/**
+ * The field a change of each type usually touches, so the form starts from
+ * something the agent's severity rules and the order's metadata understand.
+ * A request with no field change has nothing to apply.
+ */
+const CHANGE_FIELD: Readonly<Record<string, string>> = {
+  creative: "creative_id",
+  flight_dates: "flight_end",
+  impressions: "impressions",
+  pricing: "final_cpm",
+  targeting: "targeting",
+  cancellation: "",
+  other: "",
+};
+
+function problemList(result: Result<unknown> | undefined, key: string): string[] {
+  if (result?.kind !== "unavailable") return [];
+  const value = result.problem?.[key];
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+}
+
+/**
+ * With `orderId`, the order is fixed — the form is being raised from that
+ * order's row, and `order` lets it say up front what the agent would refuse.
+ */
+export function ChangeRequestCreate({
+  orderId: fixedOrder,
+  order,
+}: { orderId?: string; order?: { status: string; deal_id: string | null } } = {}) {
+  const { writesEnabled, actorName } = useCredential();
   const [typedOrder, setOrderId] = useState("");
   // `flight_extension` was the default here once; it is not a ChangeType, so
   // every request sent with it was a 400.
   const [changeType, setChangeType] = useState<string>("flight_dates");
+  const [field, setField] = useState<string | undefined>();
+  const [newValue, setNewValue] = useState("");
   const [reason, setReason] = useState("");
   const orderId = fixedOrder ?? typedOrder;
+  const fieldName = (field ?? CHANGE_FIELD[changeType] ?? "").trim();
+  const refusal = order ? refuseChange(order, changeType) : undefined;
+  const { severity, note } = predictSeverity(changeType);
+
   const create = useMutation<
-    { idempotency_key: string; order_id: string; change_type: string; reason?: string },
-    unknown
+    {
+      idempotency_key: string;
+      order_id: string;
+      change_type: string;
+      reason?: string;
+      requested_by?: string;
+      diffs?: { field: string; new_value: unknown }[];
+      proposed_values?: Record<string, unknown>;
+    },
+    ChangeRequestAck
   >((c, a) => createChangeRequest(c, a), {
     // The order's audit counts its change requests, so it goes stale too.
     invalidates: ["change-requests:*", `order-audit:${orderId.trim()}`],
   });
 
+  const value: unknown =
+    changeType === "impressions" && newValue.trim() !== "" ? Number(newValue) : newValue.trim();
+  const change = fieldName && newValue.trim() ? { [fieldName]: value } : undefined;
+  const created = create.last?.kind === "ok" ? create.last.data : undefined;
+  const createdStatus = typeof created?.["status"] === "string" ? created["status"] : undefined;
+  const refused = problemList(create.last, "validation_errors");
+
   return (
-    <WriteForm
-      title="Submit a change request?"
-      confirmLabel="Create request"
-      action="create-change-request"
-      blocked={!writesEnabled || !orderId.trim()}
-      pending={create.pending}
-      last={create.last}
-      onConfirm={() =>
-        void create.run({
-          idempotency_key: newKey(),
-          order_id: orderId.trim(),
-          change_type: changeType,
-          ...(reason ? { reason } : {}),
-        })
-      }
-      consequence={
-        <>
-          Raises a <strong>{words(changeType)}</strong> change request against {orderId.trim()}.
-          It then waits for review on the Change requests screen; nothing on the order changes
-          until it is approved and applied. Idempotent per order and key for 24 hours. Same key +
-          different body is 409.
-        </>
-      }
-    >
-      <FormFields>
-        {fixedOrder === undefined && (
-          <TextField size="small" label="Order id" value={typedOrder} onChange={(e) => setOrderId(e.target.value)} disabled={!writesEnabled} />
+    <Box>
+      {refusal ? (
+        <Typography variant="body2" color="text.secondary" data-state="change-refused">
+          {refusal}
+        </Typography>
+      ) : (
+        <WriteForm
+          title="Submit a change request?"
+          confirmLabel="Create request"
+          action="create-change-request"
+          blocked={!writesEnabled || !orderId.trim()}
+          pending={create.pending}
+          last={create.last?.kind === "ok" || refused.length > 0 ? undefined : create.last}
+          onConfirm={() =>
+            void create.run({
+              idempotency_key: newKey(),
+              order_id: orderId.trim(),
+              change_type: changeType,
+              ...(reason ? { reason } : {}),
+              ...(actorName ? { requested_by: `human:${actorName}` } : {}),
+              ...(change
+                ? { diffs: [{ field: fieldName, new_value: value }], proposed_values: change }
+                : {}),
+            })
+          }
+          consequence={
+            <>
+              Raises a <strong>{words(changeType)}</strong> change request against{" "}
+              {orderId.trim()}
+              {change ? (
+                <>
+                  , setting <strong>{fieldName}</strong> to <strong>{String(value)}</strong>
+                </>
+              ) : (
+                <> with no field change, so applying it will write nothing</>
+              )}
+              . {note} Nothing on the order changes until it is applied, and applying writes into
+              the order&apos;s metadata, never its status. Idempotent per order and key for 24
+              hours.
+            </>
+          }
+        >
+          <FormFields>
+            {fixedOrder === undefined && (
+              <TextField size="small" label="Order id" value={typedOrder} onChange={(e) => setOrderId(e.target.value)} disabled={!writesEnabled} />
+            )}
+            <EnumSelect
+              label="Change type"
+              value={changeType}
+              options={CHANGE_TYPES}
+              onChange={(v) => {
+                if (!v) return;
+                setChangeType(v);
+                setField(undefined);
+              }}
+              disabled={!writesEnabled}
+              sx={{ minWidth: 180 }}
+            />
+            <TextField size="small" label="Field" value={fieldName} onChange={(e) => setField(e.target.value)} disabled={!writesEnabled} />
+            <TextField
+              size="small"
+              label="New value"
+              type={changeType === "impressions" ? "number" : "text"}
+              value={newValue}
+              onChange={(e) => setNewValue(e.target.value)}
+              disabled={!writesEnabled}
+            />
+            <TextField size="small" label="Request reason" value={reason} onChange={(e) => setReason(e.target.value)} disabled={!writesEnabled} />
+          </FormFields>
+        </WriteForm>
+      )}
+      {!refusal && (
+        <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 0.5 }} data-note="severity">
+          {words(changeType)} is {severity}. {note}
+        </Typography>
+      )}
+      {created && (
+        <Typography variant="body2" sx={{ mt: 1 }} data-state="change-created">
+          Created {typeof created["change_request_id"] === "string" ? created["change_request_id"] : "the request"}
+          {createdStatus === "approved"
+            ? ": auto-approved. Apply it from the list to write it onto the order."
+            : createdStatus === "pending_approval"
+              ? ": waiting for review in the list."
+              : createdStatus
+                ? `: ${words(createdStatus)}.`
+                : "."}
+        </Typography>
+      )}
+      {refused.length > 0 && (
+        <Box sx={{ mt: 1, color: palette.error }} data-state="change-validation-failed">
+          <Typography variant="body2">
+            The agent refused it, and saved it as a failed request:
+          </Typography>
+          <Box component="ul" sx={{ m: 0, pl: 2.5, fontSize: 13 }}>
+            {refused.map((e) => (
+              <li key={e}>{e}</li>
+            ))}
+          </Box>
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+/**
+ * Review and apply for one change request. Shared by the Change requests
+ * screen and the order row: a pending request reaches no approval queue and
+ * has no MCP tool, so wherever an operator meets it has to be able to act.
+ */
+export function ChangeRequestReviewWrites({
+  crId,
+  status,
+  changeType,
+  onChanged,
+  compact = false,
+}: {
+  crId: string;
+  status: string;
+  changeType?: string;
+  onChanged: () => void;
+  /**
+   * Show only what this status allows. The Change requests screen keeps every
+   * control visible and disabled, so the whole flow is legible there; in an
+   * order row, beside the request's own status sentence, the one live action
+   * is what matters.
+   */
+  compact?: boolean;
+}) {
+  const { writesEnabled, actorName, setActorName } = useCredential();
+  const [reason, setReason] = useState("");
+  const [typedName, setName] = useState<string | undefined>();
+  // The stored name until the operator types a different one here.
+  const name = typedName ?? actorName;
+  const [pendingDecision, setPendingDecision] = useState<"approve" | "reject" | undefined>();
+  const [pendingApply, setPendingApply] = useState(false);
+
+  const invalidate = {
+    // Apply writes into the order's metadata, so the orders read goes stale
+    // too; review changes nothing on the order, but the same list shows it.
+    invalidates: ["change-requests:*", `change-request:${crId}`, "orders:*", "order-audit:*"] as const,
+  };
+
+  const review = useMutation<{ id: string; body: ChangeRequestReviewInput }, unknown>(
+    (c, args) => reviewChangeRequest(c, args.id, args.body),
+    invalidate,
+  );
+  const apply = useMutation<{ id: string }, unknown>(
+    (c, args) => applyChangeRequest(c, args.id),
+    invalidate,
+  );
+
+  const reviewable = status === "pending_approval";
+  const applicable = status === "approved";
+  const busy = review.pending || apply.pending;
+  const blocked = !writesEnabled;
+  const outcome = review.last ?? apply.last;
+  const showReview = !compact || reviewable;
+  const showApply = !compact || applicable;
+
+  return (
+    <Box sx={{ mt: 1 }} data-block="change-request-controls">
+      {showReview && (
+        <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 1 }}>Review this request</Typography>
+      )}
+
+      <FormRow>
+        {showReview && (
+          <>
+            <TextField
+              size="small"
+              label="Reason"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              disabled={blocked || !reviewable || busy}
+              sx={{ minWidth: 240 }}
+            />
+            <TextField
+              size="small"
+              label="Your name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onBlur={() => void setActorName(name)}
+              disabled={blocked || !reviewable || busy}
+              sx={{ minWidth: 200 }}
+            />
+            <Button
+              size="small"
+              variant="contained"
+              data-action="approve"
+              disabled={blocked || !reviewable || busy}
+              onClick={() => setPendingDecision("approve")}
+            >
+              Approve
+            </Button>
+            <Button
+              size="small"
+              variant="outlined"
+              data-action="reject"
+              disabled={blocked || !reviewable || busy}
+              onClick={() => setPendingDecision("reject")}
+            >
+              Reject
+            </Button>
+          </>
         )}
-        <EnumSelect
-          label="Change type"
-          value={changeType}
-          options={CHANGE_TYPES}
-          onChange={(v) => v && setChangeType(v)}
-          disabled={!writesEnabled}
-          sx={{ minWidth: 180 }}
-        />
-        <TextField size="small" label="Request reason" value={reason} onChange={(e) => setReason(e.target.value)} disabled={!writesEnabled} />
-      </FormFields>
-    </WriteForm>
+        {showApply && (
+          <Button
+            size="small"
+            variant={compact ? "outlined" : "text"}
+            data-action="apply"
+            disabled={blocked || !applicable || busy}
+            onClick={() => setPendingApply(true)}
+          >
+            {apply.pending ? "Applying…" : "Apply to order"}
+          </Button>
+        )}
+      </FormRow>
+      {showReview && (
+        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75 }}>
+          Name is stored as given; the agent does not verify it
+        </Typography>
+      )}
+
+      {writesEnabled && !reviewable && !applicable && (
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }} data-state="not-actionable">
+          This request is {status.replace(/_/g, " ")} — only a pending-approval
+          request can be reviewed, and only an approved one can be applied.
+        </Typography>
+      )}
+
+      {outcome && outcome.kind !== "ok" && (
+        <Typography variant="body2" sx={{ mt: 1, color: palette.error }} data-state="write-failed">
+          {describe(outcome)}
+        </Typography>
+      )}
+
+      <ConfirmAction
+        open={pendingDecision !== undefined}
+        title={pendingDecision === "reject" ? "Reject this change request?" : "Approve this change request?"}
+        confirmLabel={pendingDecision === "reject" ? "Reject" : "Approve"}
+        pending={review.pending}
+        onCancel={() => setPendingDecision(undefined)}
+        consequence={
+          <>
+            The agent records this decision on the change request. It keeps the
+            first decision it receives and refuses later ones, so if this fails
+            without a clear answer, re-read the request before trying again
+            rather than reviewing twice.
+          </>
+        }
+        onConfirm={() => {
+          const decision = pendingDecision;
+          setPendingDecision(undefined);
+          if (!decision) return;
+          void review
+            .run({
+              id: crId,
+              body: {
+                decision,
+                ...(reason ? { reason } : {}),
+                ...(name.trim() ? { decided_by: name.trim() } : {}),
+              },
+            })
+            .then(onChanged);
+        }}
+      />
+
+      <ConfirmAction
+        open={pendingApply}
+        title="Apply this change request to the order?"
+        confirmLabel="Apply"
+        pending={apply.pending}
+        onCancel={() => setPendingApply(false)}
+        consequence={
+          <>
+            The agent writes the proposed values into the order&apos;s metadata and
+            marks this request applied. The order&apos;s status does not change
+            {changeType === "cancellation"
+              ? " — applying a cancellation request does not cancel the order; that is a separate transition"
+              : ""}
+            . A second apply is refused, so if this fails without a clear answer,
+            re-read the request rather than applying twice.
+          </>
+        }
+        onConfirm={() => {
+          setPendingApply(false);
+          void apply.run({ id: crId }).then(onChanged);
+        }}
+      />
+    </Box>
   );
 }
 

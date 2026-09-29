@@ -81,3 +81,19 @@ export function dateOrStamp(iso: string | null | undefined): string {
 export function plural(count: number, singular: string, plural?: string): string {
   return `${count.toLocaleString()} ${count === 1 ? singular : (plural ?? `${singular}s`)}`;
 }
+
+/**
+ * How long ago, coarsely: "4 min", "3 h", "2 d". For "in this status for …",
+ * where the exact instant is one hover away and the order of magnitude is
+ * what an operator scans for. Naive agent timestamps are UTC, as in `stamp`.
+ */
+export function elapsed(iso: string | null | undefined, now: number = Date.now()): string {
+  const at = parse(iso);
+  if (!at) return "—";
+  const minutes = Math.max(0, Math.floor((now - at.getTime()) / 60_000));
+  if (minutes < 1) return "under a minute";
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return `${hours} h`;
+  return `${Math.floor(hours / 24)} d`;
+}

@@ -36,6 +36,9 @@ type CredentialState = {
   /** Whether this console may issue state-changing requests. Off by default. */
   readonly writesEnabled: boolean;
   readonly setWritesEnabled: (on: boolean) => Promise<void>;
+  /** The name the operator acts under; empty when never given. */
+  readonly actorName: string;
+  readonly setActorName: (name: string) => Promise<void>;
 };
 
 const CredentialContext = createContext<CredentialState | undefined>(undefined);
@@ -84,6 +87,18 @@ export function CredentialProvider({ children }: { children: ReactNode }) {
     [credential],
   );
 
+  const setActorName = useCallback(
+    async (name: string) => {
+      if (!credential) return;
+      const trimmed = name.trim();
+      if ((credential.actorName ?? "") === trimmed) return;
+      const { actorName: _previous, ...rest } = credential;
+      const saved = await saveCredential(trimmed ? { ...rest, actorName: trimmed } : rest);
+      setCredential(saved);
+    },
+    [credential],
+  );
+
   const value = useMemo<CredentialState>(
     () => ({
       credential,
@@ -95,8 +110,10 @@ export function CredentialProvider({ children }: { children: ReactNode }) {
       signOut,
       writesEnabled: credential?.writesEnabled === true,
       setWritesEnabled,
+      actorName: credential?.actorName ?? "",
+      setActorName,
     }),
-    [credential, loading, signIn, signOut, setWritesEnabled],
+    [credential, loading, signIn, signOut, setWritesEnabled, setActorName],
   );
 
   return <CredentialContext value={value}>{children}</CredentialContext>;

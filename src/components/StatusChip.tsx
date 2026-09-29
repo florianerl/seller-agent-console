@@ -20,6 +20,14 @@ const TONE: Record<string, string> = {
   agreed: palette.ok,
   under_review: palette.warningText,
   withdrawn: palette.error,
+  // Change requests: applied is done; pending review is waiting on someone.
+  applied: palette.ok,
+  pending: palette.warningText,
+  validating: palette.warningText,
+  // Change-request severity. Critical needs review like material does, but
+  // it is the one to read first.
+  critical: palette.error,
+  material: palette.warningText,
   sold_out: palette.error,
 };
 

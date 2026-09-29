@@ -155,7 +155,10 @@ export const createChangeRequest = (
     order_id: string;
     change_type: string;
     diffs?: { field: string; old_value?: unknown; new_value?: unknown }[];
+    // Merged into the order's metadata on apply; diffs only add `_changed_*`.
+    proposed_values?: Record<string, unknown>;
     reason?: string;
+    requested_by?: string;
   },
   signal?: AbortSignal,
 ): Promise<Result<ChangeRequestAck>> =>

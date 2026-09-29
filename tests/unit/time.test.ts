@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { asUtc, dateOrStamp, day, plural, stamp } from "../../src/lib/time";
+import { asUtc, dateOrStamp, day, elapsed, plural, stamp } from "../../src/lib/time";
 
 describe("naive timestamps are read as UTC", () => {
   /**
@@ -91,5 +91,31 @@ describe("counts", () => {
   it("takes an irregular plural", () => {
     expect(plural(1, "entry", "entries")).toBe("1 entry");
     expect(plural(3, "entry", "entries")).toBe("3 entries");
+  });
+});
+
+describe("elapsed", () => {
+  const now = Date.parse("2026-09-29T12:00:00Z");
+
+  it.each([
+    ["2026-09-29T11:59:40Z", "under a minute"],
+    ["2026-09-29T11:48:00Z", "12 min"],
+    ["2026-09-29T09:00:00Z", "3 h"],
+    ["2026-09-27T13:00:00Z", "47 h"],
+    ["2026-09-27T12:00:00Z", "2 d"],
+    ["2026-09-25T12:00:00Z", "4 d"],
+  ])("puts %s at %s", (iso, expected) => {
+    expect(elapsed(iso, now)).toBe(expected);
+  });
+
+  // The state machine writes naive UTC; read as local time it would be off by
+  // the viewer's offset, which is the bug asUtc exists for.
+  it("reads a naive timestamp as UTC", () => {
+    expect(elapsed("2026-09-29T11:00:00", now)).toBe("1 h");
+  });
+
+  it("does not invent a duration from nothing", () => {
+    expect(elapsed(null, now)).toBe("—");
+    expect(elapsed("not a date", now)).toBe("—");
   });
 });

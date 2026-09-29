@@ -26,6 +26,15 @@ export type Credential = {
    * answer we want for anything we are unsure about.
    */
   readonly writesEnabled: boolean;
+  /**
+   * The name this operator acts under, sent as `human:<name>` on an order
+   * transition and as `decided_by` on a review. The agent verifies neither,
+   * so this is a label, not an identity. It is kept here for the same reason
+   * as the write switch — it belongs to whoever holds this key, and sign-out
+   * takes it — and because asking for it per visit produced audit trails
+   * signed "sdgf", "gds" and "sdg" within a minute of each other.
+   */
+  readonly actorName?: string;
 };
 
 export { DB_NAME };
