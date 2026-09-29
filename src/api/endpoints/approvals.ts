@@ -79,13 +79,16 @@ export const approvalById = (
  *
  * | Call    | Idempotent on retry?                        | Confirm? | A failure leaves behind |
  * |---------|---------------------------------------------|----------|-------------------------|
- * | decide  | No. The agent records the first decision and | Yes      | Either the decision was recorded or it was not. There is no partial decision: the flow resumes or it stays gated. |
+ * | decide  | No. The agent records the first decision and | Yes      | Either the decision was recorded or it was not. Recording it does not move the flow; only resume does. |
  * |         | rejects a second, so a retry after an         |          | |
  * |         | unclear failure can answer 409 rather than    |          | |
  * |         | duplicating. Retrying is safe; assuming the   |          | |
  * |         | retry's answer describes *this* attempt is not.|         | |
- * | resume  | Yes, in effect. Resuming a flow already       | Yes      | The flow either advanced or did not. Resuming twice is not two advances. |
- * |         | running is a no-op upstream.                  |          | |
+ * | resume  | No. Each call rebuilds the proposal flow from | Yes      | Nothing is stored; the event was emitted or it was not. |
+ * |         | its snapshot and emits proposal.accepted /    |          | |
+ * |         | .rejected / .countered again. Refused (400)   |          | |
+ * |         | before a decision exists, and for any gate    |          | |
+ * |         | but proposal_handling / proposal_decision.    |          | |
  *
  * Both are refused before they are sent while the write switch is off
  * (src/api/policy.ts, ADR 12).

@@ -196,47 +196,148 @@ describe("deciding an approval", () => {
     );
   });
 
-  it("resumes a flow without a decision dialog", async () => {
+  // Upstream answers a resume before a decision with 400 "has not been
+  // decided yet", so offering it beside Approve could only ever fail.
+  it("offers no resume while the gate is still pending", async () => {
     await connect(true);
     const user = userEvent.setup();
-    const resumed: string[] = [];
-    server.use(
-      http.post(`${API}/approvals/appr-1/resume`, () => {
-        resumed.push("resume");
-        return HttpResponse.json({ ok: true });
-      }),
-    );
-
     renderScreen();
     await openGate(user);
-    await user.click(document.querySelector('[data-action="resume"]') as HTMLElement);
 
-    await waitFor(() => expect(resumed).toEqual(["resume"]));
+    expect(document.querySelector('[data-action="approve"]')).toBeEnabled();
+    expect(document.querySelector('[data-action="resume"]')).toBeNull();
   });
 
-  it("disables resume while a decision is in flight, and the reverse", async () => {
+  it("offers resume once decided, says what it emits, and reports what the flow became", async () => {
     await connect(true);
-    const user = userEvent.setup();
-    let release: (() => void) | undefined;
+    const gate = { ...GATE, flow_type: "proposal_handling", gate_name: "proposal_decision", status: "approved" };
+    const resumed: string[] = [];
     server.use(
-      http.post(`${API}/approvals/appr-1/decide`, async () => {
-        await new Promise<void>((resolve) => {
-          release = resolve;
-        });
+      http.get(`${API}/approvals`, () => HttpResponse.json({ approvals: [gate] })),
+      http.get(`${API}/approvals/appr-1`, () =>
+        HttpResponse.json({
+          request: gate,
+          response: { decision: "approve", decided_by: "anna", decided_by_principal: "key:ops", decided_at: "2026-09-16T10:00:00Z", reason: "" },
+        }),
+      ),
+      http.post(`${API}/approvals/appr-1/resume`, () => {
+        resumed.push("resume");
+        return HttpResponse.json({ proposal_id: "prop-1", status: "accepted", recommendation: "approve", resumed_from_approval: "appr-1" });
+      }),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+    await user.click(await screen.findByRole("button", { name: "Details" }));
+
+    const resume = await waitFor(() => {
+      const el = document.querySelector('[data-action="resume"]');
+      expect(el).toBeEnabled();
+      return el as HTMLElement;
+    });
+    await user.click(resume);
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toMatch(/proposal\.accepted/);
+    expect(dialog.textContent).toMatch(/not idempotent/i);
+    await user.click(document.querySelector('[data-action="confirm-mutation"]') as HTMLElement);
+
+    await waitFor(() => expect(resumed).toEqual(["resume"]));
+    await waitFor(() =>
+      expect(document.querySelector('[data-state="resumed"]')?.textContent).toMatch(/prop-1 is now accepted/),
+    );
+  });
+
+  it("says a gate the agent cannot resume has nothing to resume", async () => {
+    await connect(true);
+    const decided = { ...GATE, status: "approved" };
+    server.use(
+      http.get(`${API}/approvals/appr-1`, () =>
+        HttpResponse.json({
+          request: decided,
+          response: { decision: "approve", decided_by: "", decided_by_principal: "", decided_at: null, reason: "" },
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+    await user.click(await screen.findByRole("button", { name: "Details" }));
+
+    await waitFor(() =>
+      expect(document.querySelector('[data-state="not-resumable"]')?.textContent).toMatch(/only resume proposal decisions/),
+    );
+    expect(document.querySelector('[data-action="resume"]')).toBeNull();
+  });
+
+  it("keeps a gate decided here on screen after the queue drops it, so it can still be resumed", async () => {
+    await connect(true);
+    const gate = { ...GATE, flow_type: "proposal_handling", gate_name: "proposal_decision" };
+    let decided = false;
+    server.use(
+      // The agent lists pending gates only.
+      http.get(`${API}/approvals`, () => HttpResponse.json({ approvals: decided ? [] : [gate] })),
+      http.get(`${API}/approvals/appr-1`, () =>
+        HttpResponse.json({
+          request: { ...gate, status: decided ? "approved" : "pending" },
+          response: decided
+            ? { decision: "approve", decided_by: "", decided_by_principal: "", decided_at: null, reason: "" }
+            : null,
+        }),
+      ),
+      http.post(`${API}/approvals/appr-1/decide`, () => {
+        decided = true;
         return HttpResponse.json({ ok: true });
       }),
     );
-
+    const user = userEvent.setup();
     renderScreen();
     await openGate(user);
     await user.click(document.querySelector('[data-action="approve"]') as HTMLElement);
     await user.click(document.querySelector('[data-action="confirm-mutation"]') as HTMLElement);
 
-    await waitFor(() => expect(document.querySelector('[data-action="resume"]')).toBeDisabled());
-    expect(document.querySelector('[data-action="reject"]')).toBeDisabled();
+    await waitFor(() => expect(document.querySelector('[data-state="left-queue"]')).toBeTruthy());
+    await waitFor(() => expect(document.querySelector('[data-action="resume"]')).toBeEnabled());
+  });
 
-    release?.();
-    await waitFor(() => expect(document.querySelector('[data-block="approval-controls"]')).toBeNull());
+  // FastAPI puts the seller's sentence in `detail`; "the agent returned 400"
+  // alone hid exactly what to do next.
+  it("shows the agent's reason when it refuses a decision", async () => {
+    await connect(true);
+    server.use(
+      http.post(`${API}/approvals/appr-1/decide`, () =>
+        HttpResponse.json({ detail: "Approval appr-1 has expired" }, { status: 400 }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+    await openGate(user);
+    await user.click(document.querySelector('[data-action="approve"]') as HTMLElement);
+    await user.click(document.querySelector('[data-action="confirm-mutation"]') as HTMLElement);
+
+    await waitFor(() =>
+      expect(document.querySelector('[data-state="write-failed"]')?.textContent).toBe(
+        "the agent returned 400: Approval appr-1 has expired",
+      ),
+    );
+  });
+
+  it("opens a gate decided elsewhere by its id", async () => {
+    await connect(true);
+    server.use(
+      http.get(`${API}/approvals`, () => HttpResponse.json({ approvals: [] })),
+      http.get(`${API}/approvals/appr-9`, () =>
+        HttpResponse.json({
+          request: { ...GATE, approval_id: "appr-9", flow_type: "proposal_handling", gate_name: "proposal_decision", status: "rejected" },
+          response: { decision: "reject", decided_by: "anonymous", decided_by_principal: "", decided_at: null, reason: "" },
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+    await user.type(await screen.findByLabelText("Gate id"), "appr-9");
+    await user.click(document.querySelector('[data-action="open-gate"]') as HTMLElement);
+
+    await waitFor(() =>
+      expect(document.querySelector('[data-block="opened-gate"] [data-action="resume"]')).toBeEnabled(),
+    );
   });
 
   it("hides the decide controls as soon as the decision is accepted, before the gate is re-read", async () => {
