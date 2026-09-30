@@ -324,7 +324,7 @@ export type DealsExport = z.infer<typeof DealsExport>;
 /** Unpaginated — it scans every `deal:*` key, same as the list — hence heavy. */
 export const dealsExport = (
   c: Connection,
-  query: { format?: string } = {},
+  query: { format?: string; status?: string } = {},
   signal?: AbortSignal,
 ): Promise<Result<DealsExport>> =>
   get(c, PATHS.dealsExport, {

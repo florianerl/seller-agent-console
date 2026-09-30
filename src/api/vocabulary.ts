@@ -53,6 +53,20 @@ export type OrderStatus = (typeof ORDER_STATUSES)[number]["value"];
 export const ACTOR_KINDS = spelled(["human", "agent", "system"] as const);
 export type ActorKind = (typeof ACTOR_KINDS)[number]["value"];
 
+/**
+ * `GET /api/v1/deals/export?format=`. The agent documents these five and
+ * defaults to `generic`; the others reshape the same deals for one DSP's import.
+ */
+export const DEAL_EXPORT_FORMATS = spelled(["generic", "ttd", "dv360", "amazon", "xandr"] as const);
+export type DealExportFormat = (typeof DEAL_EXPORT_FORMATS)[number]["value"];
+
+/**
+ * The export's `status=` filter, in the stored vocabulary — not the wire one
+ * the deal list uses (`confirmed` here is `booked` there).
+ */
+export const DEAL_EXPORT_STATUSES = spelled(["confirmed", "proposed", "cancelled"] as const);
+export type DealExportStatus = (typeof DEAL_EXPORT_STATUSES)[number]["value"];
+
 /** `ChangeType`, models/change_request.py. Anything else is a 400. */
 export const CHANGE_TYPES = spelled([
   "flight_dates",

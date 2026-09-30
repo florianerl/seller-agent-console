@@ -342,10 +342,14 @@ describe("the deals screen", () => {
     const user = userEvent.setup();
     renderScreen();
 
-    await user.click(await screen.findByRole("button", { name: "Export deals" }));
+    await user.click(await screen.findByRole("combobox", { name: "Export format" }));
+    await user.click(await screen.findByRole("option", { name: "dv360" }));
+    await user.click(screen.getByRole("combobox", { name: "Export status" }));
+    await user.click(await screen.findByRole("option", { name: "proposed" }));
+    await user.click(screen.getByRole("button", { name: "Export deals" }));
 
     await waitFor(() => expect(document.body.textContent).toContain('"x-1"'));
-    expect(asked).toBe("?format=generic");
+    expect(asked).toBe("?format=dv360&status=proposed");
   });
 
   it("falls back to the export feed when the agent has no list route", async () => {

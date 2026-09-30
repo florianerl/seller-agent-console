@@ -82,6 +82,8 @@ import {
   ACTOR_KINDS,
   BULK_DEAL_ACTIONS,
   CHANGE_TYPES,
+  DEAL_EXPORT_FORMATS,
+  DEAL_EXPORT_STATUSES,
   DEAL_TYPES,
   INVENTORY_TYPES,
   LEGACY_DEAL_TYPES,
@@ -89,6 +91,8 @@ import {
   SSP_NAMES,
   words,
   type BulkDealAction,
+  type DealExportFormat,
+  type DealExportStatus,
   type DealTypeCode,
   type QuoteMediaType,
 } from "../api/vocabulary";
@@ -1352,18 +1356,34 @@ export function DealLookups({ dealId }: { dealId: string }) {
 
 /** Not about any one deal: it scans every stored record, so it sits with the page. */
 export function DealsExportLookup() {
-  const [loadExport, setLoadExport] = useState(false);
+  const [format, setFormat] = useState<DealExportFormat>("generic");
+  const [status, setStatus] = useState<DealExportStatus | "">("");
+  // What was asked for, frozen at the click: editing a filter afterwards must
+  // not silently re-run a heavy full scan.
+  const [asked, setAsked] = useState<{ format: string; status: string } | undefined>();
   return (
     <ActionBlock
       title="Export every deal"
-      description="Reads all stored deals in one unpaginated pass. Not a write, but heavy."
+      description="Reads all stored deals in one unpaginated pass, reshaped for one DSP's import. Not a write, but heavy."
     >
-      <ReadForm
-          label="Export deals"
-          action="export-deals"
-          onRun={() => setLoadExport(true)}
+      <ReadForm label="Export deals" action="export-deals" onRun={() => setAsked({ format, status })}>
+        <EnumSelect
+          hint="Which DSP's import format to shape the export for. Generic is the agent's neutral one."
+          label="Export format"
+          value={format}
+          options={DEAL_EXPORT_FORMATS}
+          onChange={(v) => v && setFormat(v)}
         />
-      {loadExport && <DealsExportBody />}
+        <EnumSelect
+          hint="Only export deals in this stored status. These are the agent's stored words, not the ones the deal list shows."
+          label="Export status"
+          value={status}
+          options={DEAL_EXPORT_STATUSES}
+          onChange={setStatus}
+          any="Any status"
+        />
+      </ReadForm>
+      {asked && <DealsExportBody format={asked.format} status={asked.status} />}
     </ActionBlock>
   );
 }
@@ -1467,11 +1487,13 @@ function SspTroubleBody({ dealId, ssp }: { dealId: string; ssp: string }) {
   );
 }
 
-function DealsExportBody() {
-  const exported = useResource("deals-export", (c, signal) => dealsExport(c, { format: "generic" }, signal));
-  return (
-    <ReadOutcome name="Export" data={exported.data} result={exported.result} />
+function DealsExportBody({ format, status }: { format: string; status: string }) {
+  // Keyed on both filters: a different format is a different document, and the
+  // cache must not hand back the last one under the new label.
+  const exported = useResource(`deals-export:${format}:${status}`, (c, signal) =>
+    dealsExport(c, { format, ...(status ? { status } : {}) }, signal),
   );
+  return <ReadOutcome name="Export" data={exported.data} result={exported.result} />;
 }
 
 export function SessionWrites({ sessionId }: { sessionId: string }) {
