@@ -8,7 +8,6 @@ import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { probe, type ProbeResult } from "../api/probe";
-import { Hint } from "../components/Hint";
 import { PageHeader } from "../components/PageHeader";
 import { TipField } from "../components/TipField";
 import { useCredential } from "../credentials/context";
@@ -96,19 +95,17 @@ export function SetupForm() {
             )}
 
             <Box>
-              <Hint hint="Checks the address and key against the agent, then saves them in this browser and opens the console. Writes stay off.">
-                <Button
-                  type="submit"
-                  variant="contained"
-                  color="primary"
-                  disabled={checking}
-                  startIcon={
-                    checking ? <CircularProgress size={16} color="inherit" /> : undefined
-                  }
-                >
-                  {checking ? "Checking…" : "Connect"}
-                </Button>
-              </Hint>
+              <Button
+                type="submit"
+                variant="contained"
+                color="primary"
+                disabled={checking}
+                startIcon={
+                  checking ? <CircularProgress size={16} color="inherit" /> : undefined
+                }
+              >
+                {checking ? "Checking…" : "Connect"}
+              </Button>
             </Box>
           </Stack>
         </form>

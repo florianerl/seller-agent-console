@@ -18,7 +18,6 @@ import { GatedNotice } from "../components/GatedNotice";
 import { PageHeader } from "../components/PageHeader";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { StatusChip } from "../components/StatusChip";
-import { Hint } from "../components/Hint";
 import { useCredential } from "../credentials/context";
 import { plural, stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
@@ -206,7 +205,6 @@ export default function ChangeRequestsScreen() {
                           {stamp(cr.requested_at)}
                         </TableCell>
                         <TableCell align="right">
-                          <Hint hint="Show or hide this change request's detail and the review or apply actions on it.">
                           <Button
                             size="small"
                             onClick={() =>
@@ -216,7 +214,6 @@ export default function ChangeRequestsScreen() {
                           >
                             {openId === cr.id ? "Hide details" : "Details"}
                           </Button>
-                          </Hint>
                         </TableCell>
                       </TableRow>
                       {openId === cr.id && (

@@ -36,7 +36,6 @@ import { PageHeader } from "../components/PageHeader";
 import { ProtocolNotice } from "../components/ProtocolNotice";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { StatusChip } from "../components/StatusChip";
-import { Hint } from "../components/Hint";
 import { TipField } from "../components/TipField";
 import { useCredential } from "../credentials/context";
 import { dateOrStamp, plural, stamp } from "../lib/time";
@@ -686,7 +685,6 @@ function ProposalList() {
                         <Box sx={{ color: palette.textSecondary }}>{statuses.join(", ")}</Box>
                       </TableCell>
                       <TableCell align="right">
-                        <Hint hint="Show or hide this proposal's line items and the actions available on it.">
                         <Button
                           size="small"
                           aria-expanded={open === row.proposal_id}
@@ -694,7 +692,6 @@ function ProposalList() {
                         >
                           {open === row.proposal_id ? "Hide" : "Details"}
                         </Button>
-                        </Hint>
                       </TableCell>
                     </TableRow>
                   );

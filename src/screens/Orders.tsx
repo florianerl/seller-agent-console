@@ -45,7 +45,6 @@ import { GatedNotice } from "../components/GatedNotice";
 import { PageHeader } from "../components/PageHeader";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { StatusChip } from "../components/StatusChip";
-import { Hint } from "../components/Hint";
 import { useCredential } from "../credentials/context";
 import {
   ChangeRequestCreate,
@@ -613,7 +612,6 @@ function OrderChangeRequests({
         <Link href="#/change-requests" sx={{ fontSize: 12 }}>
           All change requests
         </Link>
-        <Hint hint="Opens a form to raise a change request against this order. Needs writes enabled.">
         <Button
           size="small"
           onClick={() => setRaising((v) => !v)}
@@ -623,7 +621,6 @@ function OrderChangeRequests({
         >
           {raising ? "Close" : "Request a change"}
         </Button>
-        </Hint>
       </Stack>
 
       {cancelNote && (
@@ -822,7 +819,6 @@ export default function OrdersScreen() {
         title="Orders"
         subtitle="Every order the agent has stored. Buyer agents create them; nothing in the agent moves one on its own, so each step below waits on someone here or in Claude Code."
         actions={
-          <Hint hint="Opens a form to create an order by hand. Orders start in draft.">
           <Button
             variant={creating ? "outlined" : "contained"}
             size="small"
@@ -832,7 +828,6 @@ export default function OrdersScreen() {
           >
             {creating ? "Close" : "New order"}
           </Button>
-          </Hint>
         }
       >
 
@@ -874,11 +869,9 @@ export default function OrdersScreen() {
           hint="Filter the orders by lifecycle status."
         />
         {filter.kind !== "all" && (
-          <Hint hint="Clear the active filter and list every order.">
           <Button size="small" onClick={() => setFilter({ kind: "all" })} data-action="clear-filter">
             Show all
           </Button>
-          </Hint>
         )}
       </Box>
 
@@ -936,7 +929,6 @@ export default function OrdersScreen() {
                       sx={{ cursor: "pointer", "& > td": open ? { borderBottom: "none" } : {} }}
                     >
                       <TableCell padding="checkbox">
-                        <Hint hint="Show or hide this order's detail, next step and change requests.">
                         <IconButton
                           size="small"
                           aria-label={`${open ? "Hide" : "Show"} ${order.order_id}`}
@@ -949,7 +941,6 @@ export default function OrdersScreen() {
                         >
                           <Chevron open={open} />
                         </IconButton>
-                        </Hint>
                       </TableCell>
                       <TableCell sx={{ fontFamily: "monospace", fontSize: 12, whiteSpace: "nowrap" }}>
                         {order.order_id}

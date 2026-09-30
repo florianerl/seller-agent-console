@@ -23,7 +23,6 @@ import { plural, stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
 import { useResource } from "../query/useResource";
 import { FormRow } from "../components/WriteForm";
-import { Hint } from "../components/Hint";
 import { TipField } from "../components/TipField";
 import { AudienceMatchForm } from "./mutations";
 import { palette } from "../theme/palette";
@@ -193,19 +192,17 @@ function PackagesTable() {
                     </TableCell>
                     <TableCell sx={{ fontSize: 12 }}>{featuredCell(pkg.is_featured)}</TableCell>
                     <TableCell align="right">
-                      <Hint hint="Shows or hides this package's full record, read from the agent.">
-                        <Button
-                          size="small"
-                          onClick={() =>
-                            setOpenPackage((current) =>
-                              current === pkg.package_id ? undefined : pkg.package_id,
-                            )
-                          }
-                          aria-expanded={openPackage === pkg.package_id}
-                        >
-                          {openPackage === pkg.package_id ? "Hide details" : "Details"}
-                        </Button>
-                      </Hint>
+                      <Button
+                        size="small"
+                        onClick={() =>
+                          setOpenPackage((current) =>
+                            current === pkg.package_id ? undefined : pkg.package_id,
+                          )
+                        }
+                        aria-expanded={openPackage === pkg.package_id}
+                      >
+                        {openPackage === pkg.package_id ? "Hide details" : "Details"}
+                      </Button>
                     </TableCell>
                   </TableRow>
                   {openPackage === pkg.package_id && (
@@ -324,11 +321,9 @@ function Search() {
             onChange={(e) => setQueryInput(e.target.value)}
             sx={{ minWidth: 280 }}
           />
-          <Hint hint="Runs a full-text search over the media kit through the agent. Read-only.">
-            <Button type="submit" variant="outlined" size="small" data-action="search">
-              Search
-            </Button>
-          </Hint>
+          <Button type="submit" variant="outlined" size="small" data-action="search">
+            Search
+          </Button>
         </FormRow>
       </Box>
 

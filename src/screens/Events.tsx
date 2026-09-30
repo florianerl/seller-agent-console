@@ -20,7 +20,6 @@ import { clock as stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
 import { useResource } from "../query/useResource";
 import { FormRow } from "../components/WriteForm";
-import { Hint } from "../components/Hint";
 import { TipField } from "../components/TipField";
 import { EventLookup } from "./mutations";
 import { EnumSelect } from "../components/EnumSelect";
@@ -96,15 +95,13 @@ export default function EventsScreen() {
                   sx={{ minWidth: 180 }}
                 />
               ))}
-              <Hint hint="Empties all three filters and shows the latest events again.">
-                <Button
-                  size="small"
-                  onClick={() => setFilters({ event_type: "", flow_id: "", session_id: "" })}
-                  disabled={!filters.event_type && !filters.flow_id && !filters.session_id}
-                >
-                  Clear
-                </Button>
-              </Hint>
+              <Button
+                size="small"
+                onClick={() => setFilters({ event_type: "", flow_id: "", session_id: "" })}
+                disabled={!filters.event_type && !filters.flow_id && !filters.session_id}
+              >
+                Clear
+              </Button>
             </FormRow>
           </Paper>
 
@@ -175,11 +172,9 @@ export default function EventsScreen() {
                 <Typography sx={{ fontSize: 14, fontWeight: 600 }}>
                   {selected.event_type}
                 </Typography>
-                <Hint hint="Hides this event's detail panel. Nothing is changed.">
-                  <Button size="small" onClick={() => setSelected(undefined)}>
-                    Close
-                  </Button>
-                </Hint>
+                <Button size="small" onClick={() => setSelected(undefined)}>
+                  Close
+                </Button>
               </Stack>
               <Box
                 component="pre"

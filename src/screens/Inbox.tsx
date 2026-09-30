@@ -437,7 +437,6 @@ export default function InboxScreen() {
                           {stamp(row.created_at)}
                         </TableCell>
                         <TableCell align="right">
-                          <Hint hint="Show or hide this gate's detail and its decision controls.">
                           <Button
                             size="small"
                             onClick={() =>
@@ -447,7 +446,6 @@ export default function InboxScreen() {
                           >
                             {open === row.approval_id ? "Hide" : "Details"}
                           </Button>
-                          </Hint>
                         </TableCell>
                       </TableRow>
                       {open === row.approval_id && (

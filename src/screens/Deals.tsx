@@ -25,7 +25,6 @@ import { useResource } from "../query/useResource";
 import { palette } from "../theme/palette";
 import { useCredential } from "../credentials/context";
 import { FormRow } from "../components/WriteForm";
-import { Hint } from "../components/Hint";
 import { TipField } from "../components/TipField";
 import { DealLookups, DealWrites, Panel } from "./mutations";
 
@@ -198,17 +197,15 @@ export default function DealsScreen() {
                   </MenuItem>
                 ))}
               </TipField>
-              <Hint hint="Re-reads every deal from the agent in one unpaginated pass. The list never refreshes on its own.">
-                <Button
-                  variant="outlined"
-                  size="small"
-                  onClick={list.refresh}
-                  disabled={list.validating}
-                  data-action="refresh"
-                >
-                  {list.validating ? "Refreshing…" : "Refresh"}
-                </Button>
-              </Hint>
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={list.refresh}
+                disabled={list.validating}
+                data-action="refresh"
+              >
+                {list.validating ? "Refreshing…" : "Refresh"}
+              </Button>
               <Typography variant="body2" color="text.secondary" sx={{ fontSize: 12, pb: 1 }}>
                 This list does not poll — it reads every deal in one unpaginated pass.
               </Typography>
@@ -298,19 +295,17 @@ export default function DealsScreen() {
                             : `expires ${stamp(deal.expires_at)}`}
                         </TableCell>
                         <TableCell align="right">
-                          <Hint hint="Shows or hides this deal's full record and lineage, read from the agent.">
-                            <Button
-                              size="small"
-                              onClick={() =>
-                                setOpenDeal((current) =>
-                                  current === deal.deal_id ? undefined : deal.deal_id,
-                                )
-                              }
-                              aria-expanded={openDeal === deal.deal_id}
-                            >
-                              {openDeal === deal.deal_id ? "Hide details" : "Details"}
-                            </Button>
-                          </Hint>
+                          <Button
+                            size="small"
+                            onClick={() =>
+                              setOpenDeal((current) =>
+                                current === deal.deal_id ? undefined : deal.deal_id,
+                              )
+                            }
+                            aria-expanded={openDeal === deal.deal_id}
+                          >
+                            {openDeal === deal.deal_id ? "Hide details" : "Details"}
+                          </Button>
                         </TableCell>
                       </TableRow>
                       {openDeal === deal.deal_id && (

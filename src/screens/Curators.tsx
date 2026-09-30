@@ -16,7 +16,6 @@ import { describe } from "../api/errors";
 import { DataPanel, FreshnessNote } from "../components/DataPanel";
 import { Field, FieldGrid } from "../components/Field";
 import { GatedNotice } from "../components/GatedNotice";
-import { Hint } from "../components/Hint";
 import { PageHeader } from "../components/PageHeader";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { StatusChip } from "../components/StatusChip";
@@ -205,19 +204,17 @@ export default function CuratorsScreen() {
                           <StatusChip status={curator.is_active ? "active" : "inactive"} />
                         </TableCell>
                         <TableCell align="right">
-                          <Hint hint="Shows or hides this curator's full record, read from the agent.">
-                            <Button
-                              size="small"
-                              onClick={() =>
-                                setOpenCurator((current) =>
-                                  current === curator.curator_id ? undefined : curator.curator_id,
-                                )
-                              }
-                              aria-expanded={openCurator === curator.curator_id}
-                            >
-                              {openCurator === curator.curator_id ? "Hide details" : "Details"}
-                            </Button>
-                          </Hint>
+                          <Button
+                            size="small"
+                            onClick={() =>
+                              setOpenCurator((current) =>
+                                current === curator.curator_id ? undefined : curator.curator_id,
+                              )
+                            }
+                            aria-expanded={openCurator === curator.curator_id}
+                          >
+                            {openCurator === curator.curator_id ? "Hide details" : "Details"}
+                          </Button>
                         </TableCell>
                       </TableRow>
                       {openCurator === curator.curator_id && (

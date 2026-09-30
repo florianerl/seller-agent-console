@@ -111,21 +111,17 @@ export function ConnectionMenu() {
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Hint hint="Closes this dialog and leaves writes off.">
-            <Button onClick={() => setConfirmingWrites(false)}>Cancel</Button>
-          </Hint>
-          <Hint hint="Turns writes on for this key, so buttons that change the agent will send requests.">
-            <Button
-              variant="contained"
-              data-action="confirm-enable-writes"
-              onClick={() => {
-                setConfirmingWrites(false);
-                void setWritesEnabled(true);
-              }}
-            >
-              Enable writes
-            </Button>
-          </Hint>
+          <Button onClick={() => setConfirmingWrites(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            data-action="confirm-enable-writes"
+            onClick={() => {
+              setConfirmingWrites(false);
+              void setWritesEnabled(true);
+            }}
+          >
+            Enable writes
+          </Button>
         </DialogActions>
       </Dialog>
 
@@ -141,9 +137,7 @@ export function ConnectionMenu() {
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Hint hint="Closes this dialog and keeps you signed in.">
-            <Button onClick={() => setConfirming(false)}>Cancel</Button>
-          </Hint>
+          <Button onClick={() => setConfirming(false)}>Cancel</Button>
           <Hint hint="Deletes the stored key and every cached value from this browser and returns to setup. The key stays valid on the agent.">
             <Button
               variant="contained"

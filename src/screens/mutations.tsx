@@ -130,7 +130,6 @@ export function InventorySyncWrite() {
       title="Trigger an inventory sync?"
       confirmLabel="Sync now"
       action="trigger-sync"
-      hint="Starts an inventory sync in the mode above."
       blocked={!writesEnabled}
       pending={run.pending}
       last={run.last}
@@ -193,7 +192,6 @@ export function ApiKeyWrites() {
         title="Mint a buyer API key?"
         confirmLabel="Create buyer key"
         action="create-buyer-key"
-        hint="Mints a new buyer API key and shows its secret once."
         blocked={!writesEnabled}
         pending={buyer.pending}
         last={buyer.last}
@@ -222,7 +220,6 @@ export function ApiKeyWrites() {
         title="Mint an operator API key?"
         confirmLabel="Create operator key"
         action="create-operator-key"
-        hint="Mints a new operator API key and shows its secret once."
         blocked={!writesEnabled}
         pending={operator.pending}
         last={operator.last}
@@ -240,7 +237,6 @@ export function ApiKeyWrites() {
         title="Revoke this API key?"
         confirmLabel="Revoke key"
         action="revoke-key"
-        hint="Revokes the key id above so it stops working."
         blocked={!writesEnabled || !revokeId.trim()}
         pending={revoke.pending}
         last={revoke.last}
@@ -343,7 +339,6 @@ export function CatalogWrites() {
         title="Replace the stored rate card?"
         confirmLabel="Put rate card"
         action="put-rate-card"
-        hint="Replaces the stored rate card with this one entry."
         blocked={blocked}
         pending={rate.pending}
         last={rate.last}
@@ -382,7 +377,6 @@ export function CatalogWrites() {
         title="Set an inventory type override?"
         confirmLabel="Set override"
         action="set-override"
-        hint="Stores the chosen inventory type for the product id above."
         blocked={blocked || !productId.trim()}
         pending={setOverride.pending}
         last={setOverride.last}
@@ -427,7 +421,6 @@ export function CatalogWrites() {
         title="Delete this inventory type override?"
         confirmLabel="Delete override"
         action="delete-override"
-        hint="Removes the override for the product id above so it goes back to the auto-detected type."
         blocked={blocked || !productId.trim()}
         pending={clearOverride.pending}
         last={clearOverride.last}
@@ -438,7 +431,6 @@ export function CatalogWrites() {
         title="Create a curated package?"
         confirmLabel="Create package"
         action="create-package"
-        hint="Creates a curated package with the name and prices above."
         blocked={blocked || !pkgName.trim()}
         pending={createPkg.pending}
         last={createPkg.last}
@@ -461,7 +453,6 @@ export function CatalogWrites() {
         title="Rename this package?"
         confirmLabel="Update package"
         action="update-package"
-        hint="Renames the package with the id above to the name above."
         blocked={blocked || !pkgId.trim() || !pkgName.trim()}
         pending={updatePkg.pending}
         last={updatePkg.last}
@@ -474,7 +465,6 @@ export function CatalogWrites() {
         title="Archive this package?"
         confirmLabel="Delete package"
         action="delete-package"
-        hint="Archives the package with the id above."
         blocked={blocked || !pkgId.trim()}
         pending={deletePkg.pending}
         last={deletePkg.last}
@@ -485,7 +475,6 @@ export function CatalogWrites() {
         title="Assemble a dynamic package?"
         confirmLabel="Assemble"
         action="assemble-package"
-        hint="Builds a dynamic package from the name and product ids above."
         blocked={blocked || !pkgName.trim() || !productIds.trim()}
         pending={assemble.pending}
         last={assemble.last}
@@ -511,7 +500,6 @@ export function CatalogWrites() {
         title="Sync packages from the ad server?"
         confirmLabel="Sync packages"
         action="sync-packages"
-        hint="Asks the agent to re-import packages from the ad server."
         blocked={blocked}
         pending={sync.pending}
         last={sync.last}
@@ -548,7 +536,6 @@ export function CreateQuoteWrite() {
       title="Request a quote?"
       confirmLabel="Create quote"
       action="create-quote"
-      hint="Requests a non-binding quote for the product, deal type and media type above."
       blocked={!writesEnabled || !productId.trim() || (needsVolume && !volumeOk)}
       pending={create.pending}
       last={create.last}
@@ -623,7 +610,6 @@ export function PackageLookup() {
           title="Load this package?"
           confirmLabel="Load package"
           action="fetch-package"
-          hint="Reads the package with the id above and shows its name."
           blocked={!id.trim()}
           pending={false}
           last={undefined}
@@ -724,7 +710,6 @@ export function OrderCreateWrite({ onCreated }: { onCreated?: (orderId: string) 
       title="Create a draft order?"
       confirmLabel="Create order"
       action="create-order"
-      hint="Creates a draft order, optionally for the deal and quote above."
       blocked={!writesEnabled}
       pending={create.pending}
       last={create.last}
@@ -881,7 +866,6 @@ export function OrderTransitionWrites({
       title={`${step.label}?`}
       confirmLabel={step.label}
       action={`transition-order:${step.to}`}
-      hint={`Moves the order from ${words(status)} to ${words(step.to)}, recorded as the actor claimed below.`}
       blocked={!writesEnabled || !claim || (transition.pending && chosen !== step.to)}
       pending={transition.pending && chosen === step.to}
       // Success is reported below the buttons: the button that was pressed
@@ -1059,7 +1043,6 @@ export function DealWrites({ dealId }: { dealId?: string }) {
         title="Generate a deal from a proposal?"
         confirmLabel="Generate deal"
         action="generate-deal"
-        hint="Creates a deal from the accepted proposal id above."
         blocked={blocked || !proposalId.trim()}
         pending={gen.pending}
         last={gen.last}
@@ -1072,7 +1055,6 @@ export function DealWrites({ dealId }: { dealId?: string }) {
         title="Book a deal from a quote?"
         confirmLabel="Book deal"
         action="book-deal"
-        hint="Binds the quote above and books a deal from it."
         blocked={blocked || !quoteId.trim()}
         pending={book.pending}
         last={book.last}
@@ -1087,7 +1069,6 @@ export function DealWrites({ dealId }: { dealId?: string }) {
         title="Create a deal from a template?"
         confirmLabel="From template"
         action="deal-from-template"
-        hint="Prices and books a deal of the chosen type for the product above."
         blocked={blocked || !productId.trim()}
         pending={fromTpl.pending}
         last={fromTpl.last}
@@ -1121,7 +1102,6 @@ export function DealWrites({ dealId }: { dealId?: string }) {
           title={`Run a bulk ${bulkAction}?`}
           confirmLabel={`Bulk ${bulkAction}`}
           action="bulk-deals"
-          hint="Runs the chosen bulk action on the deal id above (or on the quote for create)."
           blocked={blocked || (bulkAction === "create" ? !bulkQuote.trim() : !id.trim())}
           pending={bulk.pending}
           // Reported below instead: a 200 here can still carry failures.
@@ -1182,7 +1162,6 @@ export function DealWrites({ dealId }: { dealId?: string }) {
         title="Push this deal to a buyer?"
         confirmLabel="Push"
         action="push-deal"
-        hint="Notifies the buyer URL above about the deal id above."
         blocked={blocked || !id.trim()}
         pending={push.pending}
         last={push.last}
@@ -1195,7 +1174,6 @@ export function DealWrites({ dealId }: { dealId?: string }) {
         title="Distribute this deal to an SSP?"
         confirmLabel="Distribute"
         action="distribute-deal"
-        hint="Sends the deal id above to the SSP named above, or the default when left empty."
         blocked={blocked || !id.trim()}
         pending={dist.pending}
         last={dist.last}
@@ -1210,7 +1188,6 @@ export function DealWrites({ dealId }: { dealId?: string }) {
         title="Create a curated deal?"
         confirmLabel="Curated deal"
         action="curated-deal"
-        hint="Creates a deal for the curator id above."
         blocked={blocked || !curatorId.trim()}
         pending={curated.pending}
         last={curated.last}
@@ -1223,7 +1200,6 @@ export function DealWrites({ dealId }: { dealId?: string }) {
         title="Migrate this deal?"
         confirmLabel="Migrate"
         action="migrate-deal"
-        hint="Mints a successor to the deal id above and records the lineage."
         blocked={blocked || !id.trim()}
         pending={migrate.pending}
         last={migrate.last}
@@ -1236,7 +1212,6 @@ export function DealWrites({ dealId }: { dealId?: string }) {
         title="Deprecate this deal?"
         confirmLabel="Deprecate"
         action="deprecate-deal"
-        hint="Marks the deal id above as deprecated, using the reason above."
         blocked={blocked || !id.trim() || !reason.trim()}
         pending={deprecate.pending}
         last={deprecate.last}
@@ -1258,7 +1233,6 @@ export function DealLookups({ dealId }: { dealId: string }) {
         title="Fetch this deal record?"
         confirmLabel="Fetch deal"
         action="fetch-deal"
-        hint="Loads the record for this deal. The agent may expire it as a side effect."
         blocked={false}
         pending={false}
         last={undefined}
@@ -1272,7 +1246,6 @@ export function DealLookups({ dealId }: { dealId: string }) {
         title="Export every stored deal?"
         confirmLabel="Export deals"
         action="export-deals"
-        hint="Exports every stored deal in one request and shows a short preview."
         blocked={false}
         pending={false}
         last={undefined}
@@ -1304,7 +1277,6 @@ function BuyerStatus({ dealId }: { dealId: string }) {
           title="Read buyer activation status?"
           confirmLabel="Buyer status"
           action="deal-buyer-status"
-          hint="Reads how the buyer URL above sees this deal."
           blocked={!buyerUrl.trim()}
           pending={false}
           last={undefined}
@@ -1373,7 +1345,6 @@ function SspTrouble({ dealId }: { dealId: string }) {
           title="Troubleshoot this SSP?"
           confirmLabel="Troubleshoot"
           action="deal-ssp"
-          hint="Reads connector diagnostics for the SSP above and this deal."
           blocked={!ssp.trim()}
           pending={false}
           last={undefined}
@@ -1424,7 +1395,6 @@ export function SessionWrites({ sessionId }: { sessionId: string }) {
         title="Send this session message?"
         confirmLabel="Send"
         action="session-message"
-        hint="Sends the message above as the next turn of this session."
         blocked={!writesEnabled || !message.trim()}
         pending={send.pending}
         last={send.last}
@@ -1445,7 +1415,6 @@ export function SessionWrites({ sessionId }: { sessionId: string }) {
         title="Close this session?"
         confirmLabel="Close session"
         action="close-session"
-        hint="Marks this session closed."
         blocked={!writesEnabled}
         pending={close.pending}
         last={close.last}
@@ -1466,7 +1435,6 @@ export function CreateSessionWrite() {
       title="Open a new buyer session?"
       confirmLabel="Create session"
       action="create-session"
-      hint="Opens a new buyer session on the agent."
       blocked={!writesEnabled}
       pending={create.pending}
       last={create.last}
@@ -1502,7 +1470,6 @@ export function ProposalWrites() {
         title="Submit a proposal?"
         confirmLabel="Submit proposal"
         action="submit-proposal"
-        hint="Submits a proposal for the product and price above with fixed volume and dates (100,000 impressions, 2026-10-01 to 2026-10-31)."
         blocked={!writesEnabled || !productId.trim()}
         pending={submit.pending}
         last={submit.last}
@@ -1538,7 +1505,6 @@ export function ProposalWrites() {
         title="Send a legacy counter-offer?"
         confirmLabel="Counter"
         action="counter-proposal"
-        hint="Sends the price above as a counter-offer on the proposal id above."
         blocked={!writesEnabled || !proposalId.trim()}
         pending={counter.pending}
         last={counter.last}
@@ -1549,7 +1515,6 @@ export function ProposalWrites() {
         title="Post a canonical negotiation message?"
         confirmLabel="Post message"
         action="negotiation-message"
-        hint="Posts the price above as a counter on the proposal id above, using a fresh idempotency key."
         blocked={!writesEnabled || !proposalId.trim()}
         pending={message.pending}
         last={message.last}
@@ -1592,7 +1557,6 @@ export function AgentWrites() {
         title="Discover and register this agent?"
         confirmLabel="Discover"
         action="discover-agent"
-        hint="Fetches the agent card at the URL above and registers it locally."
         blocked={!writesEnabled || !url.trim()}
         pending={discover.pending}
         last={discover.last}
@@ -1605,7 +1569,6 @@ export function AgentWrites() {
         title="Change this agent's trust status?"
         confirmLabel="Update trust"
         action="update-trust"
-        hint="Sets the trust status above on the agent id above."
         blocked={!writesEnabled || !agentId.trim()}
         pending={update.pending}
         last={update.last}
@@ -1630,7 +1593,6 @@ export function AgentWrites() {
         title="Remove this agent from the local registry?"
         confirmLabel="Remove agent"
         action="remove-agent"
-        hint="Removes the agent id above from the local registry."
         blocked={!writesEnabled || !agentId.trim()}
         pending={remove.pending}
         last={remove.last}
@@ -1666,7 +1628,6 @@ export function AgentDetailLookup() {
           title="Load this registered agent?"
           confirmLabel="Load agent"
           action="fetch-agent"
-          hint="Reads the registry row for the agent id above and shows its trust status and type."
           blocked={!id.trim()}
           pending={false}
           last={undefined}
@@ -1703,7 +1664,6 @@ export function CuratorWrite() {
       title="Register this curator?"
       confirmLabel="Register curator"
       action="register-curator"
-      hint="Registers a curator with the id, name and domain above."
       blocked={!writesEnabled || !curatorId.trim() || !name.trim() || !domain.trim()}
       pending={register.pending}
       last={register.last}
@@ -1797,7 +1757,6 @@ export function ChangeRequestCreate({
           title="Submit a change request?"
           confirmLabel="Create request"
           action="create-change-request"
-          hint="Raises a change request with the type, field and value above. It changes nothing on the order until applied."
           blocked={!writesEnabled || !orderId.trim()}
           pending={create.pending}
           last={create.last?.kind === "ok" || refused.length > 0 ? undefined : create.last}
@@ -2116,7 +2075,6 @@ export function ApiKeyDetailLookup() {
           title="Load this key's metadata?"
           confirmLabel="Load key"
           action="fetch-key"
-          hint="Reads the metadata for the key id above."
           blocked={!id.trim()}
           pending={false}
           last={undefined}
@@ -2162,7 +2120,6 @@ export function AudienceMatchForm() {
           title="Score this audience?"
           confirmLabel="Match"
           action="audience-match"
-          hint="Scores the audience identifier above. Nothing is stored."
           blocked={!identifier.trim()}
           pending={false}
           last={undefined}
@@ -2278,7 +2235,6 @@ export function ProposalLifecycleWrites({ proposal }: { proposal: Proposal }) {
             title="Publish this proposal?"
             confirmLabel="Publish"
             action="publish-proposal"
-            hint="Makes this draft proposal visible to buyer agents."
             blocked={blocked}
             pending={publish.pending}
             last={publish.last}
@@ -2300,7 +2256,6 @@ export function ProposalLifecycleWrites({ proposal }: { proposal: Proposal }) {
               title="Accept this version and make it binding?"
               confirmLabel="Accept"
               action="assent-accept"
-              hint="Accepts the version under review and makes it binding."
               blocked={blocked}
               pending={assent.pending}
               last={assent.last}
@@ -2311,7 +2266,6 @@ export function ProposalLifecycleWrites({ proposal }: { proposal: Proposal }) {
               title="Decline the version under review?"
               confirmLabel="Decline"
               action="assent-decline"
-              hint="Declines the version under review and records it in the negotiation history."
               blocked={blocked}
               pending={assent.pending}
               last={assent.last}
@@ -2328,7 +2282,6 @@ export function ProposalLifecycleWrites({ proposal }: { proposal: Proposal }) {
             title="Withdraw this proposal?"
             confirmLabel="Withdraw"
             action="withdraw-proposal"
-            hint="Withdraws this proposal so buyers can no longer use it."
             blocked={blocked}
             pending={withdraw.pending}
             last={withdraw.last}
@@ -2377,7 +2330,6 @@ export function LineItemHoldWrites({ proposal, item }: { proposal: Proposal; ite
           title="Grant the requested hold?"
           confirmLabel="Grant hold"
           action="grant-hold"
-          hint="Grants the buyer's requested hold on this line item."
           blocked={!writesEnabled}
           pending={hold.pending}
           last={hold.last}
@@ -2389,7 +2341,6 @@ export function LineItemHoldWrites({ proposal, item }: { proposal: Proposal; ite
           title="Release this hold?"
           confirmLabel="Release hold"
           action="release-hold"
-          hint="Releases this line item's hold before it expires."
           blocked={!writesEnabled}
           pending={hold.pending}
           last={hold.last}

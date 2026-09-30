@@ -1,5 +1,4 @@
 import Chip from "@mui/material/Chip";
-import { Hint } from "../components/Hint";
 import { useCredential } from "../credentials/context";
 import { palette } from "../theme/palette";
 
@@ -18,22 +17,20 @@ export function WritesChip() {
   if (!credential || !writesEnabled) return null;
 
   return (
-    <Hint hint="Writes are enabled for this key, so buttons that change the agent will send requests. Turn them off in the connection menu.">
-      <Chip
-        size="small"
-        label="Writes on"
-        data-writes="on"
-        sx={{
-          mr: 0,
-          height: 24,
-          fontSize: 11,
-          fontWeight: 700,
-          letterSpacing: 0.2,
-          color: palette.brandBlack,
-          backgroundColor: palette.attention,
-          flexShrink: 0,
-        }}
-      />
-    </Hint>
+    <Chip
+      size="small"
+      label="Writes on"
+      data-writes="on"
+      sx={{
+        mr: 0,
+        height: 24,
+        fontSize: 11,
+        fontWeight: 700,
+        letterSpacing: 0.2,
+        color: palette.brandBlack,
+        backgroundColor: palette.attention,
+        flexShrink: 0,
+      }}
+    />
   );
 }

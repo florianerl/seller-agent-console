@@ -39,7 +39,6 @@ import { CADENCE } from "../query/cadence";
 import { useResource } from "../query/useResource";
 import { palette } from "../theme/palette";
 import { FormRow } from "../components/WriteForm";
-import { Hint } from "../components/Hint";
 import { TipField } from "../components/TipField";
 import { CatalogWrites, CreateQuoteWrite, PackageLookup } from "./mutations";
 import { useCredential } from "../credentials/context";
@@ -217,19 +216,17 @@ function Products() {
                   {product.available_impressions?.toLocaleString() ?? "—"}
                 </TableCell>
                 <TableCell align="right">
-                  <Hint hint="Shows or hides this product's full record, read from the agent.">
-                    <Button
-                      size="small"
-                      onClick={() =>
-                        setOpenProduct((current) =>
-                          current === product.product_id ? undefined : product.product_id,
-                        )
-                      }
-                      aria-expanded={openProduct === product.product_id}
-                    >
-                      {openProduct === product.product_id ? "Hide" : "Details"}
-                    </Button>
-                  </Hint>
+                  <Button
+                    size="small"
+                    onClick={() =>
+                      setOpenProduct((current) =>
+                        current === product.product_id ? undefined : product.product_id,
+                      )
+                    }
+                    aria-expanded={openProduct === product.product_id}
+                  >
+                    {openProduct === product.product_id ? "Hide" : "Details"}
+                  </Button>
                 </TableCell>
               </TableRow>
               {openProduct === product.product_id && (
@@ -395,11 +392,9 @@ function Discovery() {
             onChange={(e) => setQueryInput(e.target.value)}
             sx={{ minWidth: 280 }}
           />
-          <Hint hint="Asks the agent which products fit this brief. It does not book or change anything.">
-            <Button type="submit" variant="outlined" size="small" data-action="discover">
-              Discover
-            </Button>
-          </Hint>
+          <Button type="submit" variant="outlined" size="small" data-action="discover">
+            Discover
+          </Button>
         </FormRow>
       </Box>
       {submitted !== undefined && <DiscoveryResults query={submitted} />}
@@ -519,11 +514,9 @@ function AvailsCheck() {
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
           />
-          <Hint hint="Asks the agent how many impressions this product has available across these dates. It does not reserve anything.">
-            <Button type="submit" variant="outlined" size="small" data-action="check-avails">
-              Check avails
-            </Button>
-          </Hint>
+          <Button type="submit" variant="outlined" size="small" data-action="check-avails">
+            Check avails
+          </Button>
         </FormRow>
       </Box>
       {submitted !== undefined && <AvailsResults query={submitted} />}
@@ -643,11 +636,9 @@ function Pricing() {
             onChange={(e) => setVolume(e.target.value)}
             sx={{ width: 140 }}
           />
-          <Hint hint="Asks the agent for a price for this product, without booking anything.">
-            <Button type="submit" variant="outlined" size="small" data-action="quote">
-              Quote
-            </Button>
-          </Hint>
+          <Button type="submit" variant="outlined" size="small" data-action="quote">
+            Quote
+          </Button>
         </FormRow>
       </Box>
       {submitted !== undefined && <PricingResult query={submitted} />}
