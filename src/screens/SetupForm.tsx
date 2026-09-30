@@ -69,7 +69,6 @@ export function SetupForm() {
               required
               fullWidth
               autoComplete="url"
-              slotProps={{ htmlInput: { "aria-describedby": "agent-address-help" } }}
               helperText="The origin only — no path."
               id="agent-address"
             />

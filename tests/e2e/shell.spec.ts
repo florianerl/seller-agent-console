@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { BASE_PATH } from "../../config/base-path";
 import { startServer, type StaticServer } from "./fixtures/server";
@@ -78,6 +78,12 @@ test("the manifest parses and its identity fields carry the prefix", async ({ pa
   );
 });
 
+/** Moves the pointer off the page content and waits for any hint to close. */
+async function parkPointer(page: Page) {
+  await page.mouse.move(0, 0);
+  await expect(page.getByRole("tooltip")).toHaveCount(0);
+}
+
 const ROUTES = [
   { hash: "#/", heading: "Setup and health" },
   { hash: "#/inbox", heading: "Inbox" },
@@ -99,6 +105,13 @@ for (const route of ROUTES) {
     await page.goto(`${server.appUrl}${route.hash}`);
     await expect(page.getByRole("heading", { name: route.heading })).toBeVisible();
 
+    // The pointer is still where Connect was clicked. On a screen with a hinted
+    // field under that spot (Agents), a tooltip opens and axe measures it half
+    // faded in, so its text reads as low contrast. Park the pointer and let any
+    // tooltip close: this sweep is of the screen at rest. The tooltip itself is
+    // scanned fully open by its own test below.
+    await parkPointer(page);
+
     const { violations } = await new AxeBuilder({ page })
       .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
       .analyze();
@@ -108,6 +121,29 @@ for (const route of ROUTES) {
     ).toEqual([]);
   });
 }
+
+test("an open field hint is free of axe violations", async ({ page }) => {
+  await connect(page, server, unhandled);
+  await page.goto(`${server.appUrl}#/agents`);
+  await parkPointer(page);
+  await page.getByRole("combobox", { name: "Trust", exact: true }).hover();
+
+  const tooltip = page.getByRole("tooltip");
+  await expect(tooltip).toContainText("Shows only agents with this trust status");
+  // Scanned mid-transition, the tooltip's colours are blended with the page
+  // behind it; the contrast that matters is the one it settles at.
+  await tooltip.evaluate((el) =>
+    Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished)),
+  );
+
+  const { violations } = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+    .analyze();
+
+  expect(
+    violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`),
+  ).toEqual([]);
+});
 
 test("the temporary drawer is reachable and escapable by keyboard alone", async ({ page }) => {
   await connect(page, server, unhandled);
