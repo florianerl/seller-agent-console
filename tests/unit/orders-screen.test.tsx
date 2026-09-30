@@ -810,6 +810,27 @@ describe("an order's change requests", () => {
     expect(document.querySelector('[data-action="create-change-request"]')).toBeNull();
   });
 
+  // Suggestions, not a closed list: the agent merges whatever key it is sent.
+  it("suggests the fields for the change type but still takes a typed one", async () => {
+    serve();
+    const user = userEvent.setup();
+    renderScreen();
+    await expand(user, "ORD-ABC123");
+
+    await user.click(await screen.findByRole("button", { name: "Request a change" }));
+    const field = screen.getByLabelText("Field");
+    expect(field).toHaveValue("flight_end");
+
+    await user.click(field);
+    expect(await screen.findByRole("option", { name: "flight_start" })).toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: "flight_start" }));
+    expect(field).toHaveValue("flight_start");
+
+    await user.clear(field);
+    await user.type(field, "po_number");
+    expect(field).toHaveValue("po_number");
+  });
+
   it("predicts the severity, sends the field change, and says what happens next", async () => {
     serve();
     const sent: Record<string, unknown>[] = [];
