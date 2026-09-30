@@ -4,7 +4,7 @@ import { JsonView } from "../../src/components/JsonView";
 import { palette } from "../../src/theme/palette";
 
 const colours = (el: Element) =>
-  [...el.querySelectorAll("span")].map((s) => [s.textContent, (s as HTMLElement).style.color]);
+  [...el.querySelectorAll("span")].map((s) => [s.textContent, s.style.color]);
 
 const rgb = (hex: string) => {
   const n = parseInt(hex.slice(1), 16);
