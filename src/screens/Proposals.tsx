@@ -1,3 +1,4 @@
+import { JsonView } from "../components/JsonView";
 import { useState, type ReactNode } from "react";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
@@ -521,8 +522,8 @@ function ProposalDetail({ proposalId }: { proposalId: string }) {
         <Field label="Brief">{p.brief_ref ?? (p.type === "custom" ? "missing — required for custom" : "—")}</Field>
         <Field label="Assent">
           {p.assent && Object.keys(p.assent).length > 0 ? (
-            <Box component="pre" sx={{ m: 0, fontSize: 12, whiteSpace: "pre-wrap" }} data-block="assent">
-              {JSON.stringify(p.assent, null, 2)}
+            <Box data-block="assent">
+              <JsonView value={p.assent} />
             </Box>
           ) : (
             "none recorded"

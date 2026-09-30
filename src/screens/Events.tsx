@@ -1,3 +1,4 @@
+import { JsonView } from "../components/JsonView";
 import { useMemo, useState } from "react";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -176,18 +177,8 @@ export default function EventsScreen() {
                   Close
                 </Button>
               </Stack>
-              <Box
-                component="pre"
-                sx={{
-                  mt: 1,
-                  p: 1.5,
-                  backgroundColor: palette.ground,
-                  fontSize: 12,
-                  overflow: "auto",
-                  maxHeight: 320,
-                }}
-              >
-                {JSON.stringify(selected, null, 2)}
+              <Box sx={{ mt: 1 }}>
+                <JsonView value={selected} />
               </Box>
               {selected.event_id && <EventLookup eventId={selected.event_id} />}
             </Paper>

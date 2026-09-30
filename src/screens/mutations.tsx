@@ -96,7 +96,8 @@ import { ConfirmAction } from "../components/ConfirmAction";
 import { EnumSelect } from "../components/EnumSelect";
 import { Hint } from "../components/Hint";
 import { TipField } from "../components/TipField";
-import { FormFields, FormRow, WriteForm } from "../components/WriteForm";
+import { JsonView } from "../components/JsonView";
+import { FormFields, FormRow, ReadForm, WriteForm } from "../components/WriteForm";
 import { WritesNotice } from "../components/WritesNotice";
 import { useCredential } from "../credentials/context";
 import { useMutation } from "../query/useMutation";
@@ -134,6 +135,36 @@ function ActionBlock({
 // quote" does with an idempotency key, and it is the one bulk action that takes
 // no deal id, so it never fitted a form that acts on a deal.
 const DEAL_EDIT_ACTIONS = BULK_DEAL_ACTIONS.filter((o) => o.value !== "create");
+
+/**
+ * What a read came back with: the value as highlighted JSON, or the reason
+ * there is none. Shared so every lookup shows a result the same way.
+ */
+function ReadOutcome({
+  name,
+  data,
+  result,
+}: {
+  name: string;
+  data: unknown;
+  result: Result<unknown> | undefined;
+}) {
+  if (data === undefined || data === null) {
+    return (
+      <Typography variant="caption" component="p">
+        {result ? `${name}: ${describe(result)}` : ""}
+      </Typography>
+    );
+  }
+  return (
+    <Box sx={{ mt: 1 }}>
+      <Typography variant="caption" component="p" color="text.secondary" sx={{ mb: 0.5 }}>
+        {name}
+      </Typography>
+      <JsonView value={data} />
+    </Box>
+  );
+}
 
 function Panel({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -635,15 +666,11 @@ export function PackageLookup() {
     <Box sx={{ mt: 1 }} data-block="package-lookup">
       <FormRow>
         <TipField hint="Id of the package to load, as shown in the Packages list." size="small" label="Package id" value={id} onChange={(e) => setId(e.target.value)} />
-        <WriteForm
-          title="Load this package?"
-          confirmLabel="Load package"
+        <ReadForm
+          label="Load package"
           action="fetch-package"
-          blocked={!id.trim()}
-          pending={false}
-          last={undefined}
-          onConfirm={() => setSubmitted(id.trim())}
-          consequence="A GET. An invalid key is rejected rather than treated as anonymous."
+          disabled={!id.trim()}
+          onRun={() => setSubmitted(id.trim())}
         />
       </FormRow>
       {submitted && <PackageBody packageId={submitted} />}
@@ -1331,16 +1358,11 @@ export function DealsExportLookup() {
       title="Export every deal"
       description="Reads all stored deals in one unpaginated pass. Not a write, but heavy."
     >
-      <WriteForm
-        title="Export every stored deal?"
-        confirmLabel="Export deals"
-        action="export-deals"
-        blocked={false}
-        pending={false}
-        last={undefined}
-        onConfirm={() => setLoadExport(true)}
-        consequence="An unpaginated scan of stored records. Not a write, but heavy."
-      />
+      <ReadForm
+          label="Export deals"
+          action="export-deals"
+          onRun={() => setLoadExport(true)}
+        />
       {loadExport && <DealsExportBody />}
     </ActionBlock>
   );
@@ -1362,15 +1384,11 @@ function BuyerStatus({ dealId }: { dealId: string }) {
     <>
       <FormRow>
         <TipField hint="Full URL of the buyer agent whose view of this deal you want to read." size="small" label="Buyer URL" value={buyerUrl} onChange={(e) => setBuyerUrl(e.target.value)} />
-        <WriteForm
-          title="Read buyer activation status?"
-          confirmLabel="Buyer status"
+        <ReadForm
+          label="Buyer status"
           action="deal-buyer-status"
-          blocked={!buyerUrl.trim()}
-          pending={false}
-          last={undefined}
-          onConfirm={() => setSubmitted(buyerUrl.trim())}
-          consequence="A GET of how this buyer sees the deal."
+          disabled={!buyerUrl.trim()}
+          onRun={() => setSubmitted(buyerUrl.trim())}
         />
       </FormRow>
       {submitted && <BuyerStatusBody dealId={dealId} buyerUrl={submitted} />}
@@ -1383,9 +1401,7 @@ function BuyerStatusBody({ dealId, buyerUrl }: { dealId: string; buyerUrl: strin
     dealBuyerStatus(c, dealId, buyerUrl, signal),
   );
   return (
-    <Typography variant="caption">
-      Buyer status: {buyer.data ? JSON.stringify(buyer.data) : buyer.result ? describe(buyer.result) : ""}
-    </Typography>
+    <ReadOutcome name="Buyer status" data={buyer.data} result={buyer.result} />
   );
 }
 
@@ -1430,15 +1446,11 @@ function SspTrouble({ dealId }: { dealId: string }) {
     <>
       <FormRow>
         <SspNameField label="SSP" hint="Name of the SSP connector to diagnose. Pick a known one or type another; an unknown name is a 400 that lists the configured ones." value={ssp} onChange={setSsp} />
-        <WriteForm
-          title="Troubleshoot this SSP?"
-          confirmLabel="Troubleshoot"
+        <ReadForm
+          label="Troubleshoot"
           action="deal-ssp"
-          blocked={!ssp.trim()}
-          pending={false}
-          last={undefined}
-          onConfirm={() => setSubmitted(ssp.trim())}
-          consequence="A GET of connector diagnostics for one SSP."
+          disabled={!ssp.trim()}
+          onRun={() => setSubmitted(ssp.trim())}
         />
       </FormRow>
       {submitted && <SspTroubleBody dealId={dealId} ssp={submitted} />}
@@ -1451,18 +1463,14 @@ function SspTroubleBody({ dealId, ssp }: { dealId: string; ssp: string }) {
     dealSspTroubleshoot(c, dealId, ssp, signal),
   );
   return (
-    <Typography variant="caption">
-      SSP troubleshoot: {trouble.data ? JSON.stringify(trouble.data) : trouble.result ? describe(trouble.result) : ""}
-    </Typography>
+    <ReadOutcome name="SSP troubleshoot" data={trouble.data} result={trouble.result} />
   );
 }
 
 function DealsExportBody() {
   const exported = useResource("deals-export", (c, signal) => dealsExport(c, {}, signal));
   return (
-    <Typography variant="caption">
-      Export: {exported.data ? JSON.stringify(exported.data).slice(0, 200) : exported.result ? describe(exported.result) : ""}
-    </Typography>
+    <ReadOutcome name="Export" data={exported.data} result={exported.result} />
   );
 }
 
@@ -1713,15 +1721,11 @@ export function AgentDetailLookup() {
     <Box sx={{ mt: 1 }}>
       <FormRow>
         <TipField hint="Id of the registered agent to load, as shown in the Agents list." size="small" label="Agent id" value={id} onChange={(e) => setId(e.target.value)} />
-        <WriteForm
-          title="Load this registered agent?"
-          confirmLabel="Load agent"
+        <ReadForm
+          label="Load agent"
           action="fetch-agent"
-          blocked={!id.trim()}
-          pending={false}
-          last={undefined}
-          onConfirm={() => setSubmitted(id.trim())}
-          consequence="A GET of the local registry row."
+          disabled={!id.trim()}
+          onRun={() => setSubmitted(id.trim())}
         />
       </FormRow>
       {submitted && <AgentBody agentId={submitted} />}
@@ -2143,12 +2147,8 @@ export function EventLookup({ eventId }: { eventId: string }) {
   const detail = useResource(`event:${eventId}`, (c, signal) => eventById(c, eventId, signal));
   if (!detail.data && !detail.result) return null;
   return (
-    <Box
-      component="pre"
-      data-block="event-by-id"
-      sx={{ mt: 1, p: 1.5, fontSize: 12, overflow: "auto", maxHeight: 240, backgroundColor: palette.ground }}
-    >
-      {detail.data ? JSON.stringify(detail.data, null, 2) : detail.result ? describe(detail.result) : ""}
+    <Box data-block="event-by-id" sx={{ mt: 1 }}>
+      <ReadOutcome name="Event" data={detail.data} result={detail.result} />
     </Box>
   );
 }
@@ -2160,15 +2160,11 @@ export function ApiKeyDetailLookup() {
     <Box sx={{ mt: 1 }}>
       <FormRow>
         <TipField hint="Id of the API key to look up, as shown in the API keys list. Metadata only; the secret is never returned." size="small" label="Key id" value={id} onChange={(e) => setId(e.target.value)} />
-        <WriteForm
-          title="Load this key's metadata?"
-          confirmLabel="Load key"
+        <ReadForm
+          label="Load key"
           action="fetch-key"
-          blocked={!id.trim()}
-          pending={false}
-          last={undefined}
-          onConfirm={() => setSubmitted(id.trim())}
-          consequence="Metadata only. The secret is never on this route."
+          disabled={!id.trim()}
+          onRun={() => setSubmitted(id.trim())}
         />
       </FormRow>
       {submitted && <ApiKeyBody keyId={submitted} />}
@@ -2205,15 +2201,11 @@ export function AudienceMatchForm() {
           value={identifier}
           onChange={(e) => setIdentifier(e.target.value)}
         />
-        <WriteForm
-          title="Score this audience?"
-          confirmLabel="Match"
+        <ReadForm
+          label="Match"
           action="audience-match"
-          blocked={!identifier.trim()}
-          pending={false}
-          last={undefined}
-          onConfirm={() => setSubmitted(identifier.trim())}
-          consequence="Query-shaped: nothing is stored. A missing identifier is a form error, not an outage."
+          disabled={!identifier.trim()}
+          onRun={() => setSubmitted(identifier.trim())}
         />
       </FormRow>
       {submitted && <AudienceMatchBody identifier={submitted} />}

@@ -54,7 +54,7 @@ export function WriteForm({
   pending: boolean;
   last: Result<unknown> | undefined;
   onConfirm: () => void;
-  /** Tooltip on the button; defaults to `consequence` when that is plain text. */
+  /** Tooltip on the button. Only for what the label and the confirmation do not already say. */
   hint?: ReactNode;
   children?: ReactNode;
 }) {
@@ -62,7 +62,7 @@ export function WriteForm({
 
   const tip = blocked
     ? "Writes are switched off. Turn them on from the connection menu to use this."
-    : (hint ?? (typeof consequence === "string" ? consequence : undefined));
+    : hint;
 
   const actionButton = (
     <Hint hint={tip}>
@@ -119,5 +119,46 @@ export function WriteForm({
         }}
       />
     </Box>
+  );
+}
+
+/**
+ * The read counterpart of `WriteForm`: a button that runs straight away. A read
+ * has nothing to warn about, and a dialog in front of it teaches people to
+ * click through the ones that matter. A GET that writes upstream (`fetch-deal`
+ * and its lazy expiry) is not a read for this purpose and stays on `WriteForm`.
+ */
+export function ReadForm({
+  label,
+  action,
+  disabled = false,
+  onRun,
+  children,
+}: {
+  label: string;
+  action: string;
+  disabled?: boolean;
+  onRun: () => void;
+  children?: ReactNode;
+}) {
+  const button = (
+    <Button
+      variant="outlined"
+      size="small"
+      data-action={action}
+      disabled={disabled}
+      onClick={onRun}
+      sx={{ flexShrink: 0 }}
+    >
+      {label}
+    </Button>
+  );
+  return children ? (
+    <FormRow>
+      {children}
+      {button}
+    </FormRow>
+  ) : (
+    button
   );
 }

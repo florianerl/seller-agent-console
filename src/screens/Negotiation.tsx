@@ -1,3 +1,4 @@
+import { JsonView } from "../components/JsonView";
 import { Fragment, useState } from "react";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
@@ -83,17 +84,8 @@ function Conversation({ sessionId }: { sessionId: string }) {
                   {/* Message payloads differ per role and the schema is open,
                       so the body is shown as it arrived rather than mapped
                       into fields that may not exist. */}
-                  <Box
-                    component="pre"
-                    sx={{
-                      m: 0,
-                      mt: 0.5,
-                      fontSize: 12,
-                      whiteSpace: "pre-wrap",
-                      wordBreak: "break-word",
-                    }}
-                  >
-                    {JSON.stringify(row["content"] ?? row, null, 2)}
+                  <Box sx={{ mt: 0.5 }}>
+                    <JsonView value={row["content"] ?? row} />
                   </Box>
                 </Box>
               );

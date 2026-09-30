@@ -34,6 +34,12 @@ export const palette = {
    */
   navActiveWash: "#FBEDEC",
 
+  /** JSON viewer tokens. Each clears 4.5:1 on ground, where the viewer sits. */
+  jsonKey: "#1F4E8C",
+  jsonString: "#1F7A3F",
+  jsonNumber: "#8A5A13",
+  jsonKeyword: "#8B2E7A",
+
   ok: "#1F7A3F",
   /** 3.64:1 on white — fills and icons only. */
   warning: "#B7791F",
@@ -78,6 +84,10 @@ export const CONTRAST_CONTRACT: ReadonlyArray<{
   { name: "header secondary on paper", fg: palette.textSecondary, bg: palette.paper, min: "body" },
   { name: "brand mark on paper", fg: palette.brandRed, bg: palette.paper, min: "ui" },
   { name: "active nav rule on paper", fg: palette.brandRed, bg: palette.paper, min: "ui" },
+  { name: "json key on ground", fg: palette.jsonKey, bg: palette.ground, min: "body" },
+  { name: "json string on ground", fg: palette.jsonString, bg: palette.ground, min: "body" },
+  { name: "json number on ground", fg: palette.jsonNumber, bg: palette.ground, min: "body" },
+  { name: "json keyword on ground", fg: palette.jsonKeyword, bg: palette.ground, min: "body" },
   { name: "ok status text on paper", fg: palette.ok, bg: palette.paper, min: "body" },
   { name: "error status text on paper", fg: palette.error, bg: palette.paper, min: "body" },
   { name: "error text on error background", fg: palette.error, bg: palette.errorBg, min: "body" },

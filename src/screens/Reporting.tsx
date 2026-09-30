@@ -15,6 +15,7 @@ import { CADENCE } from "../query/cadence";
 import { useResource, type ResourceHandle } from "../query/useResource";
 import { FormRow } from "../components/WriteForm";
 import { TipField } from "../components/TipField";
+import { JsonView } from "../components/JsonView";
 import { palette } from "../theme/palette";
 
 /**
@@ -53,25 +54,7 @@ function Counts({ label, counts }: { label: string; counts: Record<string, numbe
  * no way to tell the invention from the network's own answer.
  */
 function RawPayload({ data, testId }: { data: unknown; testId: string }) {
-  return (
-    <Box
-      component="pre"
-      data-payload={testId}
-      sx={{
-        m: 0,
-        p: 1.5,
-        maxHeight: 320,
-        overflow: "auto",
-        fontSize: 12,
-        lineHeight: 1.5,
-        backgroundColor: palette.ground,
-        border: `1px solid ${palette.line}`,
-        borderRadius: 1,
-      }}
-    >
-      {JSON.stringify(data, null, 2)}
-    </Box>
-  );
+  return <JsonView value={data} data-payload={testId} />;
 }
 
 /** The caption every value on this screen carries: what it is, and when it arrived. */
