@@ -146,7 +146,7 @@ stateDiagram-v2
 | Request a change | `POST /api/v1/change-requests` | Request a change in the row | none |
 | Review or apply a change | not allowed (operator key) | In the row, or Change requests | none |
 | See what a change did | `GET /api/v1/orders/{id}` (`metadata`) | Recorded on the order, in the row | none |
-| Close | — | Mark completed, or Cancel order | `transition_order` |
+| Close | — | Record completed, or Cancel order | `transition_order` |
 
 ## Gaps in the agent's MCP server
 

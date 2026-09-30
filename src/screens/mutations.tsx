@@ -71,6 +71,7 @@ import {
 } from "../api/endpoints";
 import { describe, type Result } from "../api/errors";
 import {
+  RECORD_ONLY,
   actorClaim,
   isOrderStatus,
   nextSteps,
@@ -802,6 +803,7 @@ export function OrderTransitionWrites({
   onStale,
   accepted,
   onAccepted,
+  adServer,
 }: {
   orderId: string;
   status: string;
@@ -816,6 +818,12 @@ export function OrderTransitionWrites({
    * has to live above the table to still be on screen afterwards.
    */
   onAccepted: (to: string | undefined) => void;
+  /**
+   * What GAM showed for this order's deal, if someone checked. Quoted in the
+   * confirmation of every record-only move, because that move is a claim
+   * about the ad server and this is the only evidence the console has.
+   */
+  adServer?: string;
 }) {
   const { writesEnabled, credential, setActorName } = useCredential();
   const [reason, setReason] = useState("");
@@ -894,7 +902,15 @@ export function OrderTransitionWrites({
           describes this move as &ldquo;{step.description}&rdquo;.
           {step.kind === "stop" && " It takes the order off its path."}
           {(step.to === "cancelled" || step.to === "completed") &&
-            " This is terminal: no transition leads out of it."}{" "}
+            " This is terminal: no transition leads out of it."}
+          {RECORD_ONLY.has(step.to) && (
+            <>
+              {" "}
+              <strong>Nothing is sent to the ad server</strong>: the agent has no ad-server sync, so
+              this only records the status on the order.{" "}
+              {adServer ? `GAM, when checked: ${adServer}` : "The ad server has not been checked from here."}
+            </>
+          )}{" "}
           Not idempotent: re-read the order before retrying after a timeout.
         </>
       }

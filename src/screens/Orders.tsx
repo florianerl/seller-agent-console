@@ -1,12 +1,17 @@
-import { Fragment, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
 import Collapse from "@mui/material/Collapse";
 import IconButton from "@mui/material/IconButton";
 import Link from "@mui/material/Link";
 import Paper from "@mui/material/Paper";
 import Skeleton from "@mui/material/Skeleton";
 import Stack from "@mui/material/Stack";
+import Step from "@mui/material/Step";
+import StepContent from "@mui/material/StepContent";
+import StepLabel from "@mui/material/StepLabel";
+import Stepper from "@mui/material/Stepper";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
@@ -15,6 +20,8 @@ import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import {
   changeRequests,
+  gamOrders,
+  GamOrderRows,
   orderAudit,
   orders,
   type ChangeRequest,
@@ -22,9 +29,10 @@ import {
   type Order,
   type OrderAudit,
 } from "../api/endpoints";
-import { describe } from "../api/errors";
+import { describe, type Result } from "../api/errors";
 import {
   CR_STAGE,
+  HAPPY_PATH,
   MOVED_BY,
   STAGE,
   STAGE_GROUPS,
@@ -263,80 +271,150 @@ function StageSummary({
   );
 }
 
-/**
- * Visually hidden, still read aloud, and pinned to its item's corner.
- */
-const srOnly = {
-  position: "absolute",
-  left: 0,
-  top: 0,
-  // Strings on purpose: in sx, a number up to 1 is a fraction, so width: 1
-  // is 100% — which is how this first shipped a page-wide scrollbar.
-  width: "1px",
-  height: "1px",
-  m: "-1px",
-  p: 0,
-  border: 0,
-  overflow: "hidden",
-  clip: "rect(0 0 0 0)",
-  whiteSpace: "nowrap",
-} as const;
+type NodeKind = "current" | "next" | "visited" | "other";
 
 /**
- * The whole state machine, grouped as the summary is: where the order is,
- * where it has been, and where it can go from here. A happy-path strip hid
- * the loops back to draft and the three ways off the path, which is exactly
- * where an operator gets lost.
+ * The marker for one state. Shape carries the meaning as well as colour, so
+ * nothing depends on telling hues apart: filled for where the order is, a
+ * tick for where it has been, an arrow for where it can go.
+ */
+function NodeIcon({ kind }: { kind: NodeKind }) {
+  const size = 22;
+  const common = {
+    width: size,
+    height: size,
+    borderRadius: "50%",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 12,
+    fontWeight: 700,
+    boxSizing: "border-box",
+  } as const;
+  switch (kind) {
+    case "current":
+      return <Box aria-hidden="true" sx={{ ...common, backgroundColor: palette.brandRedText, color: palette.paper }}>●</Box>;
+    case "visited":
+      return <Box aria-hidden="true" sx={{ ...common, backgroundColor: palette.text, color: palette.paper }}>✓</Box>;
+    case "next":
+      return <Box aria-hidden="true" sx={{ ...common, border: `2px solid ${palette.text}`, color: palette.text }}>→</Box>;
+    case "other":
+      return <Box aria-hidden="true" sx={{ ...common, border: `1px solid ${palette.line}` }} />;
+  }
+}
+
+const NODE_NOTE: Readonly<Record<NodeKind, string>> = {
+  current: "now",
+  next: "can go next",
+  visited: "done",
+  other: "",
+};
+
+/**
+ * Where the order is, where it has been, and where it can go from here: the
+ * main path as a stepper, and the four ways off it as chips beside it. A
+ * strip of the main path alone hid the loops back to draft and the exits,
+ * which is exactly where an operator gets lost.
  */
 function StateMap({ status, visited }: { status: string; visited: ReadonlySet<string> }) {
   const next = new Set<string>(nextSteps(status).map((s) => s.to));
+  const kindOf = (s: string): NodeKind =>
+    s === status ? "current" : next.has(s) ? "next" : visited.has(s) ? "visited" : "other";
+  const offPath = ORDER_STATUSES.map((o) => o.value).filter((s) => !HAPPY_PATH.includes(s));
+  const onPath = HAPPY_PATH.includes(status as OrderStatus);
+
   return (
-    <Box data-block="state-map" sx={{ display: "flex", flexWrap: "wrap", gap: 3, fontSize: 12 }}>
-      {STAGE_GROUPS.map((group) => (
-        <Box key={group.id}>
-          <Box sx={{ fontSize: 11, fontWeight: 700, color: palette.textSecondary, mb: 0.5 }}>
-            {group.label}
-          </Box>
-          <Box component="ol" aria-label={`${group.label} states`} sx={{ m: 0, p: 0, listStyle: "none" }}>
-            {group.statuses.map((s) => {
-              const current = s === status;
-              const reachable = next.has(s);
-              const been = visited.has(s) && !current;
-              const node = current ? "current" : reachable ? "next" : been ? "visited" : "other";
-              return (
-                <Box
-                  component="li"
-                  key={s}
-                  data-state-node={s}
-                  data-node={node}
-                  aria-current={current ? "step" : undefined}
+    <Box data-block="state-map">
+      <Box sx={{ overflowX: "auto", pb: 1 }}>
+        <Stepper
+          alternativeLabel
+          nonLinear
+          activeStep={onPath ? HAPPY_PATH.indexOf(status as OrderStatus) : -1}
+          aria-label="Order lifecycle"
+          component="ol"
+          sx={{ minWidth: 640, p: 0, m: 0, "& .MuiStepConnector-line": { borderColor: palette.line } }}
+        >
+          {HAPPY_PATH.map((s) => {
+            const kind = kindOf(s);
+            return (
+              <Step
+                key={s}
+                component="li"
+                completed={kind === "visited"}
+                data-state-node={s}
+                data-node={kind}
+                aria-current={kind === "current" ? "step" : undefined}
+                sx={{ listStyle: "none" }}
+              >
+                <StepLabel
+                  icon={<NodeIcon kind={kind} />}
+                  optional={
+                    <Typography
+                      variant="caption"
+                      component="span"
+                      sx={{ display: "block", textAlign: "center", color: palette.textSecondary, minHeight: 18 }}
+                    >
+                      {NODE_NOTE[kind] || (s === "pending_approval" ? "optional" : "")}
+                    </Typography>
+                  }
                   sx={{
-                    position: "relative",
-                    py: 0.25,
-                    color: current || reachable ? palette.text : palette.textSecondary,
-                    fontWeight: current ? 700 : 400,
+                    "& .MuiStepLabel-label": {
+                      fontSize: 12,
+                      mt: "6px !important",
+                      fontWeight: kind === "current" ? 700 : 400,
+                      color: kind === "other" ? palette.textSecondary : palette.text,
+                    },
                   }}
                 >
-                  <Box component="span" aria-hidden="true" sx={{ display: "inline-block", width: 16 }}>
-                    {current ? "●" : reachable ? "→" : been ? "✓" : "·"}
-                  </Box>
-                  <Box
-                    component="span"
-                    sx={current ? { textDecoration: "underline", textUnderlineOffset: 3 } : undefined}
-                  >
-                    {words(s)}
-                  </Box>
-                  {(reachable || been) && (
-                    <Box component="span" sx={srOnly}>
-                      {reachable ? " (a legal next step)" : " (visited)"}
-                    </Box>
-                  )}
-                </Box>
-              );
-            })}
-          </Box>
-        </Box>
-      ))}
+                  {words(s)}
+                </StepLabel>
+              </Step>
+            );
+          })}
+        </Stepper>
+      </Box>
+      <Stack
+        direction="row"
+        spacing={1}
+        alignItems="center"
+        flexWrap="wrap"
+        useFlexGap
+        sx={{ mt: 1.5 }}
+        component="ul"
+        aria-label="Ways off the path"
+        style={{ listStyle: "none", margin: 0, padding: 0 }}
+      >
+        <Typography component="li" variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>
+          Off the path:
+        </Typography>
+        {offPath.map((s) => {
+          const kind = kindOf(s);
+          return (
+            <Box
+              component="li"
+              key={s}
+              data-state-node={s}
+              data-node={kind}
+              aria-current={kind === "current" ? "step" : undefined}
+            >
+              <Chip
+                size="small"
+                variant={kind === "current" ? "filled" : "outlined"}
+                label={`${kind === "next" ? "→ " : kind === "visited" ? "✓ " : ""}${words(s)}${
+                  NODE_NOTE[kind] ? ` · ${NODE_NOTE[kind]}` : ""
+                }`}
+                sx={{
+                  fontWeight: kind === "current" ? 700 : 400,
+                  color: kind === "current" ? palette.paper : kind === "other" ? palette.textSecondary : palette.text,
+                  backgroundColor: kind === "current" ? palette.brandRedText : "transparent",
+                  borderColor: kind === "next" ? palette.text : palette.line,
+                  borderWidth: kind === "next" ? 2 : 1,
+                }}
+              />
+            </Box>
+          );
+        })}
+      </Stack>
     </Box>
   );
 }
@@ -344,26 +422,47 @@ function StateMap({ status, visited }: { status: string; visited: ReadonlySet<st
 function ActorChip({ actor }: { actor: string }) {
   const kind = actorKind(actor);
   return (
-    <Box
-      component="span"
+    <Chip
+      size="small"
+      variant="outlined"
+      label={kind}
       data-actor-kind={kind}
       sx={{
+        height: 20,
         fontSize: 10,
         fontWeight: 700,
         letterSpacing: 0.5,
         textTransform: "uppercase",
-        border: `1px solid ${palette.line}`,
-        borderRadius: 0.5,
-        px: 0.5,
-        mr: 0.75,
         color: palette.textSecondary,
+        borderColor: palette.line,
+        mr: 0.75,
       }}
-    >
-      {kind}
-    </Box>
+    />
   );
 }
 
+function TimelineDot({ tone }: { tone: "start" | "move" | "latest" }) {
+  return (
+    <Box
+      aria-hidden="true"
+      sx={{
+        width: 12,
+        height: 12,
+        mx: "6px",
+        borderRadius: "50%",
+        boxSizing: "border-box",
+        backgroundColor: tone === "latest" ? palette.brandRedText : tone === "move" ? palette.text : palette.paper,
+        border: tone === "start" ? `2px solid ${palette.text}` : "none",
+      }}
+    />
+  );
+}
+
+/**
+ * The audit trail as a vertical stepper: creation first — which writes no
+ * transition of its own — then every move, newest last and marked. Each
+ * entry says who claimed to make it, what kind of actor that is, and why.
+ */
 function Timeline({ audit }: { audit: ResourceHandle<OrderAudit> }) {
   if (audit.loading && !audit.data) return <Skeleton height={24} />;
 
@@ -377,38 +476,36 @@ function Timeline({ audit }: { audit: ResourceHandle<OrderAudit> }) {
 
   const { transitions, created_at } = audit.data;
   const anySystem = transitions.some((t) => actorKind(t.actor) === "system");
+  const connector = { "& .MuiStepConnector-line": { borderColor: palette.line, minHeight: 12 } } as const;
+  const label = (primary: ReactNode, when: string | null) => (
+    <Stack direction="row" spacing={1.5} alignItems="baseline" flexWrap="wrap" useFlexGap>
+      <Box sx={{ fontSize: 13 }}>{primary}</Box>
+      <Box sx={{ fontSize: 12, color: palette.textSecondary }}>{stamp(when)}</Box>
+    </Stack>
+  );
 
   return (
     <Stack spacing={1}>
-      <Box sx={{ fontSize: 12, color: palette.textSecondary }}>
-        Created {stamp(created_at)}, in draft. Creating an order writes no transition.
-      </Box>
-
-      {transitions.length === 0 ? (
-        <Typography variant="body2" color="text.secondary" data-state="no-transitions">
-          No transitions recorded yet.
-        </Typography>
-      ) : (
-        <Box component="ol" sx={{ m: 0, pl: 0, listStyle: "none" }} data-list="transitions">
-          {transitions.map((t, index) => (
-            <Box
-              component="li"
-              key={t.transition_id ?? `${t.timestamp}-${index}`}
-              sx={{
-                display: "flex",
-                flexWrap: "wrap",
-                columnGap: 1.5,
-                alignItems: "baseline",
-                py: 0.75,
-                borderTop: index === 0 ? "none" : `1px solid ${palette.line}`,
-              }}
-            >
-              <Box sx={{ fontSize: 12, color: palette.textSecondary, minWidth: 130 }}>
-                {stamp(t.timestamp)}
-              </Box>
-              <Box sx={{ fontSize: 13 }}>
-                {words(t.from_status)} → <strong>{words(t.to_status)}</strong>
-              </Box>
+      <Stepper orientation="vertical" nonLinear activeStep={-1} sx={connector} data-list="transitions">
+        <Step completed expanded>
+          <StepLabel icon={<TimelineDot tone="start" />}>
+            {label(<>Created, in <strong>draft</strong></>, created_at)}
+          </StepLabel>
+          <StepContent sx={{ borderColor: palette.line, fontSize: 12, color: palette.textSecondary }}>
+            Creating an order writes no transition.
+          </StepContent>
+        </Step>
+        {transitions.map((t, index) => (
+          <Step key={t.transition_id ?? `${t.timestamp}-${index}`} completed expanded>
+            <StepLabel icon={<TimelineDot tone={index === transitions.length - 1 ? "latest" : "move"} />}>
+              {label(
+                <>
+                  {words(t.from_status)} → <strong>{words(t.to_status)}</strong>
+                </>,
+                t.timestamp,
+              )}
+            </StepLabel>
+            <StepContent sx={{ borderColor: palette.line }}>
               <Box sx={{ fontSize: 12, color: palette.textSecondary }}>
                 {/* The actor is whatever the caller claimed; the API does not
                     verify it, so it is shown as a label, not as attribution. */}
@@ -417,13 +514,18 @@ function Timeline({ audit }: { audit: ResourceHandle<OrderAudit> }) {
                 {t.reason ? ` — ${t.reason}` : ""}
               </Box>
               {Object.keys(t.metadata).length > 0 && (
-                <Box component="code" sx={{ flexBasis: "100%", fontSize: 11, color: palette.textSecondary }}>
+                <Box component="code" sx={{ display: "block", mt: 0.5, fontSize: 11, color: palette.textSecondary }}>
                   {JSON.stringify(t.metadata)}
                 </Box>
               )}
-            </Box>
-          ))}
-        </Box>
+            </StepContent>
+          </Step>
+        ))}
+      </Stepper>
+      {transitions.length === 0 && (
+        <Typography variant="body2" color="text.secondary" data-state="no-transitions">
+          No transitions recorded yet.
+        </Typography>
       )}
       {anySystem && (
         <Typography variant="caption" color="text.secondary" data-note="system-actor">
@@ -655,6 +757,57 @@ function OrderChangeRequests({
   );
 }
 
+/** How many GAM orders one check reads. Each check spends the network's API quota. */
+const GAM_SCAN = 500;
+
+function gamFinding(dealId: string, result: Result<unknown> | undefined): string | undefined {
+  if (!result) return undefined;
+  if (result.kind !== "ok") return `the check failed (${describe(result)}).`;
+  const parsed = GamOrderRows.safeParse(result.data);
+  const rows = parsed.success ? parsed.data.orders : [];
+  const matches = rows.filter((o) => o.external_order_id === dealId);
+  if (matches.length === 0) {
+    return `no order for deal ${dealId} among the ${rows.length} GAM orders read.`;
+  }
+  return matches.map((o) => `order ${o.id}${o.name ? ` “${o.name}”` : ""} is ${o.status || "of unreported status"}`).join("; ") + ".";
+}
+
+/**
+ * The only evidence the console can get for an ad-server status. Mounted on
+ * request, never polled: `/gam/orders` calls Google Ad Manager with the
+ * agent's credentials and spends its quota, which is why the Reporting
+ * screen does not poll it either.
+ */
+function GamCheck({ dealId, onFinding }: { dealId: string; onFinding: (finding: string | undefined) => void }) {
+  const scan = useResource("gam-orders:scan", (c, signal) => gamOrders(c, { limit: GAM_SCAN }, signal));
+  const finding = gamFinding(dealId, scan.result);
+  // Lifted so the Record … confirmations can quote it.
+  useEffect(() => onFinding(finding), [finding, onFinding]);
+
+  return (
+    <Box data-block="gam-check" sx={{ fontSize: 13 }}>
+      {scan.loading && !scan.result ? (
+        <Typography variant="body2" color="text.secondary">
+          Asking GAM…
+        </Typography>
+      ) : (
+        <Typography variant="body2" data-state={scan.result?.kind === "ok" ? "gam-checked" : "gam-failed"}>
+          GAM: {finding}{" "}
+          <Box component="span" sx={{ color: palette.textSecondary, fontSize: 12 }}>
+            {scan.asOf !== undefined ? asOf(scan.asOf) : ""}
+          </Box>{" "}
+          <Button size="small" onClick={scan.refresh} disabled={scan.validating} data-action="gam-recheck">
+            Check again
+          </Button>
+        </Typography>
+      )}
+    </Box>
+  );
+}
+
+/** Statuses where it is worth asking the ad server what it actually has. */
+const CHECKABLE = new Set(["approved", "in_progress", "syncing", "booked", "unbooked"]);
+
 function OrderDetail({
   order,
   changes,
@@ -676,10 +829,6 @@ function OrderDetail({
     orderAudit(connection, order.order_id, {}, signal),
   );
 
-  if (audit.freshness === "blocked") {
-    return <GatedNotice what="Order audit trail" result={audit.result} />;
-  }
-
   // The audit is read when the row opens, so it is fresher than the list,
   // which may be up to a poll interval old. The buttons derive from it.
   const status = audit.data?.current_status ?? order.status;
@@ -690,6 +839,12 @@ function OrderDetail({
   const applied = (changes.data?.change_requests ?? []).filter(
     (cr) => cr.order_id === order.order_id && cr.status === "applied",
   );
+  const [checkGam, setCheckGam] = useState(false);
+  const [gam, setGam] = useState<string | undefined>();
+
+  if (audit.freshness === "blocked") {
+    return <GatedNotice what="Order audit trail" result={audit.result} />;
+  }
 
   return (
     <Stack spacing={2.5} data-block="order-detail">
@@ -725,6 +880,23 @@ function OrderDetail({
 
       <Box>
         <Typography sx={sectionHeading}>Next step</Typography>
+        {CHECKABLE.has(status) && order.deal_id && (
+          <Box sx={{ mb: 1.5 }}>
+            {checkGam ? (
+              <GamCheck dealId={order.deal_id} onFinding={setGam} />
+            ) : (
+              <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                <Button size="small" variant="outlined" onClick={() => setCheckGam(true)} data-action="gam-check">
+                  Check the ad server
+                </Button>
+                <Typography variant="caption" color="text.secondary">
+                  Asks GAM whether it has an order for deal {order.deal_id}. The steps below only record a
+                  status; this is how to see whether the ad server agrees. Spends GAM API quota.
+                </Typography>
+              </Stack>
+            )}
+          </Box>
+        )}
         {audit.data || audit.result ? (
           <OrderTransitionWrites
             orderId={order.order_id}
@@ -737,6 +909,7 @@ function OrderDetail({
             }}
             accepted={accepted}
             onAccepted={onAccepted}
+            {...(gam ? { adServer: gam } : {})}
           />
         ) : (
           <Skeleton height={32} />
