@@ -1871,6 +1871,16 @@ const CHANGE_FIELD: Readonly<Record<string, string>> = {
   other: "",
 };
 
+/**
+ * Offered, not enforced: applying a change merges `proposed_values` into the
+ * order's metadata under whatever key it carries, so the agent has no field
+ * list to validate against and a closed dropdown would refuse real fields.
+ */
+const SUGGESTED_FIELDS: Readonly<Record<string, readonly string[]>> = {
+  ...Object.fromEntries(Object.entries(CHANGE_FIELD).map(([k, v]) => [k, v ? [v] : []])),
+  flight_dates: ["flight_start", "flight_end"],
+};
+
 function problemList(result: Result<unknown> | undefined, key: string): string[] {
   if (result?.kind !== "unavailable") return [];
   const value = result.problem?.[key];
@@ -1981,7 +1991,26 @@ export function ChangeRequestCreate({
               disabled={!writesEnabled}
               sx={{ minWidth: 180 }}
             />
-            <TipField hint="Name of the order field to change. It starts from the usual field for the change type; edit it if the request touches something else." size="small" label="Field" value={fieldName} onChange={(e) => setField(e.target.value)} disabled={!writesEnabled} />
+            <Autocomplete
+              freeSolo
+              size="small"
+              options={SUGGESTED_FIELDS[changeType] ?? []}
+              // The field starts filled in, and the default text filter would
+              // then hide every suggestion but that one.
+              filterOptions={(all) => all}
+              openOnFocus
+              inputValue={fieldName}
+              onInputChange={(_, next) => setField(next)}
+              disabled={!writesEnabled}
+              sx={{ minWidth: 180 }}
+              renderInput={(params) => (
+                <TipField
+                  {...params}
+                  hint="Name of the order field to change. Pick a suggestion for the change type, or type another; it starts from the usual field."
+                  label="Field"
+                />
+              )}
+            />
             <TipField
               hint="The value to set the field to. A whole number for an impressions change, otherwise text. With no value the request changes nothing when applied."
               size="small"
