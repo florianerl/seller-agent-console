@@ -77,16 +77,126 @@ export const DealList = z
     deals: z.array(DealEnvelope),
     count: z.number().catch(0),
     skipped: z.array(z.string()).catch([]),
+    /** Set client-side when the agent has no list route and the export fed it. */
+    fromExport: z.boolean().optional(),
   })
   .loose();
 export type DealList = z.infer<typeof DealList>;
 
-export const deals = (
+/**
+ * What the list route puts on the wire. Two shapes exist: the original
+ * `{deals: [{deal: …}], count, skipped}` envelope list, and the current agent's
+ * `{items: […]}` of flat deals whose CPMs are float dollars with the currency
+ * beside them, not `Money`. Both are read and normalised to `DealList` so no
+ * screen has to know which agent it is talking to.
+ */
+const DealListWire = z
+  .object({
+    deals: z.array(DealEnvelope).optional(),
+    items: z.array(z.looseObject({ deal_id: z.string() })).optional(),
+    count: z.number().optional(),
+    skipped: z.array(z.string()).catch([]),
+  })
+  .loose();
+
+const moneyOf = (v: unknown, currency: unknown) => {
+  if (typeof v === "number") {
+    return {
+      amount_micros: Math.round(v * 1_000_000),
+      currency: typeof currency === "string" ? currency : "USD",
+    };
+  }
+  return v ?? null;
+};
+
+/** Flat item → the envelope entry, or undefined when it will not parse. */
+const fromItem = (item: Record<string, unknown>): DealEnvelope | undefined => {
+  const pricing = item.pricing as Record<string, unknown> | null | undefined;
+  const flat = pricing
+    ? {
+        ...pricing,
+        base_cpm: moneyOf(pricing.base_cpm, pricing.currency),
+        final_cpm: moneyOf(pricing.final_cpm, pricing.currency),
+      }
+    : pricing;
+  const parsed = DealEnvelope.safeParse({ deal: { ...item, pricing: flat } });
+  return parsed.success ? parsed.data : undefined;
+};
+
+export const deals = async (
   c: Connection,
   query: { status?: string } = {},
   signal?: AbortSignal,
-): Promise<Result<DealList>> =>
-  get(c, PATHS.deals, { schema: DealList, query, timeoutMs: TIMEOUTS.heavy, signal });
+): Promise<Result<DealList>> => {
+  const w = await get(c, PATHS.deals, {
+    schema: DealListWire,
+    query,
+    timeoutMs: TIMEOUTS.heavy,
+    signal,
+  });
+  const r: Result<DealList> =
+    w.kind !== "ok"
+      ? w
+      : (() => {
+          const skipped = [...w.data.skipped];
+          const flat = (w.data.items ?? []).flatMap((i) => {
+            const d = fromItem(i);
+            if (!d) skipped.push(i.deal_id);
+            return d ? [d] : [];
+          });
+          const rows = [...(w.data.deals ?? []), ...flat];
+          return {
+            ...w,
+            data: { deals: rows, count: w.data.count ?? rows.length, skipped },
+          };
+        })();
+  // Some agent builds have no list route and answer the GET with a 405. The
+  // export feed is the only other full read, so fall back to it rather than
+  // leave the screen empty — flagged `fromExport` so the screen can say the
+  // rows are the feed's, not the list's.
+  if (r.kind === "unavailable" && r.status === 405) {
+    const e = await dealsExport(c, { format: "generic" }, signal);
+    if (e.kind !== "ok") return e.kind === "unavailable" ? r : e;
+    const wanted = query.status;
+    const entries = e.data.deals.map((d) => ({
+      ...d,
+      status: d.status === "confirmed" ? "booked" : d.status,
+    }));
+    const rows = entries.filter((d) => !wanted || d.status === wanted);
+    const micros = (n: number | null) =>
+      n === null
+        ? null
+        : { amount_micros: Math.round(n * 1_000_000), currency: "USD" };
+    return {
+      kind: "ok",
+      fetchedAt: e.fetchedAt,
+      data: {
+        count: rows.length,
+        skipped: [],
+        fromExport: true,
+        deals: rows.map((d) => ({
+          deal: {
+            deal_id: d.deal_id,
+            deal_type: d.deal_type,
+            status: d.status,
+            quote_id: null,
+            product: d.product,
+            pricing: {
+              final_cpm: micros(d.final_cpm),
+              base_cpm: micros(d.base_cpm),
+              pricing_model: "cpm",
+            },
+            terms: null,
+            buyer_tier: d.buyer_tier,
+            expires_at: d.expires_at,
+            created_at: d.created_at,
+          },
+        })),
+      },
+    };
+  }
+  return r;
+};
 
 /**
  * Upstream returns placeholder figures here — its own docstring says real
@@ -163,7 +273,10 @@ export const dealById = (
   dealId: string,
   signal?: AbortSignal,
 ): Promise<Result<DealEnvelope>> =>
-  get(c, `${PATHS.deals}/${encodeURIComponent(dealId)}`, { schema: DealEnvelope, signal });
+  get(c, `${PATHS.deals}/${encodeURIComponent(dealId)}`, {
+    schema: DealEnvelope,
+    signal,
+  });
 
 /**
  * The raw DSP connector feed described above the `Deal` schema. Its statuses
@@ -206,7 +319,12 @@ export const dealsExport = (
   query: { format?: string } = {},
   signal?: AbortSignal,
 ): Promise<Result<DealsExport>> =>
-  get(c, PATHS.dealsExport, { schema: DealsExport, query, timeoutMs: TIMEOUTS.heavy, signal });
+  get(c, PATHS.dealsExport, {
+    schema: DealsExport,
+    query,
+    timeoutMs: TIMEOUTS.heavy,
+    signal,
+  });
 
 export const DealBuyerStatus = z
   .object({
@@ -276,7 +394,12 @@ export const bookDeal = (
   body: { quote_id: string; idempotency_key: string; notes?: string },
   signal?: AbortSignal,
 ): Promise<Result<MutationAck>> =>
-  request(c, PATHS.deals, { schema: MutationAck, method: "POST", body, signal });
+  request(c, PATHS.deals, {
+    schema: MutationAck,
+    method: "POST",
+    body,
+    signal,
+  });
 
 export const dealFromTemplate = (
   c: Connection,
@@ -285,7 +408,12 @@ export const dealFromTemplate = (
   body: { deal_type: DealTypeCode; product_id: string },
   signal?: AbortSignal,
 ): Promise<Result<MutationAck>> =>
-  request(c, `${PATHS.deals}/from-template`, { schema: MutationAck, method: "POST", body, signal });
+  request(c, `${PATHS.deals}/from-template`, {
+    schema: MutationAck,
+    method: "POST",
+    body,
+    signal,
+  });
 
 /**
  * The batch answers 200 whatever happened to each operation: an unknown
@@ -327,28 +455,48 @@ export const bulkDealOperations = (
   },
   signal?: AbortSignal,
 ): Promise<Result<BulkDealResponse>> =>
-  request(c, `${PATHS.deals}/bulk`, { schema: BulkDealResponse, method: "POST", body, signal });
+  request(c, `${PATHS.deals}/bulk`, {
+    schema: BulkDealResponse,
+    method: "POST",
+    body,
+    signal,
+  });
 
 export const pushDeal = (
   c: Connection,
   body: { deal_id: string; buyer_urls: string[] },
   signal?: AbortSignal,
 ): Promise<Result<MutationAck>> =>
-  request(c, `${PATHS.deals}/push`, { schema: MutationAck, method: "POST", body, signal });
+  request(c, `${PATHS.deals}/push`, {
+    schema: MutationAck,
+    method: "POST",
+    body,
+    signal,
+  });
 
 export const distributeDeal = (
   c: Connection,
   body: { deal_id: string; ssp_name?: string },
   signal?: AbortSignal,
 ): Promise<Result<MutationAck>> =>
-  request(c, `${PATHS.deals}/distribute`, { schema: MutationAck, method: "POST", body, signal });
+  request(c, `${PATHS.deals}/distribute`, {
+    schema: MutationAck,
+    method: "POST",
+    body,
+    signal,
+  });
 
 export const createCuratedDeal = (
   c: Connection,
   body: { curator_id: string; deal_type?: string },
   signal?: AbortSignal,
 ): Promise<Result<MutationAck>> =>
-  request(c, `${PATHS.deals}/curated`, { schema: MutationAck, method: "POST", body, signal });
+  request(c, `${PATHS.deals}/curated`, {
+    schema: MutationAck,
+    method: "POST",
+    body,
+    signal,
+  });
 
 export const migrateDeal = (
   c: Connection,

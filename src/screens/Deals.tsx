@@ -221,6 +221,13 @@ export default function DealsScreen() {
             </Alert>
           )}
 
+          {list.data?.fromExport && (
+            <Alert severity="info" variant="outlined" sx={{ mb: 2 }} data-note="from-export">
+              This agent has no deal list route (it answered 405), so these rows come from its
+              export feed. Quote ids and flight terms are not in that feed and show as empty.
+            </Alert>
+          )}
+
           <FreshnessNote freshness={list.freshness}>
             {list.validating && rows.length === 0 && (
               <span data-state="slow">Reading every deal — this can take a while.</span>
