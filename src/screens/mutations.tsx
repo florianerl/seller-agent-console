@@ -1468,7 +1468,7 @@ function SspTroubleBody({ dealId, ssp }: { dealId: string; ssp: string }) {
 }
 
 function DealsExportBody() {
-  const exported = useResource("deals-export", (c, signal) => dealsExport(c, {}, signal));
+  const exported = useResource("deals-export", (c, signal) => dealsExport(c, { format: "generic" }, signal));
   return (
     <ReadOutcome name="Export" data={exported.data} result={exported.result} />
   );

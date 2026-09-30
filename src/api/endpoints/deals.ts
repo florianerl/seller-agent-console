@@ -158,7 +158,11 @@ export const deals = async (
     const e = await dealsExport(c, { format: "generic" }, signal);
     if (e.kind !== "ok") return e.kind === "unavailable" ? r : e;
     const wanted = query.status;
-    const entries = e.data.deals.map((d) => ({
+    const parsed = (e.data.deals ?? []).flatMap((d) => {
+      const entry = DealExportEntry.safeParse(d);
+      return entry.success ? [entry.data] : [];
+    });
+    const entries = parsed.map((d) => ({
       ...d,
       status: d.status === "confirmed" ? "booked" : d.status,
     }));
@@ -306,9 +310,13 @@ export type DealExportEntry = z.infer<typeof DealExportEntry>;
 
 export const DealsExport = z
   .object({
-    format: z.string().catch("generic"),
-    deals: z.array(DealExportEntry).catch([]),
-    count: z.number().catch(0),
+    format: z.string().optional(),
+    // Entries stay unparsed here. `.catch([])` on the typed array turned any
+    // entry that did not match into an empty export, which the lookup then
+    // showed as "no deals" — a wrong answer, not a degraded one. Callers that
+    // need the typed shape parse per entry and drop the ones that fail.
+    deals: z.array(z.unknown()).optional(),
+    count: z.number().optional(),
   })
   .loose();
 export type DealsExport = z.infer<typeof DealsExport>;

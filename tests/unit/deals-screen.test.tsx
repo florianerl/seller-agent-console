@@ -331,6 +331,23 @@ describe("the deals screen", () => {
     expect(document.querySelector('[data-note="skipped"]')).toBeNull();
   });
 
+  it("shows the export exactly as the agent sent it, even when entries are not the shape we expect", async () => {
+    let asked = "";
+    server.use(
+      http.get(`${API}/api/v1/deals/export`, ({ request }) => {
+        asked = new URL(request.url).search;
+        return HttpResponse.json({ items: [{ id: "x-1" }], count: 1 });
+      }),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("button", { name: "Export deals" }));
+
+    await waitFor(() => expect(document.body.textContent).toContain('"x-1"'));
+    expect(asked).toBe("?format=generic");
+  });
+
   it("falls back to the export feed when the agent has no list route", async () => {
     server.use(
       http.get(
