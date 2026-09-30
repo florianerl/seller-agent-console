@@ -133,7 +133,12 @@ function ActionBlock({
     <Box
       sx={{
         display: "grid",
-        gridTemplateColumns: { xs: "1fr", md: "minmax(180px, 260px) minmax(0, 1fr)" },
+        // By the width of the card or panel it sits in, not of the page: the
+        // same row is wide in a page-level panel and narrow in half a deal.
+        gridTemplateColumns: "minmax(0, 1fr)",
+        "@container (min-width: 560px)": {
+          gridTemplateColumns: "minmax(180px, 240px) minmax(0, 1fr)",
+        },
         columnGap: 4,
         rowGap: 1,
         alignItems: "start",
@@ -193,7 +198,11 @@ function ReadOutcome({
 
 function Panel({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }} data-block="operator-writes">
+    <Paper
+      variant="outlined"
+      sx={{ p: 2.5, mb: 2.5, containerType: "inline-size" }}
+      data-block="operator-writes"
+    >
       <Typography variant="h3" sx={{ mb: 1.5 }}>
         {title}
       </Typography>
@@ -1056,9 +1065,9 @@ export function DealWrites({
 }: {
   dealId?: string;
   /** Show one group of a deal's actions, for a tabbed panel. Omitted: all of them. */
-  group?: "distribute" | "manage";
+  group?: "distribute" | "manage" | "danger";
 }) {
-  const show = (g: "distribute" | "manage") => !group || group === g;
+  const show = (g: "distribute" | "manage" | "danger") => !group || group === g;
   const { writesEnabled } = useCredential();
   const [proposalId, setProposalId] = useState("");
   const [quoteId, setQuoteId] = useState("");
@@ -1252,110 +1261,101 @@ export function DealWrites({
       )}
       {show("manage") && (
         <>
-            <ActionBlock
-              title="Replace with a new deal"
-              description="Creates a successor deal and links the two in this deal's lineage."
-            >
-              <WriteForm
-                title="Migrate this deal?"
-                confirmLabel="Migrate"
-                action="migrate-deal"
-                blocked={blocked}
-                pending={migrate.pending}
-                last={migrate.last}
-                onConfirm={() => void migrate.run({ id, ...(reason ? { reason } : {}) })}
-                consequence="Mints a successor and records lineage. A retry may mint a second successor."
-              >
-                <TipField hint="Optional reason recorded with the migration." size="small" label="Reason (optional)" value={reason} onChange={(e) => setReason(e.target.value)} disabled={blocked} />
-              </WriteForm>
-            </ActionBlock>
-          {/* Kept apart: these two cannot be taken back from this console. */}
-          <Box
-            data-block="danger-zone"
-            sx={{ mt: 2, p: 2, border: `1px solid ${palette.error}`, borderRadius: 1 }}
+        <ActionBlock
+          title="Replace with a new deal"
+          description="Creates a successor deal and links the two in this deal's lineage."
+        >
+          <WriteForm
+            title="Migrate this deal?"
+            confirmLabel="Migrate"
+            action="migrate-deal"
+            blocked={blocked}
+            pending={migrate.pending}
+            last={migrate.last}
+            onConfirm={() => void migrate.run({ id, ...(reason ? { reason } : {}) })}
+            consequence="Mints a successor and records lineage. A retry may mint a second successor."
           >
-            <Typography
-              variant="overline"
-              component="p"
-              sx={{ color: palette.error, fontWeight: 700, lineHeight: 1.5, mb: 0.5 }}
-            >
-              Danger zone
-            </Typography>
-                <ActionBlock
-                  title="Cancel or edit notes"
-                  description="Cancels this deal, or replaces its notes. Cancelling cannot be undone from this console."
+            <TipField hint="Optional reason recorded with the migration." size="small" label="Reason (optional)" value={reason} onChange={(e) => setReason(e.target.value)} disabled={blocked} />
+          </WriteForm>
+        </ActionBlock>
+        </>
+      )}
+      {show("danger") && (
+        <>
+        <ActionBlock
+          title="Cancel or edit notes"
+          description="Cancels this deal, or replaces its notes. Cancelling cannot be undone from this console."
+        >
+          <WriteForm
+            title={`Run a bulk ${bulkAction}?`}
+            confirmLabel={bulkAction === "cancel" ? "Cancel deal" : "Update notes"}
+            action="bulk-deals"
+            blocked={blocked}
+            pending={bulk.pending}
+            // Reported below instead: a 200 here can still carry failures.
+            last={bulk.last?.kind === "ok" ? undefined : bulk.last}
+            onConfirm={() =>
+              void bulk.run({
+                operations: [
+                  {
+                    action: bulkAction,
+                    deal_id: id,
+                    ...(bulkNotes.trim() ? { notes: bulkNotes.trim() } : {}),
+                  },
+                ],
+              })
+            }
+            consequence={
+              bulkAction === "cancel"
+                ? "Sets the deal to cancelled, with the notes as the cancel reason. Nothing in this console reverses it."
+                : "Replaces the deal's notes and stamps updated_at. Partial success is possible in a batch: re-read the list rather than repeating it blindly."
+            }
+          >
+            <FormFields>
+              <EnumSelect
+                hint="Cancel ends the deal; update replaces its notes."
+                label="Action"
+                value={bulkAction}
+                options={DEAL_EDIT_ACTIONS}
+                onChange={(v) => v && setBulkAction(v)}
+                disabled={blocked}
+                sx={{ minWidth: 140 }}
+              />
+              <TipField hint="Optional notes. For update they replace the deal's notes; for cancel they become the cancel reason." size="small" label="Notes (optional)" value={bulkNotes} onChange={(e) => setBulkNotes(e.target.value)} disabled={blocked} />
+            </FormFields>
+          </WriteForm>
+          {bulk.last?.kind === "ok" && (
+            <Box sx={{ mt: 1 }} data-block="bulk-results">
+              {bulk.last.data.results.map((r) => (
+                <Typography
+                  key={r.index}
+                  variant="body2"
+                  sx={{ color: r.success ? undefined : palette.error }}
+                  data-state={r.success ? "op-ok" : "op-failed"}
                 >
-                  <WriteForm
-                    title={`Run a bulk ${bulkAction}?`}
-                    confirmLabel={bulkAction === "cancel" ? "Cancel deal" : "Update notes"}
-                    action="bulk-deals"
-                    blocked={blocked}
-                    pending={bulk.pending}
-                    // Reported below instead: a 200 here can still carry failures.
-                    last={bulk.last?.kind === "ok" ? undefined : bulk.last}
-                    onConfirm={() =>
-                      void bulk.run({
-                        operations: [
-                          {
-                            action: bulkAction,
-                            deal_id: id,
-                            ...(bulkNotes.trim() ? { notes: bulkNotes.trim() } : {}),
-                          },
-                        ],
-                      })
-                    }
-                    consequence={
-                      bulkAction === "cancel"
-                        ? "Sets the deal to cancelled, with the notes as the cancel reason. Nothing in this console reverses it."
-                        : "Replaces the deal's notes and stamps updated_at. Partial success is possible in a batch: re-read the list rather than repeating it blindly."
-                    }
-                  >
-                    <FormFields>
-                      <EnumSelect
-                        hint="Cancel ends the deal; update replaces its notes."
-                        label="Action"
-                        value={bulkAction}
-                        options={DEAL_EDIT_ACTIONS}
-                        onChange={(v) => v && setBulkAction(v)}
-                        disabled={blocked}
-                        sx={{ minWidth: 140 }}
-                      />
-                      <TipField hint="Optional notes. For update they replace the deal's notes; for cancel they become the cancel reason." size="small" label="Notes (optional)" value={bulkNotes} onChange={(e) => setBulkNotes(e.target.value)} disabled={blocked} />
-                    </FormFields>
-                  </WriteForm>
-                  {bulk.last?.kind === "ok" && (
-                    <Box sx={{ mt: 1 }} data-block="bulk-results">
-                      {bulk.last.data.results.map((r) => (
-                        <Typography
-                          key={r.index}
-                          variant="body2"
-                          sx={{ color: r.success ? undefined : palette.error }}
-                          data-state={r.success ? "op-ok" : "op-failed"}
-                        >
-                          {r.action} {r.deal_id ?? ""}: {r.success ? "done" : r.error ?? "failed"}
-                        </Typography>
-                      ))}
-                    </Box>
-                  )}
-                </ActionBlock>
-                <ActionBlock
-                  title="Deprecate"
-                  description="Marks this deal deprecated. A reason is required."
-                >
-                  <WriteForm
-                    title="Deprecate this deal?"
-                    confirmLabel="Deprecate"
-                    action="deprecate-deal"
-                    blocked={blocked || !deprecateReason.trim()}
-                    pending={deprecate.pending}
-                    last={deprecate.last}
-                    onConfirm={() => void deprecate.run({ id, reason: deprecateReason.trim() })}
-                    consequence="Marks the deal deprecated. A second deprecate may 409 depending on status."
-                  >
-                    <TipField hint="Why the deal is being deprecated. Required; sent to the agent with the request." size="small" label="Reason" value={deprecateReason} onChange={(e) => setDeprecateReason(e.target.value)} disabled={blocked} />
-                  </WriteForm>
-                </ActionBlock>
-          </Box>
+                  {r.action} {r.deal_id ?? ""}: {r.success ? "done" : r.error ?? "failed"}
+                </Typography>
+              ))}
+            </Box>
+          )}
+        </ActionBlock>
+        <ActionBlock
+          title="Deprecate"
+          description="Marks this deal deprecated. A reason is required."
+        >
+          <WriteForm
+            title="Deprecate this deal?"
+            confirmLabel="Deprecate"
+            action="deprecate-deal"
+            blocked={blocked || !deprecateReason.trim()}
+            pending={deprecate.pending}
+            last={deprecate.last}
+            onConfirm={() => void deprecate.run({ id, reason: deprecateReason.trim() })}
+            consequence="Marks the deal deprecated. A second deprecate may 409 depending on status."
+          >
+            <TipField hint="Why the deal is being deprecated. Required; sent to the agent with the request." size="small" label="Reason" value={deprecateReason} onChange={(e) => setDeprecateReason(e.target.value)} disabled={blocked} />
+          </WriteForm>
+        </ActionBlock>
         </>
       )}
     </Box>

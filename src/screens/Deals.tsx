@@ -11,11 +11,10 @@ import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
-import Tab from "@mui/material/Tab";
-import Tabs from "@mui/material/Tabs";
 import Typography from "@mui/material/Typography";
 import { dealLineage, dealPerformance, deals, type Money } from "../api/endpoints";
 import { describe } from "../api/errors";
+import { DetailCard } from "../components/DetailCard";
 import { DataPanel, FreshnessNote } from "../components/DataPanel";
 import { Field, FieldGrid } from "../components/Field";
 import { GatedNotice } from "../components/GatedNotice";
@@ -70,16 +69,7 @@ function dollars(amount: number): string {
  * which would make the agent write (it runs a lazy expiry check and persists
  * the outcome).
  */
-const TABS = [
-  { key: "overview", label: "Overview" },
-  { key: "lookup", label: "Look up" },
-  { key: "distribute", label: "Send" },
-  { key: "manage", label: "Manage" },
-] as const;
-type TabKey = (typeof TABS)[number]["key"];
-
 function Detail({ dealId }: { dealId: string }) {
-  const [tab, setTab] = useState<TabKey>("overview");
   const perf = useResource(`deal-perf:${dealId}`, (c, signal) =>
     dealPerformance(c, dealId, signal),
   );
@@ -90,23 +80,19 @@ function Detail({ dealId }: { dealId: string }) {
   const chain = lineage.data;
 
   return (
-    <Box sx={{ py: 1 }}>
-      <Tabs
-        value={tab}
-        onChange={(_, next: TabKey) => setTab(next)}
-        aria-label={`Deal ${dealId}`}
-        sx={{ mb: 2, borderBottom: `1px solid ${palette.line}` }}
+    <Box sx={{ py: 1, containerType: "inline-size" }} data-block="deal-detail">
+      <Box
+        sx={{
+          display: "grid",
+          gap: 2,
+          gridTemplateColumns: "minmax(0, 1fr)",
+          "@container (min-width: 880px)": { gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)" },
+          alignItems: "start",
+        }}
       >
-        {TABS.map((t) => (
-          <Tab key={t.key} value={t.key} label={t.label} id={`deal-tab-${t.key}`} aria-controls={`deal-panel-${t.key}`} />
-        ))}
-      </Tabs>
-      {/* Every panel stays mounted and is only hidden: switching tabs must not
-          throw away a half-typed form or a lookup result. */}
-      <Box role="tabpanel" id="deal-panel-overview" aria-labelledby="deal-tab-overview" hidden={tab !== "overview"}>
         <Stack spacing={2}>
-          <Box>
-            <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 0.5 }}>Delivery</Typography>
+          <DetailCard block="delivery" title="Delivery">
+            <Box>
             {/* The agent returns placeholder figures on this route until a real ad
                 server is wired in. Rendering a fill rate as delivery truth would be
                 the most misleading thing this console could do, so the caveat sits
@@ -131,10 +117,11 @@ function Detail({ dealId }: { dealId: string }) {
                 <Field label="Pacing">{perf.data.delivery_pacing.replace(/_/g, " ")}</Field>
               </FieldGrid>
             )}
-          </Box>
+            </Box>
+          </DetailCard>
 
-          <Box>
-            <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 0.5 }}>Lineage</Typography>
+          <DetailCard block="lineage" title="Lineage">
+            <Box>
             {lineage.loading && !chain ? (
               <Skeleton height={20} />
             ) : !chain ? (
@@ -171,17 +158,27 @@ function Detail({ dealId }: { dealId: string }) {
                 ))}
               </Box>
             )}
-          </Box>
+            </Box>
+          </DetailCard>
+
+          <DetailCard block="look-up" title="Look up" info="Reads about this deal from the agent. Nothing here changes it, except that fetching the full record can expire a proposed deal.">
+            <DealLookups dealId={dealId} />
+          </DetailCard>
         </Stack>
-      </Box>
-      <Box role="tabpanel" id="deal-panel-lookup" aria-labelledby="deal-tab-lookup" hidden={tab !== "lookup"}>
-        <DealLookups dealId={dealId} />
-      </Box>
-      <Box role="tabpanel" id="deal-panel-distribute" aria-labelledby="deal-tab-distribute" hidden={tab !== "distribute"}>
-        <DealWrites dealId={dealId} group="distribute" />
-      </Box>
-      <Box role="tabpanel" id="deal-panel-manage" aria-labelledby="deal-tab-manage" hidden={tab !== "manage"}>
-        <DealWrites dealId={dealId} group="manage" />
+
+        <Stack spacing={2}>
+          <DetailCard block="send" title="Send" info="Hands this deal to a buyer or an SSP. Each is a write: a retry after an unclear failure may send it twice.">
+            <DealWrites dealId={dealId} group="distribute" />
+          </DetailCard>
+
+          <DetailCard block="manage" title="Manage">
+            <DealWrites dealId={dealId} group="manage" />
+          </DetailCard>
+
+          <DetailCard block="danger" title="Cannot be undone here" danger>
+            <DealWrites dealId={dealId} group="danger" />
+          </DetailCard>
+        </Stack>
       </Box>
     </Box>
   );

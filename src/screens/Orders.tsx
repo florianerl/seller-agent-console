@@ -67,44 +67,7 @@ import { CADENCE } from "../query/cadence";
 import type { ResourceHandle } from "../query/useResource";
 import { useResource } from "../query/useResource";
 import { palette } from "../theme/palette";
-
-/**
- * One section of an open order: a titled, outlined card. The row used to be
- * one grey column of 12px headings and captions, where nothing separated
- * one concern from the next; a card per concern gives the eye edges to stop
- * at. `info` holds the background a reader wants once, `meta` the section's
- * freshness.
- */
-function DetailCard({
-  title,
-  info,
-  infoNote,
-  meta,
-  children,
-  block,
-}: {
-  title: ReactNode;
-  info?: string | undefined;
-  /** `data-note` on the (i), for the tests that read what it explains. */
-  infoNote?: string;
-  meta?: ReactNode;
-  children: ReactNode;
-  block: string;
-}) {
-  return (
-    <Paper variant="outlined" sx={{ p: 2, borderColor: palette.line }} data-block={block}>
-      <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 1.25, minHeight: 28 }} flexWrap="wrap" useFlexGap>
-        <Typography component="h3" sx={{ fontSize: 14, fontWeight: 600 }}>
-          {title}
-        </Typography>
-        {info && <InfoTip title={info} {...(infoNote ? { "data-note": infoNote } : {})} />}
-        <Box sx={{ flex: 1 }} />
-        {meta}
-      </Stack>
-      {children}
-    </Paper>
-  );
-}
+import { DetailCard } from "../components/DetailCard";
 
 function Freshness({ resource, what }: { resource: ResourceHandle<unknown>; what: string }) {
   return (
