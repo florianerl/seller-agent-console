@@ -20,6 +20,7 @@ import {
   createBuyerApiKey,
   createChangeRequest,
   createCuratedDeal,
+  curators,
   createOperatorApiKey,
   createOrder,
   createPackage,
@@ -105,6 +106,7 @@ import { FormFields, FormRow, ReadForm, WriteForm } from "../components/WriteFor
 import { WritesNotice } from "../components/WritesNotice";
 import { useCredential } from "../credentials/context";
 import { useMutation } from "../query/useMutation";
+import { CADENCE } from "../query/cadence";
 import { useResource } from "../query/useResource";
 import { palette } from "../theme/palette";
 
@@ -698,6 +700,64 @@ function PackageBody({ packageId }: { packageId: string }) {
  * Mounting this component is the request; it shares the Deals screen's cache
  * entry, so a list already loaded there costs nothing here.
  */
+/**
+ * The registered curators, read from the agent, as a choice. The id used to be
+ * a text box, and the only way to learn what to type was to be refused with a
+ * 404. Restricted to the list on purpose: an id that is not on it is the 404.
+ * Shares the Curators screen's cache entry, so it costs no second request.
+ */
+function CuratorPicker({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  disabled: boolean;
+}) {
+  const list = useResource("curators", (c, signal) => curators(c, signal), {
+    refreshInterval: CADENCE.curators,
+  });
+  const all = list.data?.curators ?? [];
+  const byId = new Map(all.map((k) => [k.curator_id, k]));
+  return (
+    <Autocomplete
+      size="small"
+      options={all.map((k) => k.curator_id)}
+      value={value || null}
+      onChange={(_, next) => onChange(next ?? "")}
+      loading={list.loading}
+      disabled={disabled}
+      sx={{ minWidth: 280 }}
+      noOptionsText={
+        list.result && list.result.kind !== "ok"
+          ? describe(list.result)
+          : "No curators registered. Register one on the Curators screen."
+      }
+      renderOption={(props, id) => {
+        const k = byId.get(id);
+        return (
+          <li {...props} key={id}>
+            <Box>
+              <Box sx={{ fontFamily: "monospace", fontSize: 12 }}>{id}</Box>
+              <Box sx={{ fontSize: 12, color: palette.textSecondary }}>
+                {[k?.name, k?.domain, k?.is_active === false ? "inactive" : ""].filter(Boolean).join(" · ")}
+              </Box>
+            </Box>
+          </li>
+        );
+      }}
+      renderInput={(params) => (
+        <TipField
+          {...params}
+          hint="A curator registered with this agent, read from the Curators list. Register one there first if the list is empty."
+          label="Curator"
+        />
+      )}
+    />
+  );
+}
+
 function StoredDealOptions({
   value,
   onChange,
@@ -1181,7 +1241,7 @@ export function DealWrites({ dealId }: { dealId?: string }) {
             onConfirm={() => void curated.run({ curator_id: curatorId.trim() })}
             consequence="Not idempotent: each call mints another curated deal."
           >
-            <TipField hint="Id of the curator the deal is created for. Use an id registered under Curators." size="small" label="Curator id" value={curatorId} onChange={(e) => setCuratorId(e.target.value)} disabled={blocked} />
+            <CuratorPicker value={curatorId} onChange={setCuratorId} disabled={blocked} />
           </WriteForm>
         </ActionBlock>
       </Stack>

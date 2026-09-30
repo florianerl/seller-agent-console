@@ -139,6 +139,26 @@ describe("forms that send an enum", () => {
     );
   });
 
+  it("offers the registered curators for a curated deal, instead of a free-text id", async () => {
+    server.use(
+      http.get(`${API}/api/v1/curators`, () =>
+        HttpResponse.json({
+          count: 1,
+          curators: [{ curator_id: "cur-1", name: "Acme Curation", domain: "acme.example", is_active: true }],
+        }),
+      ),
+    );
+    const sent = capture("post", "/api/v1/deals/curated");
+    const user = userEvent.setup();
+    mount(<DealWrites />);
+
+    await user.click(await screen.findByLabelText("Curator"));
+    await user.click(await screen.findByRole("option", { name: /cur-1/ }));
+    await confirm(user, "curated-deal", "Curated deal");
+
+    await waitFor(() => expect(sent).toEqual([{ curator_id: "cur-1" }]));
+  });
+
   it("migrates with the old deal id the request model requires", async () => {
     const sent = capture("post", "/api/v1/deals/D-1/migrate");
     const user = userEvent.setup();
