@@ -34,6 +34,7 @@ import { useMutation } from "../query/useMutation";
 import { useResource } from "../query/useResource";
 import { FormRow, WriteForm } from "../components/WriteForm";
 import { Hint } from "../components/Hint";
+import { GatePicker } from "./pickers";
 import { TipField } from "../components/TipField";
 import { palette } from "../theme/palette";
 
@@ -480,12 +481,10 @@ export default function InboxScreen() {
               <code>approval.denied</code> event.
             </Typography>
             <FormRow>
-              <TipField
-                hint="The approval id, found in the approval.granted or approval.denied event. Opens a gate that is no longer in the queue."
-                size="small"
-                label="Gate id"
+              <GatePicker
                 value={lookupId}
-                onChange={(e) => setLookupId(e.target.value)}
+                onChange={setLookupId}
+                hint="A gate still waiting, or paste the approval id of a decided one from its approval.granted or approval.denied event."
                 sx={{ minWidth: 320 }}
               />
               <Hint hint="Reads this gate from the agent so you can see its decision and resume it.">

@@ -40,6 +40,7 @@ import { useResource } from "../query/useResource";
 import { palette } from "../theme/palette";
 import { FormRow } from "../components/WriteForm";
 import { TipField } from "../components/TipField";
+import { ProductPicker } from "./pickers";
 import { CatalogWrites, CreateQuoteWrite, PackageLookup } from "./mutations";
 import { useCredential } from "../credentials/context";
 
@@ -488,14 +489,7 @@ function AvailsCheck() {
     <Paper variant="outlined" sx={{ p: 2.5 }} data-block="avails">
       <Box component="form" onSubmit={handleSubmit}>
         <FormRow>
-          <TipField
-            hint="The product id, as shown in the catalog above under a product's Details. Required."
-            size="small"
-            label="Product id"
-            value={productId}
-            onChange={(e) => setProductId(e.target.value)}
-            sx={{ minWidth: 200 }}
-          />
+          <ProductPicker value={productId} onChange={setProductId} hint="The product to use. Pick one, or type or paste an id. Required." />
           <TipField
             hint="First day of the flight to check. Required,; the check will not run without it."
             size="small"
@@ -619,14 +613,7 @@ function Pricing() {
     <Paper variant="outlined" sx={{ p: 2.5 }} data-block="pricing">
       <Box component="form" onSubmit={handleSubmit}>
         <FormRow>
-          <TipField
-            hint="The product id, as shown in the catalog above under a product's Details. Required."
-            size="small"
-            label="Product id"
-            value={productId}
-            onChange={(e) => setProductId(e.target.value)}
-            sx={{ minWidth: 200 }}
-          />
+          <ProductPicker value={productId} onChange={setProductId} hint="The product to use. Pick one, or type or paste an id. Required." />
           <TipField
             hint="Optional impressions to price for. The agent applies its volume discounts to this figure; leave blank to quote without one."
             size="small"

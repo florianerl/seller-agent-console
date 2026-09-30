@@ -20,7 +20,6 @@ import {
   createBuyerApiKey,
   createChangeRequest,
   createCuratedDeal,
-  curators,
   createOperatorApiKey,
   createOrder,
   createPackage,
@@ -101,12 +100,12 @@ import { ConfirmAction } from "../components/ConfirmAction";
 import { EnumSelect } from "../components/EnumSelect";
 import { Hint } from "../components/Hint";
 import { TipField } from "../components/TipField";
+import { AgentPicker, CuratorPicker, OrderPicker, PackagePicker, ProductPicker } from "./pickers";
 import { JsonView } from "../components/JsonView";
 import { FormFields, FormRow, ReadForm, WriteForm } from "../components/WriteForm";
 import { WritesNotice } from "../components/WritesNotice";
 import { useCredential } from "../credentials/context";
 import { useMutation } from "../query/useMutation";
-import { CADENCE } from "../query/cadence";
 import { useResource } from "../query/useResource";
 import { palette } from "../theme/palette";
 
@@ -456,14 +455,7 @@ export function CatalogWrites() {
         consequence="The override persists across inventory syncs. A second set replaces the first."
       >
         <FormFields>
-          <TipField
-            hint="Id of the catalog product to override. Copy it from the Catalog screen."
-            size="small"
-            label="Product id"
-            value={productId}
-            onChange={(e) => setProductId(e.target.value)}
-            disabled={blocked}
-          />
+          <ProductPicker value={productId} onChange={setProductId} disabled={blocked} />
           <EnumSelect
             hint="Inventory type to force on the product. It replaces the auto-detected type and survives inventory syncs."
             label="Inventory type"
@@ -525,7 +517,7 @@ export function CatalogWrites() {
         onConfirm={() => void updatePkg.run({ id: pkgId.trim(), name: pkgName.trim() })}
         consequence="The named fields are overwritten. A missing id 404s."
       >
-        <TipField hint="Id of the package to rename or archive. Find it in the Packages list; a missing id 404s." size="small" label="Package id" value={pkgId} onChange={(e) => setPkgId(e.target.value)} disabled={blocked} />
+        <PackagePicker value={pkgId} onChange={setPkgId} disabled={blocked} />
       </WriteForm>
       <WriteForm
         title="Archive this package?"
@@ -623,14 +615,7 @@ export function CreateQuoteWrite() {
       }
     >
       <FormFields>
-        <TipField
-          hint="Id of the product to quote. Copy it from the Catalog screen."
-          size="small"
-          label="Product id"
-          value={productId}
-          onChange={(e) => setProductId(e.target.value)}
-          disabled={!writesEnabled}
-        />
+        <ProductPicker value={productId} onChange={setProductId} disabled={!writesEnabled} />
         <EnumSelect
           hint="PG is guaranteed and needs an impression count; PD (preferred) and PA (private auction) do not."
           label="Deal type"
@@ -671,7 +656,7 @@ export function PackageLookup() {
   return (
     <Box sx={{ mt: 1 }} data-block="package-lookup">
       <FormRow>
-        <TipField hint="Id of the package to load, as shown in the Packages list." size="small" label="Package id" value={id} onChange={(e) => setId(e.target.value)} />
+        <PackagePicker value={id} onChange={setId} />
         <ReadForm
           label="Load package"
           action="fetch-package"
@@ -700,64 +685,6 @@ function PackageBody({ packageId }: { packageId: string }) {
  * Mounting this component is the request; it shares the Deals screen's cache
  * entry, so a list already loaded there costs nothing here.
  */
-/**
- * The registered curators, read from the agent, as a choice. The id used to be
- * a text box, and the only way to learn what to type was to be refused with a
- * 404. Restricted to the list on purpose: an id that is not on it is the 404.
- * Shares the Curators screen's cache entry, so it costs no second request.
- */
-function CuratorPicker({
-  value,
-  onChange,
-  disabled,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  disabled: boolean;
-}) {
-  const list = useResource("curators", (c, signal) => curators(c, signal), {
-    refreshInterval: CADENCE.curators,
-  });
-  const all = list.data?.curators ?? [];
-  const byId = new Map(all.map((k) => [k.curator_id, k]));
-  return (
-    <Autocomplete
-      size="small"
-      options={all.map((k) => k.curator_id)}
-      value={value || null}
-      onChange={(_, next) => onChange(next ?? "")}
-      loading={list.loading}
-      disabled={disabled}
-      sx={{ minWidth: 280 }}
-      noOptionsText={
-        list.result && list.result.kind !== "ok"
-          ? describe(list.result)
-          : "No curators registered. Register one on the Curators screen."
-      }
-      renderOption={(props, id) => {
-        const k = byId.get(id);
-        return (
-          <li {...props} key={id}>
-            <Box>
-              <Box sx={{ fontFamily: "monospace", fontSize: 12 }}>{id}</Box>
-              <Box sx={{ fontSize: 12, color: palette.textSecondary }}>
-                {[k?.name, k?.domain, k?.is_active === false ? "inactive" : ""].filter(Boolean).join(" · ")}
-              </Box>
-            </Box>
-          </li>
-        );
-      }}
-      renderInput={(params) => (
-        <TipField
-          {...params}
-          hint="A curator registered with this agent, read from the Curators list. Register one there first if the list is empty."
-          label="Curator"
-        />
-      )}
-    />
-  );
-}
-
 function StoredDealOptions({
   value,
   onChange,
@@ -1214,7 +1141,7 @@ export function DealWrites({ dealId }: { dealId?: string }) {
             consequence="Prices and auto-books. 422 if max CPM is below floor. Not a replay-safe mint without an idempotency story on this route."
           >
             <FormFields>
-              <TipField hint="Id of the product to price. Copy it from the Catalog screen." size="small" label="Product id" value={productId} onChange={(e) => setProductId(e.target.value)} disabled={blocked} />
+              <ProductPicker value={productId} onChange={setProductId} disabled={blocked} />
               <EnumSelect
                 hint="Deal type for the template: PG, PD or PA. The route rejects anything else with a 400."
                 label="Deal type"
@@ -1665,7 +1592,7 @@ export function ProposalWrites() {
         consequence="Not idempotent. A retry after an unclear failure may create a second proposal."
       >
         <FormFields>
-          <TipField hint="Id of the product being proposed for. Copy it from the Catalog screen." size="small" label="Product id" value={productId} onChange={(e) => setProductId(e.target.value)} disabled={!writesEnabled} />
+          <ProductPicker value={productId} onChange={setProductId} disabled={!writesEnabled} />
           <EnumSelect
             hint="Legacy deal type the proposal is checked against; the agent rejects values it does not recognise."
             label="Deal type"
@@ -1757,7 +1684,7 @@ export function AgentWrites() {
         consequence="Trust is this operator's decision and caps the buyer's access tier. A blocked agent is refused on later calls."
       >
         <FormFields>
-          <TipField hint="Id of the registered agent to change or remove, as shown in the Agents list." size="small" label="Agent id" value={agentId} onChange={(e) => setAgentId(e.target.value)} disabled={!writesEnabled} />
+          <AgentPicker value={agentId} onChange={setAgentId} disabled={!writesEnabled} />
           <TipField hint="Trust decision for the agent: unknown, registered, approved, preferred or blocked. It caps the buyer's access tier, and a blocked agent is refused on later calls." select size="small" label="Trust" value={trust} onChange={(e) => setTrust(e.target.value)} disabled={!writesEnabled} sx={{ minWidth: 160 }}>
             {["unknown", "registered", "approved", "preferred", "blocked"].map((t) => (
               <MenuItem key={t} value={t}>
@@ -1802,7 +1729,7 @@ export function AgentDetailLookup() {
   return (
     <Box sx={{ mt: 1 }}>
       <FormRow>
-        <TipField hint="Id of the registered agent to load, as shown in the Agents list." size="small" label="Agent id" value={id} onChange={(e) => setId(e.target.value)} />
+        <AgentPicker value={id} onChange={setId} />
         <ReadForm
           label="Load agent"
           action="fetch-agent"
@@ -1976,7 +1903,7 @@ export function ChangeRequestCreate({
         >
           <FormFields>
             {fixedOrder === undefined && (
-              <TipField hint="Id of the order the change is for. Copy it from the Orders screen." size="small" label="Order id" value={typedOrder} onChange={(e) => setOrderId(e.target.value)} disabled={!writesEnabled} />
+              <OrderPicker value={typedOrder} onChange={setOrderId} disabled={!writesEnabled} />
             )}
             <EnumSelect
               hint="What kind of change is being requested. It decides the usual field and how severe the agent treats the request."

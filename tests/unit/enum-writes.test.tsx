@@ -139,6 +139,29 @@ describe("forms that send an enum", () => {
     );
   });
 
+  it("suggests products by name and still accepts a typed id", async () => {
+    server.use(
+      http.get(`${API}/products`, () =>
+        HttpResponse.json({ products: [{ product_id: "prod-91", name: "Premium Display - Homepage" }] }),
+      ),
+    );
+    const sent = capture("post", "/api/v1/deals/from-template");
+    const user = userEvent.setup();
+    mount(<DealWrites />);
+
+    // Matches on the name, not only the id, and fills in the id.
+    await user.type(await enabled("Product id"), "homepage");
+    await user.click(await screen.findByRole("option", { name: /prod-91/ }));
+    await confirm(user, "deal-from-template", "From template");
+    await waitFor(() => expect(sent).toEqual([{ deal_type: "PD", product_id: "prod-91" }]));
+
+    // Nothing on the list is still a valid thing to send.
+    await user.clear(await enabled("Product id"));
+    await user.type(await enabled("Product id"), "prod-typed");
+    await confirm(user, "deal-from-template", "From template");
+    await waitFor(() => expect(sent.at(-1)).toEqual({ deal_type: "PD", product_id: "prod-typed" }));
+  });
+
   it("offers the registered curators for a curated deal, instead of a free-text id", async () => {
     server.use(
       http.get(`${API}/api/v1/curators`, () =>
