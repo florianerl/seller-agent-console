@@ -4,6 +4,7 @@ import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import Collapse from "@mui/material/Collapse";
 import IconButton from "@mui/material/IconButton";
+import InputAdornment from "@mui/material/InputAdornment";
 import Tooltip from "@mui/material/Tooltip";
 import Link from "@mui/material/Link";
 import Paper from "@mui/material/Paper";
@@ -18,6 +19,7 @@ import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
+import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import {
   changeRequests,
@@ -156,6 +158,40 @@ function origin(order: Order): string {
   const persona = order.metadata["persona"];
   if (typeof source !== "string" || !source) return "not recorded";
   return typeof persona === "string" && persona ? `${source} (${persona})` : source;
+}
+
+/**
+ * Free-text search over what an operator would paste: an order, deal or quote
+ * id, or where the order came from. Case-insensitive and partial, so the
+ * tail of an id read off a log line is enough. Client-side on purpose: the
+ * list is already every stored order, and the agent's list route filters on
+ * status alone.
+ */
+function searchMatches(order: Order, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return [order.order_id, order.deal_id, order.quote_id, origin(order), words(order.status)]
+    .filter((v): v is string => typeof v === "string" && v !== "")
+    .some((v) => v.toLowerCase().includes(q));
+}
+
+function SearchIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <circle cx="11" cy="11" r="7" />
+      <line x1="16.5" y1="16.5" x2="21" y2="21" />
+    </svg>
+  );
 }
 
 type Filter =
@@ -987,6 +1023,7 @@ function OrderDetail({
 
 export default function OrdersScreen() {
   const [filter, setFilter] = useState<Filter>({ kind: "all" });
+  const [query, setQuery] = useState("");
   const [openOrder, setOpenOrder] = useState<string | undefined>();
   const [creating, setCreating] = useState(false);
   const { writesEnabled, actorName } = useCredential();
@@ -1011,18 +1048,27 @@ export default function OrdersScreen() {
 
   const all = list.data?.orders ?? [];
   const waiting = waitingByOrder(changes.data?.change_requests ?? []);
-  const rows = all.filter((o) => matches(filter, o, waiting));
+  const rows = all.filter((o) => matches(filter, o, waiting) && searchMatches(o, query));
+  const narrowed = filter.kind !== "all" || query.trim() !== "";
+  const clearAll = () => {
+    setFilter({ kind: "all" });
+    setQuery("");
+  };
   const toggle = (orderId: string) =>
     setOpenOrder((current) => (current === orderId ? undefined : orderId));
 
-  const filterText =
+  const filterText = [
+    query.trim() ? `matching "${query.trim()}"` : "",
     filter.kind === "status"
       ? `with status "${words(filter.status)}"`
       : filter.kind === "group"
         ? `in ${STAGE_GROUPS.find((g) => g.id === filter.group)?.label.toLowerCase() ?? filter.group}`
         : filter.kind === "waiting"
           ? "with change requests waiting"
-          : "";
+          : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <section data-screen="orders">
@@ -1059,8 +1105,8 @@ export default function OrdersScreen() {
           <OrderCreateWrite
             onCreated={(orderId) => {
               // Land the operator on the new order's next step, whatever the
-              // filter was hiding.
-              setFilter({ kind: "all" });
+              // filter or search was hiding.
+              clearAll();
               setOpenOrder(orderId);
               setCreating(false);
             }}
@@ -1071,6 +1117,28 @@ export default function OrdersScreen() {
       {list.data && <StageSummary rows={all} waiting={waiting} filter={filter} onFilter={setFilter} />}
 
       <Box sx={{ mb: 2, display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
+        <TextField
+          type="search"
+          size="small"
+          label="Search"
+          placeholder="Order, deal or quote id, or source"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setQuery("");
+          }}
+          sx={{ flex: "1 1 260px", maxWidth: 420 }}
+          slotProps={{
+            input: {
+              startAdornment: (
+                <InputAdornment position="start" sx={{ color: palette.textSecondary }}>
+                  <SearchIcon />
+                </InputAdornment>
+              ),
+            },
+            htmlInput: { "data-field": "order-search" },
+          }}
+        />
         <EnumSelect
           label="Status"
           value={filter.kind === "status" ? filter.status : ""}
@@ -1079,8 +1147,8 @@ export default function OrdersScreen() {
           any="Any status"
           hint="Filter the orders by lifecycle status."
         />
-        {filter.kind !== "all" && (
-          <Button size="small" onClick={() => setFilter({ kind: "all" })} data-action="clear-filter">
+        {narrowed && (
+          <Button size="small" onClick={clearAll} data-action="clear-filter">
             Show all
           </Button>
         )}
@@ -1089,7 +1157,7 @@ export default function OrdersScreen() {
       <FreshnessNote freshness={list.freshness}>
         {list.freshness === "live" &&
           `${plural(rows.length, "order")}${filterText ? ` ${filterText}` : ""}${
-            filter.kind !== "all" ? ` of ${all.length}` : ""
+            narrowed ? ` of ${all.length}` : ""
           } · ${asOf(list.asOf)}`}
         {list.freshness === "stale" && "couldn't refresh — showing the last list received"}
         {list.freshness === "blocked" && "access denied"}
@@ -1108,7 +1176,7 @@ export default function OrdersScreen() {
             <Typography variant="body2" color="text.secondary">
               {list.freshness === "empty" && list.result?.kind === "unavailable"
                 ? describe(list.result)
-                : filter.kind !== "all"
+                : narrowed
                   ? `No orders ${filterText}.`
                   : "No orders yet. Buyer agents create them over the API; use New order to create one here."}
             </Typography>

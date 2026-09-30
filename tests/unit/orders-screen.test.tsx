@@ -1069,3 +1069,94 @@ describe("ad-server steps", () => {
     );
   });
 });
+
+describe("searching the orders", () => {
+  beforeEach(async () => {
+    resetReachability();
+    await connect();
+    server.use(
+      http.get(`${API}/api/v1/orders`, () =>
+        HttpResponse.json({
+          orders: [
+            { ...ORDERS[0], quote_id: "qt-aaa111", metadata: { source: "test-buyer" } },
+            { ...ORDERS[1], quote_id: "qt-bbb222" },
+          ],
+          count: 2,
+        }),
+      ),
+      http.get(`${API}/api/v1/change-requests`, () => HttpResponse.json({ change_requests: [], count: 0 })),
+    );
+  });
+
+  const box = () => document.querySelector('[data-field="order-search"]') as HTMLInputElement;
+
+  it("finds an order by part of its id, case-insensitively, without asking the agent again", async () => {
+    const seen: URL[] = [];
+    server.use(
+      http.get(`${API}/api/v1/orders`, ({ request }) => {
+        seen.push(new URL(request.url));
+        return HttpResponse.json({ orders: ORDERS, count: ORDERS.length });
+      }),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+    await waitFor(() => expect(screen.getByText("ORD-ABC123")).toBeInTheDocument());
+    const reads = seen.length;
+
+    await user.type(box(), "def4");
+    await waitFor(() => expect(screen.queryByText("ORD-ABC123")).toBeNull());
+    expect(screen.getByText("ORD-DEF456")).toBeInTheDocument();
+    expect(document.body.textContent).toMatch(/1 order matching "def4" of 2/);
+    expect(seen.length).toBe(reads);
+  });
+
+  it.each([
+    ["deal-2", "ORD-DEF456"],
+    ["qt-aaa", "ORD-ABC123"],
+    ["test-buyer", "ORD-ABC123"],
+  ])("matches %s to %s", async (query, expected) => {
+    const user = userEvent.setup();
+    renderScreen();
+    await waitFor(() => expect(screen.getByText("ORD-ABC123")).toBeInTheDocument());
+
+    await user.type(box(), query);
+    await waitFor(() => expect(screen.getAllByRole("row").filter((r) => r.hasAttribute("data-row"))).toHaveLength(1));
+    expect(screen.getByText(expected)).toBeInTheDocument();
+  });
+
+  it("combines with the status filter, and says when nothing matches", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await waitFor(() => expect(screen.getByText("ORD-ABC123")).toBeInTheDocument());
+
+    await user.type(box(), "ORD-ABC");
+    await user.click(screen.getByLabelText("Status"));
+    await user.click(await screen.findByRole("option", { name: "approved" }));
+
+    await waitFor(() =>
+      expect(document.querySelector('[data-state="empty"]')?.textContent).toMatch(
+        /No orders matching "ORD-ABC" with status "approved"/,
+      ),
+    );
+  });
+
+  it("clears with Escape, and Show all clears search and filter together", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await waitFor(() => expect(screen.getByText("ORD-ABC123")).toBeInTheDocument());
+
+    await user.type(box(), "nothing-like-this");
+    await waitFor(() => expect(document.querySelector('[data-state="empty"]')).toBeTruthy());
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.getByText("ORD-DEF456")).toBeInTheDocument());
+    expect(box()).toHaveValue("");
+
+    await user.type(box(), "DEF");
+    await user.click(document.querySelector('[data-chip="approval"]') as HTMLElement);
+    await waitFor(() => expect(document.querySelector('[data-state="empty"]')).toBeTruthy());
+    await user.click(document.querySelector('[data-action="clear-filter"]') as HTMLElement);
+    await waitFor(() => expect(screen.getByText("ORD-ABC123")).toBeInTheDocument());
+    expect(screen.getByText("ORD-DEF456")).toBeInTheDocument();
+    expect(box()).toHaveValue("");
+  });
+});
