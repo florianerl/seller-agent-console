@@ -4,7 +4,6 @@ import Button from "@mui/material/Button";
 import Paper from "@mui/material/Paper";
 import Skeleton from "@mui/material/Skeleton";
 import Stack from "@mui/material/Stack";
-import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { gamDeliveryReport, gamOrders, ordersReport } from "../api/endpoints";
 import { describe } from "../api/errors";
@@ -15,6 +14,8 @@ import { plural, stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
 import { useResource, type ResourceHandle } from "../query/useResource";
 import { FormRow } from "../components/WriteForm";
+import { Hint } from "../components/Hint";
+import { TipField } from "../components/TipField";
 import { palette } from "../theme/palette";
 
 /**
@@ -108,9 +109,11 @@ function OrdersSummary() {
     <Paper variant="outlined" sx={{ p: 2.5 }} data-card="orders-report">
       <Stack direction="row" justifyContent="space-between" alignItems="baseline" sx={{ mb: 1.5 }}>
         <Typography variant="h3">Orders, as the agent counts them</Typography>
-        <Button size="small" onClick={report.refresh} disabled={report.validating}>
-          {report.validating ? "Refreshing…" : "Refresh"}
-        </Button>
+        <Hint hint="Re-reads the order summary from the agent now. It never refreshes on its own.">
+          <Button size="small" onClick={report.refresh} disabled={report.validating}>
+            {report.validating ? "Refreshing…" : "Refresh"}
+          </Button>
+        </Hint>
       </Stack>
 
       {report.loading && !report.data ? (
@@ -177,9 +180,11 @@ function GamOrders() {
       <Stack direction="row" justifyContent="space-between" alignItems="baseline" sx={{ mb: 1.5 }}>
         <Typography variant="h3">Orders in the connected ad server</Typography>
         {!loaded && (
-          <Button size="small" onClick={() => setLoaded(true)}>
-            Load
-          </Button>
+          <Hint hint="Asks the agent for up to 50 orders from the connected ad server. It only runs when you click.">
+            <Button size="small" onClick={() => setLoaded(true)}>
+              Load
+            </Button>
+          </Hint>
         )}
       </Stack>
 
@@ -240,7 +245,8 @@ function DeliveryReport() {
         sx={{ mb: 2 }}
       >
         <FormRow>
-        <TextField
+        <TipField
+          hint="Ad server order ids, separated by commas. Required; sent to the agent as one comma-joined string."
           size="small"
           label="Order IDs"
           // The agent takes one comma-joined string rather than a repeated
@@ -249,7 +255,8 @@ function DeliveryReport() {
           onChange={(e) => setOrderIds(e.target.value)}
           sx={{ minWidth: 280 }}
         />
-        <TextField
+        <TipField
+          hint="How many days of delivery to report on. Optional; blank or zero uses 30."
           size="small"
           label="Days"
           type="number"
@@ -257,9 +264,11 @@ function DeliveryReport() {
           onChange={(e) => setDays(e.target.value)}
           sx={{ width: 110 }}
         />
-        <Button type="submit" variant="outlined" size="small" disabled={!orderIds.trim()}>
-          Run report
-        </Button>
+        <Hint hint="Fetches delivery for these orders from the connected ad server through the agent. Read-only; needs at least one order id.">
+          <Button type="submit" variant="outlined" size="small" disabled={!orderIds.trim()}>
+            Run report
+          </Button>
+        </Hint>
         </FormRow>
         <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75 }}>
           Comma-separated, as the ad server knows them

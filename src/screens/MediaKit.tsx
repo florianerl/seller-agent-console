@@ -10,7 +10,6 @@ import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
-import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { mediaKit, mediaKitPackage, mediaKitPackages, searchMediaKit } from "../api/endpoints";
 import { describe } from "../api/errors";
@@ -24,6 +23,8 @@ import { plural, stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
 import { useResource } from "../query/useResource";
 import { FormRow } from "../components/WriteForm";
+import { Hint } from "../components/Hint";
+import { TipField } from "../components/TipField";
 import { AudienceMatchForm } from "./mutations";
 import { palette } from "../theme/palette";
 
@@ -192,17 +193,19 @@ function PackagesTable() {
                     </TableCell>
                     <TableCell sx={{ fontSize: 12 }}>{featuredCell(pkg.is_featured)}</TableCell>
                     <TableCell align="right">
-                      <Button
-                        size="small"
-                        onClick={() =>
-                          setOpenPackage((current) =>
-                            current === pkg.package_id ? undefined : pkg.package_id,
-                          )
-                        }
-                        aria-expanded={openPackage === pkg.package_id}
-                      >
-                        {openPackage === pkg.package_id ? "Hide details" : "Details"}
-                      </Button>
+                      <Hint hint="Shows or hides this package's full record, read from the agent.">
+                        <Button
+                          size="small"
+                          onClick={() =>
+                            setOpenPackage((current) =>
+                              current === pkg.package_id ? undefined : pkg.package_id,
+                            )
+                          }
+                          aria-expanded={openPackage === pkg.package_id}
+                        >
+                          {openPackage === pkg.package_id ? "Hide details" : "Details"}
+                        </Button>
+                      </Hint>
                     </TableCell>
                   </TableRow>
                   {openPackage === pkg.package_id && (
@@ -313,16 +316,19 @@ function Search() {
     <Paper variant="outlined" sx={{ p: 2.5, mb: 3 }}>
       <Box component="form" onSubmit={handleSubmit}>
         <FormRow>
-          <TextField
+          <TipField
+            hint="Words to look for in the media kit's packages. Searching happens only when you submit; a blank search submits nothing."
             size="small"
             label="Search the media kit"
             value={queryInput}
             onChange={(e) => setQueryInput(e.target.value)}
             sx={{ minWidth: 280 }}
           />
-          <Button type="submit" variant="outlined" size="small" data-action="search">
-            Search
-          </Button>
+          <Hint hint="Runs a full-text search over the media kit through the agent. Read-only.">
+            <Button type="submit" variant="outlined" size="small" data-action="search">
+              Search
+            </Button>
+          </Hint>
         </FormRow>
       </Box>
 

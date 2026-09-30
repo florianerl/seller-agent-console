@@ -10,6 +10,7 @@ import DialogTitle from "@mui/material/DialogTitle";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
+import { Hint } from "../components/Hint";
 import { useCredential } from "../credentials/context";
 import { palette } from "../theme/palette";
 
@@ -51,45 +52,49 @@ export function ConnectionMenu() {
         >
           {credential.baseUrl} · {credential.role}
         </Typography>
-        <FormControlLabel
-          sx={{ mr: 0, flexShrink: 0, "& .MuiFormControlLabel-label": { fontSize: 13, color: palette.brandBlack } }}
-          label="Writes"
-          control={
-            <Switch
-              size="small"
-              color="default"
-              checked={writesEnabled}
-              // MUI 7 routes attributes to the real <input> through slotProps;
-              // inputProps silently drops them, taking the accessible name
-              // with it.
-              slotProps={{
-                input: {
-                  "aria-label": "Enable write operations",
-                  "data-control": "writes-toggle",
-                } as React.InputHTMLAttributes<HTMLInputElement>,
-              }}
-              onChange={(event) => {
-                // Enabling asks; disabling takes effect at once, because the
-                // safe direction should never be the one with a dialog in it.
-                if (event.target.checked) setConfirmingWrites(true);
-                else void setWritesEnabled(false);
-              }}
-            />
-          }
-        />
-        <Button
-          size="small"
-          onClick={() => setConfirming(true)}
-          sx={{
-            fontSize: 13,
-            fontWeight: 600,
-            flexShrink: 0,
-            minWidth: "auto",
-            px: 1,
-          }}
-        >
-          Sign out
-        </Button>
+        <Hint hint="Lets this console send changes to the agent using this key. Off, nothing that changes the agent is sent; turning it on asks first, and the setting is kept for this key only.">
+          <FormControlLabel
+            sx={{ mr: 0, flexShrink: 0, "& .MuiFormControlLabel-label": { fontSize: 13, color: palette.brandBlack } }}
+            label="Writes"
+            control={
+              <Switch
+                size="small"
+                color="default"
+                checked={writesEnabled}
+                // MUI 7 routes attributes to the real <input> through slotProps;
+                // inputProps silently drops them, taking the accessible name
+                // with it.
+                slotProps={{
+                  input: {
+                    "aria-label": "Enable write operations",
+                    "data-control": "writes-toggle",
+                  } as React.InputHTMLAttributes<HTMLInputElement>,
+                }}
+                onChange={(event) => {
+                  // Enabling asks; disabling takes effect at once, because the
+                  // safe direction should never be the one with a dialog in it.
+                  if (event.target.checked) setConfirmingWrites(true);
+                  else void setWritesEnabled(false);
+                }}
+              />
+            }
+          />
+        </Hint>
+        <Hint hint="Asks for confirmation, then removes the stored key and cached values from this browser. It does not revoke the key.">
+          <Button
+            size="small"
+            onClick={() => setConfirming(true)}
+            sx={{
+              fontSize: 13,
+              fontWeight: 600,
+              flexShrink: 0,
+              minWidth: "auto",
+              px: 1,
+            }}
+          >
+            Sign out
+          </Button>
+        </Hint>
       </Box>
 
       <Dialog open={confirmingWrites} onClose={() => setConfirmingWrites(false)}>
@@ -106,17 +111,21 @@ export function ConnectionMenu() {
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setConfirmingWrites(false)}>Cancel</Button>
-          <Button
-            variant="contained"
-            data-action="confirm-enable-writes"
-            onClick={() => {
-              setConfirmingWrites(false);
-              void setWritesEnabled(true);
-            }}
-          >
-            Enable writes
-          </Button>
+          <Hint hint="Closes this dialog and leaves writes off.">
+            <Button onClick={() => setConfirmingWrites(false)}>Cancel</Button>
+          </Hint>
+          <Hint hint="Turns writes on for this key, so buttons that change the agent will send requests.">
+            <Button
+              variant="contained"
+              data-action="confirm-enable-writes"
+              onClick={() => {
+                setConfirmingWrites(false);
+                void setWritesEnabled(true);
+              }}
+            >
+              Enable writes
+            </Button>
+          </Hint>
         </DialogActions>
       </Dialog>
 
@@ -132,17 +141,21 @@ export function ConnectionMenu() {
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setConfirming(false)}>Cancel</Button>
-          <Button
-            variant="contained"
-            data-action="confirm-sign-out"
-            onClick={() => {
-              setConfirming(false);
-              void signOut();
-            }}
-          >
-            Sign out
-          </Button>
+          <Hint hint="Closes this dialog and keeps you signed in.">
+            <Button onClick={() => setConfirming(false)}>Cancel</Button>
+          </Hint>
+          <Hint hint="Deletes the stored key and every cached value from this browser and returns to setup. The key stays valid on the agent.">
+            <Button
+              variant="contained"
+              data-action="confirm-sign-out"
+              onClick={() => {
+                setConfirming(false);
+                void signOut();
+              }}
+            >
+              Sign out
+            </Button>
+          </Hint>
         </DialogActions>
       </Dialog>
     </>

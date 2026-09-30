@@ -11,7 +11,6 @@ import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
-import TextField from "@mui/material/TextField";
 import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
 import {
@@ -40,6 +39,8 @@ import { CADENCE } from "../query/cadence";
 import { useResource } from "../query/useResource";
 import { palette } from "../theme/palette";
 import { FormRow } from "../components/WriteForm";
+import { Hint } from "../components/Hint";
+import { TipField } from "../components/TipField";
 import { CatalogWrites, CreateQuoteWrite, PackageLookup } from "./mutations";
 import { useCredential } from "../credentials/context";
 
@@ -216,17 +217,19 @@ function Products() {
                   {product.available_impressions?.toLocaleString() ?? "—"}
                 </TableCell>
                 <TableCell align="right">
-                  <Button
-                    size="small"
-                    onClick={() =>
-                      setOpenProduct((current) =>
-                        current === product.product_id ? undefined : product.product_id,
-                      )
-                    }
-                    aria-expanded={openProduct === product.product_id}
-                  >
-                    {openProduct === product.product_id ? "Hide" : "Details"}
-                  </Button>
+                  <Hint hint="Shows or hides this product's full record, read from the agent.">
+                    <Button
+                      size="small"
+                      onClick={() =>
+                        setOpenProduct((current) =>
+                          current === product.product_id ? undefined : product.product_id,
+                        )
+                      }
+                      aria-expanded={openProduct === product.product_id}
+                    >
+                      {openProduct === product.product_id ? "Hide" : "Details"}
+                    </Button>
+                  </Hint>
                 </TableCell>
               </TableRow>
               {openProduct === product.product_id && (
@@ -384,16 +387,19 @@ function Discovery() {
     <Paper variant="outlined" sx={{ p: 2.5 }} data-block="discovery">
       <Box component="form" onSubmit={handleSubmit}>
         <FormRow>
-          <TextField
+          <TipField
+            hint="A plain-language description of what the buyer wants, such as a format or audience. The agent suggests matching products. Submitting a blank brief does nothing."
             size="small"
             label="Brief"
             value={queryInput}
             onChange={(e) => setQueryInput(e.target.value)}
             sx={{ minWidth: 280 }}
           />
-          <Button type="submit" variant="outlined" size="small" data-action="discover">
-            Discover
-          </Button>
+          <Hint hint="Asks the agent which products fit this brief. It does not book or change anything.">
+            <Button type="submit" variant="outlined" size="small" data-action="discover">
+              Discover
+            </Button>
+          </Hint>
         </FormRow>
       </Box>
       {submitted !== undefined && <DiscoveryResults query={submitted} />}
@@ -487,14 +493,16 @@ function AvailsCheck() {
     <Paper variant="outlined" sx={{ p: 2.5 }} data-block="avails">
       <Box component="form" onSubmit={handleSubmit}>
         <FormRow>
-          <TextField
+          <TipField
+            hint="The product id, as shown in the catalog above under a product's Details. Required."
             size="small"
             label="Product id"
             value={productId}
             onChange={(e) => setProductId(e.target.value)}
             sx={{ minWidth: 200 }}
           />
-          <TextField
+          <TipField
+            hint="First day of the flight to check. Required,; the check will not run without it."
             size="small"
             label="Start"
             type="date"
@@ -502,7 +510,8 @@ function AvailsCheck() {
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
           />
-          <TextField
+          <TipField
+            hint="Last day of the flight to check. Required,; the check will not run without it."
             size="small"
             label="End"
             type="date"
@@ -510,9 +519,11 @@ function AvailsCheck() {
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
           />
-          <Button type="submit" variant="outlined" size="small" data-action="check-avails">
-            Check avails
-          </Button>
+          <Hint hint="Asks the agent how many impressions this product has available across these dates. It does not reserve anything.">
+            <Button type="submit" variant="outlined" size="small" data-action="check-avails">
+              Check avails
+            </Button>
+          </Hint>
         </FormRow>
       </Box>
       {submitted !== undefined && <AvailsResults query={submitted} />}
@@ -615,14 +626,16 @@ function Pricing() {
     <Paper variant="outlined" sx={{ p: 2.5 }} data-block="pricing">
       <Box component="form" onSubmit={handleSubmit}>
         <FormRow>
-          <TextField
+          <TipField
+            hint="The product id, as shown in the catalog above under a product's Details. Required."
             size="small"
             label="Product id"
             value={productId}
             onChange={(e) => setProductId(e.target.value)}
             sx={{ minWidth: 200 }}
           />
-          <TextField
+          <TipField
+            hint="Optional impressions to price for. The agent applies its volume discounts to this figure; leave blank to quote without one."
             size="small"
             label="Volume"
             type="number"
@@ -630,9 +643,11 @@ function Pricing() {
             onChange={(e) => setVolume(e.target.value)}
             sx={{ width: 140 }}
           />
-          <Button type="submit" variant="outlined" size="small" data-action="quote">
-            Quote
-          </Button>
+          <Hint hint="Asks the agent for a price for this product, without booking anything.">
+            <Button type="submit" variant="outlined" size="small" data-action="quote">
+              Quote
+            </Button>
+          </Hint>
         </FormRow>
       </Box>
       {submitted !== undefined && <PricingResult query={submitted} />}

@@ -10,7 +10,6 @@ import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
-import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { events, type EventRecord, type EventsQuery } from "../api/endpoints";
 import { describe } from "../api/errors";
@@ -21,12 +20,19 @@ import { clock as stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
 import { useResource } from "../query/useResource";
 import { FormRow } from "../components/WriteForm";
+import { Hint } from "../components/Hint";
+import { TipField } from "../components/TipField";
 import { EventLookup } from "./mutations";
 import { EnumSelect } from "../components/EnumSelect";
 import { EVENT_TYPES } from "../api/vocabulary";
 import { palette } from "../theme/palette";
 
 const LIMIT = 50;
+
+const FILTER_HINTS = {
+  flow_id: "Shows only events with this flow id, matched as typed. Optional.",
+  session_id: "Shows only events with this session id, matched as typed. Optional.",
+} as const;
 
 export default function EventsScreen() {
   const [filters, setFilters] = useState({ event_type: "", flow_id: "", session_id: "" });
@@ -66,6 +72,7 @@ export default function EventsScreen() {
               {/* Matched exactly upstream, so a typed type that is nearly
                   right returns nothing. Offer the set instead. */}
               <EnumSelect
+                hint="Shows only events of this exact type. Any type shows the latest events of every kind."
                 label="Event type"
                 value={filters.event_type}
                 options={EVENT_TYPES}
@@ -79,7 +86,8 @@ export default function EventsScreen() {
                   ["session_id", "Session id"],
                 ] as const
               ).map(([field, label]) => (
-                <TextField
+                <TipField
+                  hint={FILTER_HINTS[field]}
                   key={field}
                   label={label}
                   size="small"
@@ -88,13 +96,15 @@ export default function EventsScreen() {
                   sx={{ minWidth: 180 }}
                 />
               ))}
-              <Button
-                size="small"
-                onClick={() => setFilters({ event_type: "", flow_id: "", session_id: "" })}
-                disabled={!filters.event_type && !filters.flow_id && !filters.session_id}
-              >
-                Clear
-              </Button>
+              <Hint hint="Empties all three filters and shows the latest events again.">
+                <Button
+                  size="small"
+                  onClick={() => setFilters({ event_type: "", flow_id: "", session_id: "" })}
+                  disabled={!filters.event_type && !filters.flow_id && !filters.session_id}
+                >
+                  Clear
+                </Button>
+              </Hint>
             </FormRow>
           </Paper>
 
@@ -165,9 +175,11 @@ export default function EventsScreen() {
                 <Typography sx={{ fontSize: 14, fontWeight: 600 }}>
                   {selected.event_type}
                 </Typography>
-                <Button size="small" onClick={() => setSelected(undefined)}>
-                  Close
-                </Button>
+                <Hint hint="Hides this event's detail panel. Nothing is changed.">
+                  <Button size="small" onClick={() => setSelected(undefined)}>
+                    Close
+                  </Button>
+                </Hint>
               </Stack>
               <Box
                 component="pre"

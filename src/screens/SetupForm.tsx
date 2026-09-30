@@ -6,10 +6,11 @@ import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
-import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { probe, type ProbeResult } from "../api/probe";
+import { Hint } from "../components/Hint";
 import { PageHeader } from "../components/PageHeader";
+import { TipField } from "../components/TipField";
 import { useCredential } from "../credentials/context";
 
 export function SetupForm() {
@@ -60,7 +61,8 @@ export function SetupForm() {
           noValidate
         >
           <Stack spacing={2.5}>
-            <TextField
+            <TipField
+              hint="Where your seller agent is served, as https://host with no path. Requests go from this browser straight to this address."
               label="Agent address"
               value={baseUrl}
               onChange={(e) => setBaseUrl(e.target.value)}
@@ -72,7 +74,8 @@ export function SetupForm() {
               helperText="The origin only — no path."
               id="agent-address"
             />
-            <TextField
+            <TipField
+              hint="The operator key for this agent. It is kept in this browser's IndexedDB and sent only to the agent address above."
               label="Operator API key"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
@@ -93,17 +96,19 @@ export function SetupForm() {
             )}
 
             <Box>
-              <Button
-                type="submit"
-                variant="contained"
-                color="primary"
-                disabled={checking}
-                startIcon={
-                  checking ? <CircularProgress size={16} color="inherit" /> : undefined
-                }
-              >
-                {checking ? "Checking…" : "Connect"}
-              </Button>
+              <Hint hint="Checks the address and key against the agent, then saves them in this browser and opens the console. Writes stay off.">
+                <Button
+                  type="submit"
+                  variant="contained"
+                  color="primary"
+                  disabled={checking}
+                  startIcon={
+                    checking ? <CircularProgress size={16} color="inherit" /> : undefined
+                  }
+                >
+                  {checking ? "Checking…" : "Connect"}
+                </Button>
+              </Hint>
             </Box>
           </Stack>
         </form>

@@ -4,7 +4,6 @@ import Button from "@mui/material/Button";
 import Paper from "@mui/material/Paper";
 import Skeleton from "@mui/material/Skeleton";
 import Stack from "@mui/material/Stack";
-import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useSearchParams } from "react-router";
 import { quoteById, type Money, type Quote } from "../api/endpoints";
@@ -13,6 +12,8 @@ import { Field, FieldGrid } from "../components/Field";
 import { GatedNotice } from "../components/GatedNotice";
 import { PageHeader } from "../components/PageHeader";
 import { StatusChip } from "../components/StatusChip";
+import { Hint } from "../components/Hint";
+import { TipField } from "../components/TipField";
 import { FormRow } from "../components/WriteForm";
 import { WritesNotice } from "../components/WritesNotice";
 import { stamp } from "../lib/time";
@@ -213,12 +214,14 @@ export default function QuotesScreen() {
             }}
           >
             <FormRow>
-              <TextField
+              <TipField
+                hint="The id of a quote requested on Catalog (or shown on an order). The agent cannot list quotes, so paste it exactly."
                 size="small"
                 label="Quote id"
                 value={id}
                 onChange={(e) => setId(e.target.value)}
               />
+              <Hint hint="Fetches this quote from the agent. That read enforces its TTL and may mark it expired.">
               <Button
                 type="submit"
                 variant="outlined"
@@ -228,6 +231,7 @@ export default function QuotesScreen() {
               >
                 Fetch quote
               </Button>
+              </Hint>
             </FormRow>
           </Box>
           {submitted && <QuoteResult key={submitted} quoteId={submitted} />}

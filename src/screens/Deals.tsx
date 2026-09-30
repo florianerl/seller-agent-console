@@ -11,7 +11,6 @@ import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
-import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { dealLineage, dealPerformance, deals, type Money } from "../api/endpoints";
 import { describe } from "../api/errors";
@@ -26,6 +25,8 @@ import { useResource } from "../query/useResource";
 import { palette } from "../theme/palette";
 import { useCredential } from "../credentials/context";
 import { FormRow } from "../components/WriteForm";
+import { Hint } from "../components/Hint";
+import { TipField } from "../components/TipField";
 import { DealLookups, DealWrites, Panel } from "./mutations";
 
 /**
@@ -182,7 +183,8 @@ export default function DealsScreen() {
         <>
           <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }}>
             <FormRow>
-              <TextField
+              <TipField
+                hint="Shows only deals in this status and reloads the list. Any status shows every deal."
                 select
                 size="small"
                 label="Status"
@@ -195,16 +197,18 @@ export default function DealsScreen() {
                     {s ? s.replace(/_/g, " ") : "Any status"}
                   </MenuItem>
                 ))}
-              </TextField>
-              <Button
-                variant="outlined"
-                size="small"
-                onClick={list.refresh}
-                disabled={list.validating}
-                data-action="refresh"
-              >
-                {list.validating ? "Refreshing…" : "Refresh"}
-              </Button>
+              </TipField>
+              <Hint hint="Re-reads every deal from the agent in one unpaginated pass. The list never refreshes on its own.">
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={list.refresh}
+                  disabled={list.validating}
+                  data-action="refresh"
+                >
+                  {list.validating ? "Refreshing…" : "Refresh"}
+                </Button>
+              </Hint>
               <Typography variant="body2" color="text.secondary" sx={{ fontSize: 12, pb: 1 }}>
                 This list does not poll — it reads every deal in one unpaginated pass.
               </Typography>
@@ -294,17 +298,19 @@ export default function DealsScreen() {
                             : `expires ${stamp(deal.expires_at)}`}
                         </TableCell>
                         <TableCell align="right">
-                          <Button
-                            size="small"
-                            onClick={() =>
-                              setOpenDeal((current) =>
-                                current === deal.deal_id ? undefined : deal.deal_id,
-                              )
-                            }
-                            aria-expanded={openDeal === deal.deal_id}
-                          >
-                            {openDeal === deal.deal_id ? "Hide details" : "Details"}
-                          </Button>
+                          <Hint hint="Shows or hides this deal's full record and lineage, read from the agent.">
+                            <Button
+                              size="small"
+                              onClick={() =>
+                                setOpenDeal((current) =>
+                                  current === deal.deal_id ? undefined : deal.deal_id,
+                                )
+                              }
+                              aria-expanded={openDeal === deal.deal_id}
+                            >
+                              {openDeal === deal.deal_id ? "Hide details" : "Details"}
+                            </Button>
+                          </Hint>
                         </TableCell>
                       </TableRow>
                       {openDeal === deal.deal_id && (

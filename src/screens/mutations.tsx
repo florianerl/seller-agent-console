@@ -5,7 +5,6 @@ import Button from "@mui/material/Button";
 import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
-import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import {
   agentById,
@@ -94,6 +93,8 @@ import {
 } from "../api/vocabulary";
 import { ConfirmAction } from "../components/ConfirmAction";
 import { EnumSelect } from "../components/EnumSelect";
+import { Hint } from "../components/Hint";
+import { TipField } from "../components/TipField";
 import { FormFields, FormRow, WriteForm } from "../components/WriteForm";
 import { WritesNotice } from "../components/WritesNotice";
 import { useCredential } from "../credentials/context";
@@ -129,6 +130,7 @@ export function InventorySyncWrite() {
       title="Trigger an inventory sync?"
       confirmLabel="Sync now"
       action="trigger-sync"
+      hint="Starts an inventory sync in the mode above."
       blocked={!writesEnabled}
       pending={run.pending}
       last={run.last}
@@ -141,7 +143,8 @@ export function InventorySyncWrite() {
         </>
       }
     >
-      <TextField
+      <TipField
+        hint="How much to sync. Full re-reads everything from the ad server; Incremental starts from the stored watermark when one exists."
         select
         size="small"
         label="Mode"
@@ -152,7 +155,7 @@ export function InventorySyncWrite() {
       >
         <MenuItem value="full">Full</MenuItem>
         <MenuItem value="incremental">Incremental</MenuItem>
-      </TextField>
+      </TipField>
     </WriteForm>
   );
 }
@@ -190,6 +193,7 @@ export function ApiKeyWrites() {
         title="Mint a buyer API key?"
         confirmLabel="Create buyer key"
         action="create-buyer-key"
+        hint="Mints a new buyer API key and shows its secret once."
         blocked={!writesEnabled}
         pending={buyer.pending}
         last={buyer.last}
@@ -204,7 +208,8 @@ export function ApiKeyWrites() {
           </>
         }
       >
-        <TextField
+        <TipField
+          hint="Optional name for the new buyer key, so you can tell keys apart in the list. Leave empty for an unlabelled key."
           size="small"
           label="Label"
           value={label}
@@ -217,6 +222,7 @@ export function ApiKeyWrites() {
         title="Mint an operator API key?"
         confirmLabel="Create operator key"
         action="create-operator-key"
+        hint="Mints a new operator API key and shows its secret once."
         blocked={!writesEnabled}
         pending={operator.pending}
         last={operator.last}
@@ -234,6 +240,7 @@ export function ApiKeyWrites() {
         title="Revoke this API key?"
         confirmLabel="Revoke key"
         action="revoke-key"
+        hint="Revokes the key id above so it stops working."
         blocked={!writesEnabled || !revokeId.trim()}
         pending={revoke.pending}
         last={revoke.last}
@@ -245,7 +252,8 @@ export function ApiKeyWrites() {
           </>
         }
       >
-        <TextField
+        <TipField
+          hint="Id of the key to revoke, as shown in the API keys list (the key_id, not the secret)."
           size="small"
           label="Key id"
           value={revokeId}
@@ -335,6 +343,7 @@ export function CatalogWrites() {
         title="Replace the stored rate card?"
         confirmLabel="Put rate card"
         action="put-rate-card"
+        hint="Replaces the stored rate card with this one entry."
         blocked={blocked}
         pending={rate.pending}
         last={rate.last}
@@ -351,6 +360,7 @@ export function CatalogWrites() {
       >
         <FormFields>
           <EnumSelect
+            hint="Which inventory type this rate applies to. Choose from the types the agent documents."
             label="Inventory type"
             value={rateType}
             options={INVENTORY_TYPES}
@@ -358,7 +368,8 @@ export function CatalogWrites() {
             disabled={blocked}
             sx={{ minWidth: 160 }}
           />
-          <TextField
+          <TipField
+            hint="Base CPM for the chosen inventory type, as a plain number in dollars per thousand impressions, for example 12."
             size="small"
             label="Base CPM"
             value={cpm}
@@ -371,6 +382,7 @@ export function CatalogWrites() {
         title="Set an inventory type override?"
         confirmLabel="Set override"
         action="set-override"
+        hint="Stores the chosen inventory type for the product id above."
         blocked={blocked || !productId.trim()}
         pending={setOverride.pending}
         last={setOverride.last}
@@ -384,7 +396,8 @@ export function CatalogWrites() {
         consequence="The override persists across inventory syncs. A second set replaces the first."
       >
         <FormFields>
-          <TextField
+          <TipField
+            hint="Id of the catalog product to override. Copy it from the Catalog screen."
             size="small"
             label="Product id"
             value={productId}
@@ -392,6 +405,7 @@ export function CatalogWrites() {
             disabled={blocked}
           />
           <EnumSelect
+            hint="Inventory type to force on the product. It replaces the auto-detected type and survives inventory syncs."
             label="Inventory type"
             value={inventoryType}
             options={INVENTORY_TYPES}
@@ -399,7 +413,8 @@ export function CatalogWrites() {
             disabled={blocked}
             sx={{ minWidth: 160 }}
           />
-          <TextField
+          <TipField
+            hint="Optional note on why the type is being overridden. Sent only when filled in."
             size="small"
             label="Reason"
             value={reason}
@@ -412,6 +427,7 @@ export function CatalogWrites() {
         title="Delete this inventory type override?"
         confirmLabel="Delete override"
         action="delete-override"
+        hint="Removes the override for the product id above so it goes back to the auto-detected type."
         blocked={blocked || !productId.trim()}
         pending={clearOverride.pending}
         last={clearOverride.last}
@@ -422,6 +438,7 @@ export function CatalogWrites() {
         title="Create a curated package?"
         confirmLabel="Create package"
         action="create-package"
+        hint="Creates a curated package with the name and prices above."
         blocked={blocked || !pkgName.trim()}
         pending={createPkg.pending}
         last={createPkg.last}
@@ -435,27 +452,29 @@ export function CatalogWrites() {
         consequence="Not idempotent: each call mints a new package id."
       >
         <FormFields>
-          <TextField size="small" label="Name" value={pkgName} onChange={(e) => setPkgName(e.target.value)} disabled={blocked} />
-          <TextField size="small" label="Base price" value={pkgPrice} onChange={(e) => setPkgPrice(e.target.value)} disabled={blocked} />
-          <TextField size="small" label="Floor" value={pkgFloor} onChange={(e) => setPkgFloor(e.target.value)} disabled={blocked} />
+          <TipField hint="Name of the new package. Also used as the name when assembling a dynamic package or renaming one." size="small" label="Name" value={pkgName} onChange={(e) => setPkgName(e.target.value)} disabled={blocked} />
+          <TipField hint="Base (list) price for the package as a plain number, for example 10. Sent as base_price." size="small" label="Base price" value={pkgPrice} onChange={(e) => setPkgPrice(e.target.value)} disabled={blocked} />
+          <TipField hint="Lowest price the package may be sold at, as a plain number, for example 5. Sent as floor_price." size="small" label="Floor" value={pkgFloor} onChange={(e) => setPkgFloor(e.target.value)} disabled={blocked} />
         </FormFields>
       </WriteForm>
       <WriteForm
         title="Rename this package?"
         confirmLabel="Update package"
         action="update-package"
+        hint="Renames the package with the id above to the name above."
         blocked={blocked || !pkgId.trim() || !pkgName.trim()}
         pending={updatePkg.pending}
         last={updatePkg.last}
         onConfirm={() => void updatePkg.run({ id: pkgId.trim(), name: pkgName.trim() })}
         consequence="The named fields are overwritten. A missing id 404s."
       >
-        <TextField size="small" label="Package id" value={pkgId} onChange={(e) => setPkgId(e.target.value)} disabled={blocked} />
+        <TipField hint="Id of the package to rename or archive. Find it in the Packages list; a missing id 404s." size="small" label="Package id" value={pkgId} onChange={(e) => setPkgId(e.target.value)} disabled={blocked} />
       </WriteForm>
       <WriteForm
         title="Archive this package?"
         confirmLabel="Delete package"
         action="delete-package"
+        hint="Archives the package with the id above."
         blocked={blocked || !pkgId.trim()}
         pending={deletePkg.pending}
         last={deletePkg.last}
@@ -466,6 +485,7 @@ export function CatalogWrites() {
         title="Assemble a dynamic package?"
         confirmLabel="Assemble"
         action="assemble-package"
+        hint="Builds a dynamic package from the name and product ids above."
         blocked={blocked || !pkgName.trim() || !productIds.trim()}
         pending={assemble.pending}
         last={assemble.last}
@@ -477,7 +497,8 @@ export function CatalogWrites() {
         }
         consequence="Not idempotent. Unresolvable product ids 422."
       >
-        <TextField
+        <TipField
+          hint="Ids of the products to combine, separated by commas. Ids that do not resolve to a product are rejected with a 422."
           size="small"
           label="Product ids (comma-separated)"
           value={productIds}
@@ -490,6 +511,7 @@ export function CatalogWrites() {
         title="Sync packages from the ad server?"
         confirmLabel="Sync packages"
         action="sync-packages"
+        hint="Asks the agent to re-import packages from the ad server."
         blocked={blocked}
         pending={sync.pending}
         last={sync.last}
@@ -526,6 +548,7 @@ export function CreateQuoteWrite() {
       title="Request a quote?"
       confirmLabel="Create quote"
       action="create-quote"
+      hint="Requests a non-binding quote for the product, deal type and media type above."
       blocked={!writesEnabled || !productId.trim() || (needsVolume && !volumeOk)}
       pending={create.pending}
       last={create.last}
@@ -547,7 +570,8 @@ export function CreateQuoteWrite() {
       }
     >
       <FormFields>
-        <TextField
+        <TipField
+          hint="Id of the product to quote. Copy it from the Catalog screen."
           size="small"
           label="Product id"
           value={productId}
@@ -555,6 +579,7 @@ export function CreateQuoteWrite() {
           disabled={!writesEnabled}
         />
         <EnumSelect
+          hint="PG is guaranteed and needs an impression count; PD (preferred) and PA (private auction) do not."
           label="Deal type"
           value={dealType}
           options={DEAL_TYPES}
@@ -563,6 +588,7 @@ export function CreateQuoteWrite() {
           sx={{ minWidth: 220 }}
         />
         <EnumSelect
+          hint="Media type the quote is for. The agent accepts only the listed values."
           label="Media type"
           value={mediaType}
           options={QUOTE_MEDIA_TYPES}
@@ -571,7 +597,8 @@ export function CreateQuoteWrite() {
           sx={{ minWidth: 140 }}
         />
         {needsVolume && (
-          <TextField
+          <TipField
+            hint="Number of impressions to quote. Required for a guaranteed (PG) quote and a whole number above zero; other deal types send none."
             size="small"
             type="number"
             label="Impressions"
@@ -591,11 +618,12 @@ export function PackageLookup() {
   return (
     <Box sx={{ mt: 1 }} data-block="package-lookup">
       <FormRow>
-        <TextField size="small" label="Package id" value={id} onChange={(e) => setId(e.target.value)} />
+        <TipField hint="Id of the package to load, as shown in the Packages list." size="small" label="Package id" value={id} onChange={(e) => setId(e.target.value)} />
         <WriteForm
           title="Load this package?"
           confirmLabel="Load package"
           action="fetch-package"
+          hint="Reads the package with the id above and shows its name."
           blocked={!id.trim()}
           pending={false}
           last={undefined}
@@ -660,8 +688,9 @@ function StoredDealOptions({
         );
       }}
       renderInput={(params) => (
-        <TextField
+        <TipField
           {...params}
+          hint="Optional deal to attach. Pick one of the stored deals, or type or paste a deal id."
           label="Deal"
           helperText={
             list.result && list.result.kind !== "ok"
@@ -695,6 +724,7 @@ export function OrderCreateWrite({ onCreated }: { onCreated?: (orderId: string) 
       title="Create a draft order?"
       confirmLabel="Create order"
       action="create-order"
+      hint="Creates a draft order, optionally for the deal and quote above."
       blocked={!writesEnabled}
       pending={create.pending}
       last={create.last}
@@ -724,7 +754,8 @@ export function OrderCreateWrite({ onCreated }: { onCreated?: (orderId: string) 
         {pickDeal ? (
           <StoredDealOptions value={dealId} onChange={setDealId} disabled={!writesEnabled} />
         ) : (
-          <TextField
+          <TipField
+            hint="Optional id of the deal the order is for. Leave empty for an order with no deal attached."
             size="small"
             label="Deal id (optional)"
             value={dealId}
@@ -732,7 +763,8 @@ export function OrderCreateWrite({ onCreated }: { onCreated?: (orderId: string) 
             disabled={!writesEnabled}
           />
         )}
-        <TextField
+        <TipField
+          hint="Optional id of the quote the order was priced from. It links to the Quotes screen."
           size="small"
           label="Quote id (optional)"
           value={quoteId}
@@ -740,15 +772,17 @@ export function OrderCreateWrite({ onCreated }: { onCreated?: (orderId: string) 
           disabled={!writesEnabled}
         />
         {!pickDeal && (
-          <Button
-            size="small"
-            onClick={() => setPickDeal(true)}
-            disabled={!writesEnabled}
-            data-action="choose-deal"
-            sx={{ flexShrink: 0 }}
-          >
-            Choose from deals
-          </Button>
+          <Hint hint="Switches the deal box to a list of stored deals. This loads every stored deal, so it only runs when you click.">
+            <Button
+              size="small"
+              onClick={() => setPickDeal(true)}
+              disabled={!writesEnabled}
+              data-action="choose-deal"
+              sx={{ flexShrink: 0 }}
+            >
+              Choose from deals
+            </Button>
+          </Hint>
         )}
       </FormFields>
     </WriteForm>
@@ -847,6 +881,7 @@ export function OrderTransitionWrites({
       title={`${step.label}?`}
       confirmLabel={step.label}
       action={`transition-order:${step.to}`}
+      hint={`Moves the order from ${words(status)} to ${words(step.to)}, recorded as the actor claimed below.`}
       blocked={!writesEnabled || !claim || (transition.pending && chosen !== step.to)}
       pending={transition.pending && chosen === step.to}
       // Success is reported below the buttons: the button that was pressed
@@ -900,6 +935,7 @@ export function OrderTransitionWrites({
       </Stack>
       <FormRow>
         <EnumSelect
+          hint="Who the move is recorded as: a person, an agent or the system. Not verified by the agent."
           label="Acting as"
           value={actor.kind}
           options={ACTOR_KINDS}
@@ -908,7 +944,8 @@ export function OrderTransitionWrites({
           sx={{ minWidth: 140 }}
         />
         {actor.kind !== "system" && (
-          <TextField
+          <TipField
+            hint="Who the move is recorded as. The agent stores this as claimed and does not verify it."
             size="small"
             label={actor.kind === "human" ? "Your name or id" : "Agent id"}
             value={actor.id}
@@ -921,7 +958,8 @@ export function OrderTransitionWrites({
             disabled={!writesEnabled}
           />
         )}
-        <TextField
+        <TipField
+          hint="Optional reason recorded with the move. The placeholder shows how the agent describes the first available step."
           size="small"
           label="Reason (optional)"
           placeholder={steps[0]?.description}
@@ -1021,18 +1059,20 @@ export function DealWrites({ dealId }: { dealId?: string }) {
         title="Generate a deal from a proposal?"
         confirmLabel="Generate deal"
         action="generate-deal"
+        hint="Creates a deal from the accepted proposal id above."
         blocked={blocked || !proposalId.trim()}
         pending={gen.pending}
         last={gen.last}
         onConfirm={() => void gen.run({ proposal_id: proposalId.trim() })}
         consequence="POST /deals from an accepted proposal. Not the same route as booking a quote. Not idempotent."
       >
-        <TextField size="small" label="Proposal id" value={proposalId} onChange={(e) => setProposalId(e.target.value)} disabled={blocked} />
+        <TipField hint="Id of an accepted proposal. Copy it from the Proposals screen." size="small" label="Proposal id" value={proposalId} onChange={(e) => setProposalId(e.target.value)} disabled={blocked} />
       </WriteForm>
       <WriteForm
         title="Book a deal from a quote?"
         confirmLabel="Book deal"
         action="book-deal"
+        hint="Binds the quote above and books a deal from it."
         blocked={blocked || !quoteId.trim()}
         pending={book.pending}
         last={book.last}
@@ -1041,12 +1081,13 @@ export function DealWrites({ dealId }: { dealId?: string }) {
         }
         consequence="The commit point: the quote becomes bound. Same idempotency key + body returns the same deal; a different body 409s."
       >
-        <TextField size="small" label="Quote id" value={quoteId} onChange={(e) => setQuoteId(e.target.value)} disabled={blocked} />
+        <TipField hint="Id of the quote to book, from the Quotes screen. Quotes expire after 24 hours." size="small" label="Quote id" value={quoteId} onChange={(e) => setQuoteId(e.target.value)} disabled={blocked} />
       </WriteForm>
       <WriteForm
         title="Create a deal from a template?"
         confirmLabel="From template"
         action="deal-from-template"
+        hint="Prices and books a deal of the chosen type for the product above."
         blocked={blocked || !productId.trim()}
         pending={fromTpl.pending}
         last={fromTpl.last}
@@ -1054,8 +1095,9 @@ export function DealWrites({ dealId }: { dealId?: string }) {
         consequence="Prices and auto-books. 422 if max CPM is below floor. Not a replay-safe mint without an idempotency story on this route."
       >
         <FormFields>
-          <TextField size="small" label="Product id" value={productId} onChange={(e) => setProductId(e.target.value)} disabled={blocked} />
+          <TipField hint="Id of the product to price. Copy it from the Catalog screen." size="small" label="Product id" value={productId} onChange={(e) => setProductId(e.target.value)} disabled={blocked} />
           <EnumSelect
+            hint="Deal type for the template: PG, PD or PA. The route rejects anything else with a 400."
             label="Deal type"
             value={dealType}
             options={DEAL_TYPES}
@@ -1069,7 +1111,7 @@ export function DealWrites({ dealId }: { dealId?: string }) {
           the bulk form, which left it unclear that push, distribute, migrate
           and deprecate read it too. */}
       <Box data-block="deal-target">
-        <TextField size="small" label="Deal id" value={id} onChange={(e) => setId(e.target.value)} disabled={blocked} />
+        <TipField hint="The deal that bulk update and cancel, push, distribute, migrate and deprecate act on. Copy it from the Deals screen." size="small" label="Deal id" value={id} onChange={(e) => setId(e.target.value)} disabled={blocked} />
         <Typography variant="caption" component="p" color="text.secondary" sx={{ mt: 0.5 }}>
           Bulk update and cancel, push, distribute, migrate and deprecate all act on this deal.
         </Typography>
@@ -1079,6 +1121,7 @@ export function DealWrites({ dealId }: { dealId?: string }) {
           title={`Run a bulk ${bulkAction}?`}
           confirmLabel={`Bulk ${bulkAction}`}
           action="bulk-deals"
+          hint="Runs the chosen bulk action on the deal id above (or on the quote for create)."
           blocked={blocked || (bulkAction === "create" ? !bulkQuote.trim() : !id.trim())}
           pending={bulk.pending}
           // Reported below instead: a 200 here can still carry failures.
@@ -1106,6 +1149,7 @@ export function DealWrites({ dealId }: { dealId?: string }) {
         >
           <FormFields>
             <EnumSelect
+              hint="What the bulk call does to the deal: create books from a quote, cancel cancels it, update replaces its notes."
               label="Bulk action"
               value={bulkAction}
               options={BULK_DEAL_ACTIONS}
@@ -1114,9 +1158,9 @@ export function DealWrites({ dealId }: { dealId?: string }) {
               sx={{ minWidth: 140 }}
             />
             {bulkAction === "create" && (
-              <TextField size="small" label="Quote id" value={bulkQuote} onChange={(e) => setBulkQuote(e.target.value)} disabled={blocked} />
+              <TipField hint="Id of the quote to book a deal from. Quotes expire after 24 hours." size="small" label="Quote id" value={bulkQuote} onChange={(e) => setBulkQuote(e.target.value)} disabled={blocked} />
             )}
-            <TextField size="small" label="Notes (optional)" value={bulkNotes} onChange={(e) => setBulkNotes(e.target.value)} disabled={blocked} />
+            <TipField hint="Optional notes. For update they replace the deal's notes; for cancel they become the cancel reason." size="small" label="Notes (optional)" value={bulkNotes} onChange={(e) => setBulkNotes(e.target.value)} disabled={blocked} />
           </FormFields>
         </WriteForm>
         {bulk.last?.kind === "ok" && (
@@ -1138,18 +1182,20 @@ export function DealWrites({ dealId }: { dealId?: string }) {
         title="Push this deal to a buyer?"
         confirmLabel="Push"
         action="push-deal"
+        hint="Notifies the buyer URL above about the deal id above."
         blocked={blocked || !id.trim()}
         pending={push.pending}
         last={push.last}
         onConfirm={() => void push.run({ deal_id: id.trim(), buyer_urls: [buyerUrl] })}
         consequence="Notifies the named buyer URLs. A retry may notify twice."
       >
-        <TextField size="small" label="Buyer URL" value={buyerUrl} onChange={(e) => setBuyerUrl(e.target.value)} disabled={blocked} sx={{ minWidth: 240 }} />
+        <TipField hint="Full URL of the buyer agent to notify, for example https://buyer.example. Only this one URL is sent." size="small" label="Buyer URL" value={buyerUrl} onChange={(e) => setBuyerUrl(e.target.value)} disabled={blocked} sx={{ minWidth: 240 }} />
       </WriteForm>
       <WriteForm
         title="Distribute this deal to an SSP?"
         confirmLabel="Distribute"
         action="distribute-deal"
+        hint="Sends the deal id above to the SSP named above, or the default when left empty."
         blocked={blocked || !id.trim()}
         pending={dist.pending}
         last={dist.last}
@@ -1158,36 +1204,39 @@ export function DealWrites({ dealId }: { dealId?: string }) {
         }
         consequence="A retry may push a second copy to the SSP."
       >
-        <SspNameField label="SSP name (optional)" value={ssp} onChange={setSsp} disabled={blocked} />
+        <SspNameField label="SSP name (optional)" hint="Name of the SSP connector to send the deal to. Pick a known one or type another; an unknown name is a 400 that lists the configured ones." value={ssp} onChange={setSsp} disabled={blocked} />
       </WriteForm>
       <WriteForm
         title="Create a curated deal?"
         confirmLabel="Curated deal"
         action="curated-deal"
+        hint="Creates a deal for the curator id above."
         blocked={blocked || !curatorId.trim()}
         pending={curated.pending}
         last={curated.last}
         onConfirm={() => void curated.run({ curator_id: curatorId.trim() })}
         consequence="Not idempotent: each call mints another curated deal."
       >
-        <TextField size="small" label="Curator id" value={curatorId} onChange={(e) => setCuratorId(e.target.value)} disabled={blocked} />
+        <TipField hint="Id of the curator the deal is created for. Use an id registered under Curators." size="small" label="Curator id" value={curatorId} onChange={(e) => setCuratorId(e.target.value)} disabled={blocked} />
       </WriteForm>
       <WriteForm
         title="Migrate this deal?"
         confirmLabel="Migrate"
         action="migrate-deal"
+        hint="Mints a successor to the deal id above and records the lineage."
         blocked={blocked || !id.trim()}
         pending={migrate.pending}
         last={migrate.last}
         onConfirm={() => void migrate.run({ id: id.trim(), ...(reason ? { reason } : {}) })}
         consequence="Mints a successor and records lineage. A retry may mint a second successor."
       >
-        <TextField size="small" label="Reason" value={reason} onChange={(e) => setReason(e.target.value)} disabled={blocked} />
+        <TipField hint="Optional reason recorded with the migration, which mints a successor deal. Deprecate below requires a reason and reads this same box." size="small" label="Reason" value={reason} onChange={(e) => setReason(e.target.value)} disabled={blocked} />
       </WriteForm>
       <WriteForm
         title="Deprecate this deal?"
         confirmLabel="Deprecate"
         action="deprecate-deal"
+        hint="Marks the deal id above as deprecated, using the reason above."
         blocked={blocked || !id.trim() || !reason.trim()}
         pending={deprecate.pending}
         last={deprecate.last}
@@ -1209,6 +1258,7 @@ export function DealLookups({ dealId }: { dealId: string }) {
         title="Fetch this deal record?"
         confirmLabel="Fetch deal"
         action="fetch-deal"
+        hint="Loads the record for this deal. The agent may expire it as a side effect."
         blocked={false}
         pending={false}
         last={undefined}
@@ -1222,6 +1272,7 @@ export function DealLookups({ dealId }: { dealId: string }) {
         title="Export every stored deal?"
         confirmLabel="Export deals"
         action="export-deals"
+        hint="Exports every stored deal in one request and shows a short preview."
         blocked={false}
         pending={false}
         last={undefined}
@@ -1248,11 +1299,12 @@ function BuyerStatus({ dealId }: { dealId: string }) {
   return (
     <>
       <FormRow>
-        <TextField size="small" label="Buyer URL" value={buyerUrl} onChange={(e) => setBuyerUrl(e.target.value)} />
+        <TipField hint="Full URL of the buyer agent whose view of this deal you want to read." size="small" label="Buyer URL" value={buyerUrl} onChange={(e) => setBuyerUrl(e.target.value)} />
         <WriteForm
           title="Read buyer activation status?"
           confirmLabel="Buyer status"
           action="deal-buyer-status"
+          hint="Reads how the buyer URL above sees this deal."
           blocked={!buyerUrl.trim()}
           pending={false}
           last={undefined}
@@ -1283,11 +1335,13 @@ function BuyerStatusBody({ dealId, buyerUrl }: { dealId: string; buyerUrl: strin
  */
 function SspNameField({
   label,
+  hint,
   value,
   onChange,
   disabled,
 }: {
   label: string;
+  hint?: string;
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
@@ -1301,7 +1355,7 @@ function SspNameField({
       onInputChange={(_, next) => onChange(next)}
       disabled={disabled}
       sx={{ minWidth: 200 }}
-      renderInput={(params) => <TextField {...params} label={label} />}
+      renderInput={(params) => <TipField {...params} hint={hint} label={label} />}
     />
   );
 }
@@ -1314,11 +1368,12 @@ function SspTrouble({ dealId }: { dealId: string }) {
   return (
     <>
       <FormRow>
-        <SspNameField label="SSP" value={ssp} onChange={setSsp} />
+        <SspNameField label="SSP" hint="Name of the SSP connector to diagnose. Pick a known one or type another; an unknown name is a 400 that lists the configured ones." value={ssp} onChange={setSsp} />
         <WriteForm
           title="Troubleshoot this SSP?"
           confirmLabel="Troubleshoot"
           action="deal-ssp"
+          hint="Reads connector diagnostics for the SSP above and this deal."
           blocked={!ssp.trim()}
           pending={false}
           last={undefined}
@@ -1369,13 +1424,15 @@ export function SessionWrites({ sessionId }: { sessionId: string }) {
         title="Send this session message?"
         confirmLabel="Send"
         action="session-message"
+        hint="Sends the message above as the next turn of this session."
         blocked={!writesEnabled || !message.trim()}
         pending={send.pending}
         last={send.last}
         onConfirm={() => void send.run({ id: sessionId, message: message.trim() })}
         consequence="Appends a turn and gets a response. Not idempotent: a retry sends a second message."
       >
-        <TextField
+        <TipField
+          hint="Text sent to the session as the next turn. Required."
           size="small"
           label="Message"
           value={message}
@@ -1388,6 +1445,7 @@ export function SessionWrites({ sessionId }: { sessionId: string }) {
         title="Close this session?"
         confirmLabel="Close session"
         action="close-session"
+        hint="Marks this session closed."
         blocked={!writesEnabled}
         pending={close.pending}
         last={close.last}
@@ -1408,6 +1466,7 @@ export function CreateSessionWrite() {
       title="Open a new buyer session?"
       confirmLabel="Create session"
       action="create-session"
+      hint="Opens a new buyer session on the agent."
       blocked={!writesEnabled}
       pending={create.pending}
       last={create.last}
@@ -1443,6 +1502,7 @@ export function ProposalWrites() {
         title="Submit a proposal?"
         confirmLabel="Submit proposal"
         action="submit-proposal"
+        hint="Submits a proposal for the product and price above with fixed volume and dates (100,000 impressions, 2026-10-01 to 2026-10-31)."
         blocked={!writesEnabled || !productId.trim()}
         pending={submit.pending}
         last={submit.last}
@@ -1459,8 +1519,9 @@ export function ProposalWrites() {
         consequence="Not idempotent. A retry after an unclear failure may create a second proposal."
       >
         <FormFields>
-          <TextField size="small" label="Product id" value={productId} onChange={(e) => setProductId(e.target.value)} disabled={!writesEnabled} />
+          <TipField hint="Id of the product being proposed for. Copy it from the Catalog screen." size="small" label="Product id" value={productId} onChange={(e) => setProductId(e.target.value)} disabled={!writesEnabled} />
           <EnumSelect
+            hint="Legacy deal type the proposal is checked against; the agent rejects values it does not recognise."
             label="Deal type"
             value={proposalDealType}
             options={LEGACY_DEAL_TYPES}
@@ -1468,15 +1529,16 @@ export function ProposalWrites() {
             disabled={!writesEnabled}
             sx={{ minWidth: 200 }}
           />
-          <TextField size="small" label="Price" value={price} onChange={(e) => setPrice(e.target.value)} disabled={!writesEnabled} />
+          <TipField hint="Price as a plain number in dollars, for example 10. Used as the proposal price, the counter price, and the negotiation message price (sent as USD micros, times 1,000,000)." size="small" label="Price" value={price} onChange={(e) => setPrice(e.target.value)} disabled={!writesEnabled} />
         </FormFields>
       </WriteForm>
-      <TextField size="small" label="Proposal id" value={proposalId} onChange={(e) => setProposalId(e.target.value)} />
+      <TipField hint="Id of the proposal to counter or check negotiation status for. Copy it from the Proposals screen." size="small" label="Proposal id" value={proposalId} onChange={(e) => setProposalId(e.target.value)} />
       {proposalId.trim() ? <NegotiationStatus proposalId={proposalId.trim()} /> : null}
       <WriteForm
         title="Send a legacy counter-offer?"
         confirmLabel="Counter"
         action="counter-proposal"
+        hint="Sends the price above as a counter-offer on the proposal id above."
         blocked={!writesEnabled || !proposalId.trim()}
         pending={counter.pending}
         last={counter.last}
@@ -1487,6 +1549,7 @@ export function ProposalWrites() {
         title="Post a canonical negotiation message?"
         confirmLabel="Post message"
         action="negotiation-message"
+        hint="Posts the price above as a counter on the proposal id above, using a fresh idempotency key."
         blocked={!writesEnabled || !proposalId.trim()}
         pending={message.pending}
         last={message.last}
@@ -1529,18 +1592,20 @@ export function AgentWrites() {
         title="Discover and register this agent?"
         confirmLabel="Discover"
         action="discover-agent"
+        hint="Fetches the agent card at the URL above and registers it locally."
         blocked={!writesEnabled || !url.trim()}
         pending={discover.pending}
         last={discover.last}
         onConfirm={() => void discover.run({ agent_url: url.trim() })}
         consequence="Fetches the remote card and writes a local registry row. Re-discovering the same URL updates that row."
       >
-        <TextField size="small" label="Agent URL" value={url} onChange={(e) => setUrl(e.target.value)} disabled={!writesEnabled} sx={{ minWidth: 280 }} />
+        <TipField hint="Full URL of the remote agent to look up, for example https://agent.example. Its card is fetched and stored as a local registry row." size="small" label="Agent URL" value={url} onChange={(e) => setUrl(e.target.value)} disabled={!writesEnabled} sx={{ minWidth: 280 }} />
       </WriteForm>
       <WriteForm
         title="Change this agent's trust status?"
         confirmLabel="Update trust"
         action="update-trust"
+        hint="Sets the trust status above on the agent id above."
         blocked={!writesEnabled || !agentId.trim()}
         pending={update.pending}
         last={update.last}
@@ -1550,21 +1615,22 @@ export function AgentWrites() {
         consequence="Trust is this operator's decision and caps the buyer's access tier. A blocked agent is refused on later calls."
       >
         <FormFields>
-          <TextField size="small" label="Agent id" value={agentId} onChange={(e) => setAgentId(e.target.value)} disabled={!writesEnabled} />
-          <TextField select size="small" label="Trust" value={trust} onChange={(e) => setTrust(e.target.value)} disabled={!writesEnabled} sx={{ minWidth: 160 }}>
+          <TipField hint="Id of the registered agent to change or remove, as shown in the Agents list." size="small" label="Agent id" value={agentId} onChange={(e) => setAgentId(e.target.value)} disabled={!writesEnabled} />
+          <TipField hint="Trust decision for the agent: unknown, registered, approved, preferred or blocked. It caps the buyer's access tier, and a blocked agent is refused on later calls." select size="small" label="Trust" value={trust} onChange={(e) => setTrust(e.target.value)} disabled={!writesEnabled} sx={{ minWidth: 160 }}>
             {["unknown", "registered", "approved", "preferred", "blocked"].map((t) => (
               <MenuItem key={t} value={t}>
                 {t}
               </MenuItem>
             ))}
-          </TextField>
-          <TextField size="small" label="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} disabled={!writesEnabled} />
+          </TipField>
+          <TipField hint="Optional note on why the trust status changed. Sent only when filled in." size="small" label="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} disabled={!writesEnabled} />
         </FormFields>
       </WriteForm>
       <WriteForm
         title="Remove this agent from the local registry?"
         confirmLabel="Remove agent"
         action="remove-agent"
+        hint="Removes the agent id above from the local registry."
         blocked={!writesEnabled || !agentId.trim()}
         pending={remove.pending}
         last={remove.last}
@@ -1595,11 +1661,12 @@ export function AgentDetailLookup() {
   return (
     <Box sx={{ mt: 1 }}>
       <FormRow>
-        <TextField size="small" label="Agent id" value={id} onChange={(e) => setId(e.target.value)} />
+        <TipField hint="Id of the registered agent to load, as shown in the Agents list." size="small" label="Agent id" value={id} onChange={(e) => setId(e.target.value)} />
         <WriteForm
           title="Load this registered agent?"
           confirmLabel="Load agent"
           action="fetch-agent"
+          hint="Reads the registry row for the agent id above and shows its trust status and type."
           blocked={!id.trim()}
           pending={false}
           last={undefined}
@@ -1636,6 +1703,7 @@ export function CuratorWrite() {
       title="Register this curator?"
       confirmLabel="Register curator"
       action="register-curator"
+      hint="Registers a curator with the id, name and domain above."
       blocked={!writesEnabled || !curatorId.trim() || !name.trim() || !domain.trim()}
       pending={register.pending}
       last={register.last}
@@ -1645,9 +1713,9 @@ export function CuratorWrite() {
       consequence="Not idempotent if the id is new; a duplicate id may 409."
     >
       <FormFields>
-        <TextField size="small" label="Curator id" value={curatorId} onChange={(e) => setCuratorId(e.target.value)} disabled={!writesEnabled} />
-        <TextField size="small" label="Name" value={name} onChange={(e) => setName(e.target.value)} disabled={!writesEnabled} />
-        <TextField size="small" label="Domain" value={domain} onChange={(e) => setDomain(e.target.value)} disabled={!writesEnabled} />
+        <TipField hint="Your own short identifier for the curator, for example acme-curation. A duplicate id may 409." size="small" label="Curator id" value={curatorId} onChange={(e) => setCuratorId(e.target.value)} disabled={!writesEnabled} />
+        <TipField hint="Display name of the curator. Required." size="small" label="Name" value={name} onChange={(e) => setName(e.target.value)} disabled={!writesEnabled} />
+        <TipField hint="Domain the curator operates from, for example curator.example. Required." size="small" label="Domain" value={domain} onChange={(e) => setDomain(e.target.value)} disabled={!writesEnabled} />
       </FormFields>
     </WriteForm>
   );
@@ -1729,6 +1797,7 @@ export function ChangeRequestCreate({
           title="Submit a change request?"
           confirmLabel="Create request"
           action="create-change-request"
+          hint="Raises a change request with the type, field and value above. It changes nothing on the order until applied."
           blocked={!writesEnabled || !orderId.trim()}
           pending={create.pending}
           last={create.last?.kind === "ok" || refused.length > 0 ? undefined : create.last}
@@ -1763,9 +1832,10 @@ export function ChangeRequestCreate({
         >
           <FormFields>
             {fixedOrder === undefined && (
-              <TextField size="small" label="Order id" value={typedOrder} onChange={(e) => setOrderId(e.target.value)} disabled={!writesEnabled} />
+              <TipField hint="Id of the order the change is for. Copy it from the Orders screen." size="small" label="Order id" value={typedOrder} onChange={(e) => setOrderId(e.target.value)} disabled={!writesEnabled} />
             )}
             <EnumSelect
+              hint="What kind of change is being requested. It decides the usual field and how severe the agent treats the request."
               label="Change type"
               value={changeType}
               options={CHANGE_TYPES}
@@ -1777,8 +1847,9 @@ export function ChangeRequestCreate({
               disabled={!writesEnabled}
               sx={{ minWidth: 180 }}
             />
-            <TextField size="small" label="Field" value={fieldName} onChange={(e) => setField(e.target.value)} disabled={!writesEnabled} />
-            <TextField
+            <TipField hint="Name of the order field to change. It starts from the usual field for the change type; edit it if the request touches something else." size="small" label="Field" value={fieldName} onChange={(e) => setField(e.target.value)} disabled={!writesEnabled} />
+            <TipField
+              hint="The value to set the field to. A whole number for an impressions change, otherwise text. With no value the request changes nothing when applied."
               size="small"
               label="New value"
               type={changeType === "impressions" ? "number" : "text"}
@@ -1786,7 +1857,7 @@ export function ChangeRequestCreate({
               onChange={(e) => setNewValue(e.target.value)}
               disabled={!writesEnabled}
             />
-            <TextField size="small" label="Request reason" value={reason} onChange={(e) => setReason(e.target.value)} disabled={!writesEnabled} />
+            <TipField hint="Optional reason for the request, shown to whoever reviews it." size="small" label="Request reason" value={reason} onChange={(e) => setReason(e.target.value)} disabled={!writesEnabled} />
           </FormFields>
         </WriteForm>
       )}
@@ -1887,7 +1958,8 @@ export function ChangeRequestReviewWrites({
       <FormRow>
         {showReview && (
           <>
-            <TextField
+            <TipField
+              hint="Optional reason for the decision, saved with the change request."
               size="small"
               label="Reason"
               value={reason}
@@ -1895,7 +1967,8 @@ export function ChangeRequestReviewWrites({
               disabled={blocked || !reviewable || busy}
               sx={{ minWidth: 240 }}
             />
-            <TextField
+            <TipField
+              hint="Name recorded as the reviewer (decided_by). It is stored as given and not verified, and is remembered for next time."
               size="small"
               label="Your name"
               value={name}
@@ -1904,36 +1977,42 @@ export function ChangeRequestReviewWrites({
               disabled={blocked || !reviewable || busy}
               sx={{ minWidth: 200 }}
             />
-            <Button
-              size="small"
-              variant="contained"
-              data-action="approve"
-              disabled={blocked || !reviewable || busy}
-              onClick={() => setPendingDecision("approve")}
-            >
-              Approve
-            </Button>
-            <Button
-              size="small"
-              variant="outlined"
-              data-action="reject"
-              disabled={blocked || !reviewable || busy}
-              onClick={() => setPendingDecision("reject")}
-            >
-              Reject
-            </Button>
+            <Hint hint="Approves this pending request so it can be applied. You are asked to confirm first.">
+              <Button
+                size="small"
+                variant="contained"
+                data-action="approve"
+                disabled={blocked || !reviewable || busy}
+                onClick={() => setPendingDecision("approve")}
+              >
+                Approve
+              </Button>
+            </Hint>
+            <Hint hint="Rejects this pending request. The agent keeps the first decision it receives. You are asked to confirm first.">
+              <Button
+                size="small"
+                variant="outlined"
+                data-action="reject"
+                disabled={blocked || !reviewable || busy}
+                onClick={() => setPendingDecision("reject")}
+              >
+                Reject
+              </Button>
+            </Hint>
           </>
         )}
         {showApply && (
-          <Button
-            size="small"
-            variant={compact ? "outlined" : "text"}
-            data-action="apply"
-            disabled={blocked || !applicable || busy}
-            onClick={() => setPendingApply(true)}
-          >
-            {apply.pending ? "Applying…" : "Apply to order"}
-          </Button>
+          <Hint hint="Writes the approved values into the order's metadata. The order's status does not change. You are asked to confirm first.">
+            <Button
+              size="small"
+              variant={compact ? "outlined" : "text"}
+              data-action="apply"
+              disabled={blocked || !applicable || busy}
+              onClick={() => setPendingApply(true)}
+            >
+              {apply.pending ? "Applying…" : "Apply to order"}
+            </Button>
+          </Hint>
         )}
       </FormRow>
       {showReview && (
@@ -2032,11 +2111,12 @@ export function ApiKeyDetailLookup() {
   return (
     <Box sx={{ mt: 1 }}>
       <FormRow>
-        <TextField size="small" label="Key id" value={id} onChange={(e) => setId(e.target.value)} />
+        <TipField hint="Id of the API key to look up, as shown in the API keys list. Metadata only; the secret is never returned." size="small" label="Key id" value={id} onChange={(e) => setId(e.target.value)} />
         <WriteForm
           title="Load this key's metadata?"
           confirmLabel="Load key"
           action="fetch-key"
+          hint="Reads the metadata for the key id above."
           blocked={!id.trim()}
           pending={false}
           last={undefined}
@@ -2071,7 +2151,8 @@ export function AudienceMatchForm() {
         A POST that stores nothing, so it runs with writes off.
       </Typography>
       <FormRow>
-        <TextField
+        <TipField
+          hint="Identifier of the audience to score. Sent as an agentic audience reference; required."
           size="small"
           label="Audience identifier"
           value={identifier}
@@ -2081,6 +2162,7 @@ export function AudienceMatchForm() {
           title="Score this audience?"
           confirmLabel="Match"
           action="audience-match"
+          hint="Scores the audience identifier above. Nothing is stored."
           blocked={!identifier.trim()}
           pending={false}
           last={undefined}
@@ -2196,6 +2278,7 @@ export function ProposalLifecycleWrites({ proposal }: { proposal: Proposal }) {
             title="Publish this proposal?"
             confirmLabel="Publish"
             action="publish-proposal"
+            hint="Makes this draft proposal visible to buyer agents."
             blocked={blocked}
             pending={publish.pending}
             last={publish.last}
@@ -2217,6 +2300,7 @@ export function ProposalLifecycleWrites({ proposal }: { proposal: Proposal }) {
               title="Accept this version and make it binding?"
               confirmLabel="Accept"
               action="assent-accept"
+              hint="Accepts the version under review and makes it binding."
               blocked={blocked}
               pending={assent.pending}
               last={assent.last}
@@ -2227,6 +2311,7 @@ export function ProposalLifecycleWrites({ proposal }: { proposal: Proposal }) {
               title="Decline the version under review?"
               confirmLabel="Decline"
               action="assent-decline"
+              hint="Declines the version under review and records it in the negotiation history."
               blocked={blocked}
               pending={assent.pending}
               last={assent.last}
@@ -2243,6 +2328,7 @@ export function ProposalLifecycleWrites({ proposal }: { proposal: Proposal }) {
             title="Withdraw this proposal?"
             confirmLabel="Withdraw"
             action="withdraw-proposal"
+            hint="Withdraws this proposal so buyers can no longer use it."
             blocked={blocked}
             pending={withdraw.pending}
             last={withdraw.last}
@@ -2253,7 +2339,8 @@ export function ProposalLifecycleWrites({ proposal }: { proposal: Proposal }) {
         </Box>
       )}
       {(canWithdraw || canAssent) && (
-        <TextField
+        <TipField
+          hint="Optional reason sent with a withdraw or an assent (accept or decline). Not used for publish."
           size="small"
           label="Reason (optional, sent with withdraw or assent)"
           value={reason}
@@ -2290,6 +2377,7 @@ export function LineItemHoldWrites({ proposal, item }: { proposal: Proposal; ite
           title="Grant the requested hold?"
           confirmLabel="Grant hold"
           action="grant-hold"
+          hint="Grants the buyer's requested hold on this line item."
           blocked={!writesEnabled}
           pending={hold.pending}
           last={hold.last}
@@ -2301,6 +2389,7 @@ export function LineItemHoldWrites({ proposal, item }: { proposal: Proposal; ite
           title="Release this hold?"
           confirmLabel="Release hold"
           action="release-hold"
+          hint="Releases this line item's hold before it expires."
           blocked={!writesEnabled}
           pending={hold.pending}
           last={hold.last}

@@ -10,16 +10,17 @@ import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
-import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { curatorById, curators, type CuratorFee } from "../api/endpoints";
 import { describe } from "../api/errors";
 import { DataPanel, FreshnessNote } from "../components/DataPanel";
 import { Field, FieldGrid } from "../components/Field";
 import { GatedNotice } from "../components/GatedNotice";
+import { Hint } from "../components/Hint";
 import { PageHeader } from "../components/PageHeader";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { StatusChip } from "../components/StatusChip";
+import { TipField } from "../components/TipField";
 import { useCredential } from "../credentials/context";
 import { CuratorWrite, Panel } from "./mutations";
 import { plural, stamp } from "../lib/time";
@@ -124,7 +125,8 @@ export default function CuratorsScreen() {
       ) : (
         <>
           <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }}>
-            <TextField
+            <TipField
+              hint="Filters the list already loaded to active or inactive curators. It does not query the agent again."
               select
               size="small"
               label="Active"
@@ -135,7 +137,7 @@ export default function CuratorsScreen() {
               <MenuItem value="">Any</MenuItem>
               <MenuItem value="true">Active only</MenuItem>
               <MenuItem value="false">Inactive only</MenuItem>
-            </TextField>
+            </TipField>
           </Paper>
 
           <FreshnessNote freshness={list.freshness}>
@@ -203,17 +205,19 @@ export default function CuratorsScreen() {
                           <StatusChip status={curator.is_active ? "active" : "inactive"} />
                         </TableCell>
                         <TableCell align="right">
-                          <Button
-                            size="small"
-                            onClick={() =>
-                              setOpenCurator((current) =>
-                                current === curator.curator_id ? undefined : curator.curator_id,
-                              )
-                            }
-                            aria-expanded={openCurator === curator.curator_id}
-                          >
-                            {openCurator === curator.curator_id ? "Hide details" : "Details"}
-                          </Button>
+                          <Hint hint="Shows or hides this curator's full record, read from the agent.">
+                            <Button
+                              size="small"
+                              onClick={() =>
+                                setOpenCurator((current) =>
+                                  current === curator.curator_id ? undefined : curator.curator_id,
+                                )
+                              }
+                              aria-expanded={openCurator === curator.curator_id}
+                            >
+                              {openCurator === curator.curator_id ? "Hide details" : "Details"}
+                            </Button>
+                          </Hint>
                         </TableCell>
                       </TableRow>
                       {openCurator === curator.curator_id && (
