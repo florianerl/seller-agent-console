@@ -5,6 +5,7 @@ import Typography from "@mui/material/Typography";
 import { describe, type Result } from "../api/errors";
 import { palette } from "../theme/palette";
 import { ConfirmAction } from "./ConfirmAction";
+import { Hint } from "./Hint";
 
 const formRowSx = {
   display: "flex",
@@ -42,6 +43,7 @@ export function WriteForm({
   pending,
   last,
   onConfirm,
+  hint,
   children,
 }: {
   title: string;
@@ -52,21 +54,29 @@ export function WriteForm({
   pending: boolean;
   last: Result<unknown> | undefined;
   onConfirm: () => void;
+  /** Tooltip on the button; defaults to `consequence` when that is plain text. */
+  hint?: ReactNode;
   children?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
 
+  const tip = blocked
+    ? "Writes are switched off. Turn them on from the connection menu to use this."
+    : (hint ?? (typeof consequence === "string" ? consequence : undefined));
+
   const actionButton = (
-    <Button
-      variant="outlined"
-      size="small"
-      data-action={action}
-      disabled={blocked || pending}
-      onClick={() => setOpen(true)}
-      sx={{ flexShrink: 0 }}
-    >
-      {pending ? "Working…" : confirmLabel}
-    </Button>
+    <Hint hint={tip}>
+      <Button
+        variant="outlined"
+        size="small"
+        data-action={action}
+        disabled={blocked || pending}
+        onClick={() => setOpen(true)}
+        sx={{ flexShrink: 0 }}
+      >
+        {pending ? "Working…" : confirmLabel}
+      </Button>
+    </Hint>
   );
 
   return (

@@ -1,7 +1,8 @@
+import type { ReactNode } from "react";
 import MenuItem from "@mui/material/MenuItem";
-import TextField from "@mui/material/TextField";
 import type { SxProps, Theme } from "@mui/material/styles";
 import type { Option } from "../api/vocabulary";
+import { TipField } from "./TipField";
 
 /**
  * A select over a closed value set. Where the agent validates a field against
@@ -17,6 +18,7 @@ export function EnumSelect<V extends string>({
   onChange,
   any,
   disabled,
+  hint,
   sx,
 }: {
   label: string;
@@ -25,10 +27,13 @@ export function EnumSelect<V extends string>({
   onChange: (value: V | "") => void;
   any?: string;
   disabled?: boolean;
+  /** Tooltip: what the field does or what the agent expects in it. */
+  hint?: ReactNode;
   sx?: SxProps<Theme>;
 }) {
   return (
-    <TextField
+    <TipField
+      hint={hint}
       select
       size="small"
       label={label}
@@ -43,6 +48,6 @@ export function EnumSelect<V extends string>({
           {o.label}
         </MenuItem>
       ))}
-    </TextField>
+    </TipField>
   );
 }
