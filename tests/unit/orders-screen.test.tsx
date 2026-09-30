@@ -310,7 +310,7 @@ describe("the orders screen", () => {
     const cell = (id: string) =>
       screen.getByText(id).closest("tr")!.querySelector('[data-cell="next-step"]')!.textContent;
     expect(cell("ORD-ABC123")).toBe("Approve");
-    expect(cell("ORD-DEF456")).toBe("Start execution");
+    expect(cell("ORD-DEF456")).toBe("Record execution started");
   });
 
   it("offers only the moves the state machine allows from the current status", async () => {
@@ -324,7 +324,8 @@ describe("the orders screen", () => {
     expect(transitionButtons()).toEqual(["approved", "rejected", "cancelled"]);
     expect(within(detail).getByText(/waiting for a human decision/i)).toBeInTheDocument();
     // No approval queue lists orders; the screen has to say so.
-    expect(detail.querySelector('[data-block="moved-by"]')?.textContent).toMatch(/no approval queue/i);
+    // Held in an (i) whose accessible name is the explanation itself.
+    expect(detail.querySelector('[data-block="moved-by"]')?.getAttribute("aria-label")).toMatch(/no approval queue/i);
     const map = detail.querySelector('[data-block="state-map"]')!;
     expect(map.querySelector('[data-node="current"]')?.getAttribute("data-state-node")).toBe("pending_approval");
     expect([...map.querySelectorAll('[data-node="next"]')].map((n) => n.getAttribute("data-state-node")).sort()).toEqual(
@@ -365,7 +366,7 @@ describe("the orders screen", () => {
     const detail = await expand(user, "ORD-ABC123");
 
     await waitFor(() => expect(transitionButtons()).toEqual(["in_progress", "cancelled"]));
-    expect(detail.textContent).toMatch(/the list still shows pending approval/);
+    expect(detail.textContent).toMatch(/the list still shows pending approval/i);
   });
 
   it("keeps the moves disabled, and sends nothing, while writes are off", async () => {
@@ -956,9 +957,115 @@ describe("moving an order, round two", () => {
     await expand(user, "ORD-ABC123");
 
     await waitFor(() =>
-      expect(document.querySelector('[data-note="system-actor"]')?.textContent).toMatch(/transition_order/),
+      expect(document.querySelector('[data-note="system-actor"]')?.getAttribute("aria-label")).toMatch(/transition_order/),
     );
     expect(document.querySelector('[data-actor-kind="agent"]')).toBeTruthy();
-    expect(document.querySelector('[data-note="mcp"]')?.textContent).toMatch(/transition_order/);
+    expect(document.querySelector('[data-note="mcp"]')?.getAttribute("aria-label")).toMatch(/transition_order/);
+  });
+});
+
+describe("ad-server steps", () => {
+  beforeEach(async () => {
+    resetReachability();
+    await connect({ writesEnabled: true });
+    server.use(
+      http.get(`${API}/api/v1/orders`, () =>
+        HttpResponse.json({ orders: [{ ...ORDERS[0], status: "booked" }], count: 1 }),
+      ),
+      http.get(`${API}/api/v1/orders/ORD-ABC123/audit`, () =>
+        HttpResponse.json({ ...AUDIT, current_status: "booked" }),
+      ),
+      http.get(`${API}/api/v1/change-requests`, () => HttpResponse.json({ change_requests: [], count: 0 })),
+    );
+  });
+
+  // The agent has no ad-server sync: moving an order into these statuses
+  // records a claim, and the confirmation has to say so.
+  it("says a record-only move sends nothing to the ad server", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await expand(user, "ORD-ABC123");
+    await waitFor(() => expect(transitionButtons()).toEqual(["completed", "unbooked"]));
+
+    await user.click(screen.getByLabelText("Acting as"));
+    await user.click(await screen.findByRole("option", { name: "system" }));
+    await user.click(document.querySelector('[data-action="transition-order:completed"]') as HTMLElement);
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toMatch(/Nothing is sent to the ad server/);
+    expect(dialog.textContent).toMatch(/has not been checked/);
+    expect(within(dialog).getByRole("button", { name: "Record completed" })).toBeInTheDocument();
+  });
+
+  it("asks GAM only when told to, and quotes what it found in the confirmation", async () => {
+    const seen: URL[] = [];
+    server.use(
+      http.get(`${API}/gam/orders`, ({ request }) => {
+        seen.push(new URL(request.url));
+        return HttpResponse.json({
+          network_code: "123",
+          orders: [
+            { id: "9001", name: "Autumn takeover", status: "APPROVED", external_order_id: "deal-1" },
+            { id: "9002", name: "Other", status: "DRAFT", external_order_id: "deal-7" },
+          ],
+          count: 2,
+        });
+      }),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+    await expand(user, "ORD-ABC123");
+    await waitFor(() => expect(transitionButtons().length).toBeGreaterThan(0));
+    // Each call spends the network's GAM quota: nothing until asked.
+    expect(seen).toEqual([]);
+
+    await user.click(document.querySelector('[data-action="gam-check"]') as HTMLElement);
+    await waitFor(() =>
+      expect(document.querySelector('[data-state="gam-checked"]')?.textContent).toMatch(
+        /order 9001 “Autumn takeover” is APPROVED/,
+      ),
+    );
+    expect(seen[0]!.searchParams.get("limit")).toBe("500");
+
+    await user.click(screen.getByLabelText("Acting as"));
+    await user.click(await screen.findByRole("option", { name: "system" }));
+    await user.click(document.querySelector('[data-action="transition-order:completed"]') as HTMLElement);
+    expect((await screen.findByRole("dialog")).textContent).toMatch(/GAM, when checked: order 9001/);
+  });
+
+  it("says when GAM has no order for the deal", async () => {
+    server.use(
+      http.get(`${API}/gam/orders`, () =>
+        HttpResponse.json({ orders: [{ id: "1", name: "x", status: "DRAFT", external_order_id: null }], count: 1 }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+    await expand(user, "ORD-ABC123");
+    await user.click(await screen.findByRole("button", { name: "Check the ad server" }));
+
+    await waitFor(() =>
+      expect(document.querySelector('[data-state="gam-checked"]')?.textContent).toMatch(
+        /no order for deal deal-1 among the 1 GAM orders read/,
+      ),
+    );
+  });
+
+  it("reports why the check failed when GAM is not configured", async () => {
+    server.use(
+      http.get(`${API}/gam/orders`, () =>
+        HttpResponse.json(
+          { detail: "GAM not configured — set GAM_ENABLED=true, GAM_NETWORK_CODE, GAM_JSON_KEY_PATH" },
+          { status: 503 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+    await expand(user, "ORD-ABC123");
+    await user.click(await screen.findByRole("button", { name: "Check the ad server" }));
+
+    await waitFor(() =>
+      expect(document.querySelector('[data-state="gam-failed"]')?.textContent).toMatch(/GAM not configured/),
+    );
   });
 });

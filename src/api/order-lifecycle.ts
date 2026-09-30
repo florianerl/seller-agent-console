@@ -64,15 +64,34 @@ const VERB: Readonly<Record<OrderStatus, string>> = {
   submitted: "Submit for review",
   pending_approval: "Send for approval",
   approved: "Approve",
-  in_progress: "Start execution",
-  syncing: "Mark syncing",
-  booked: "Mark booked",
-  completed: "Mark completed",
+  // "Record", not "Mark" or "Start": these five only write the status. The
+  // agent pushes nothing to an ad server when an order moves (see
+  // RECORD_ONLY), and a verb that sounds like an action implied it did.
+  in_progress: "Record execution started",
+  syncing: "Record sync started",
+  booked: "Record booked",
+  completed: "Record completed",
   rejected: "Reject",
   failed: "Mark failed",
   cancelled: "Cancel order",
-  unbooked: "Mark unbooked",
+  unbooked: "Record unbooked",
 };
+
+/**
+ * Statuses that describe something happening in the ad server. Upstream has
+ * no operation that makes it happen: the GAM booking code exists
+ * (clients/gam_adapter.py `book_deal`) but no route, flow or MCP tool calls
+ * it, and moving an order sends nothing anywhere. Moving into one of these
+ * records a claim about the ad server, which the screen says in the
+ * confirmation and offers to check against GAM.
+ */
+export const RECORD_ONLY: ReadonlySet<string> = new Set([
+  "in_progress",
+  "syncing",
+  "booked",
+  "unbooked",
+  "completed",
+]);
 
 function kindOf(to: OrderStatus): StepKind {
   if (to === "draft") return "reset";
@@ -98,10 +117,10 @@ export const STAGE: Readonly<Record<OrderStatus, string>> = {
   draft: "Not yet submitted. Submit it for review, or cancel it.",
   submitted: "Submitted and waiting for review. Send it for approval, approve it directly, or cancel it.",
   pending_approval: "Waiting for a human decision: approve or reject it.",
-  approved: "Approved and ready to execute. Start execution when the order should go live.",
-  in_progress: "Executing. Mark it syncing once it is being pushed to the ad server.",
-  syncing: "Being pushed to the ad server. Mark it booked when the ad server confirms, or failed if it did not take.",
-  booked: "Booked in the ad server. Mark it completed once fulfilled, or unbooked if the booking was reversed.",
+  approved: "Approved and ready to execute. Record execution started when work on it begins.",
+  in_progress: "Recorded as executing. Record sync started once someone is setting it up in the ad server.",
+  syncing: "Recorded as being set up in the ad server. Record booked once the ad server shows the booking, or failed if it did not take.",
+  booked: "Recorded as booked in the ad server. Record completed once fulfilled, or unbooked if the booking was reversed.",
   completed: "Fulfilled. This is terminal; no further transitions.",
   rejected: "Rejected at approval. Return it to draft to revise and resubmit.",
   failed: "Processing failed. Return it to draft to retry.",
@@ -124,9 +143,11 @@ export const MOVED_BY: Readonly<Record<OrderStatus, string>> = {
   pending_approval:
     "Waits on the seller. No approval queue lists orders — the Inbox and the MCP approval tools cover proposals only — so this screen is where it gets decided.",
   approved: "Waits on the seller to start execution.",
-  in_progress: "Set by hand. Nothing in the agent watches the ad server, so mark each step when it happens there.",
-  syncing: "Set by hand. The agent does not check the ad server; mark booked or failed from what the ad server shows.",
-  booked: "Set by hand, from the ad server's side of the booking.",
+  in_progress:
+    "Set by hand. The agent neither books into the ad server nor watches it, so each of these steps records what someone did there.",
+  syncing:
+    "Set by hand. Recording sync started pushed nothing: the agent has no ad-server sync. Check GAM below before recording booked or failed.",
+  booked: "Set by hand, from the ad server's side of the booking. Check GAM below to see whether it shows one.",
   completed: "Nothing moves it again.",
   rejected: "Waits on the seller to return it to draft, or leave it.",
   failed: "Waits on the seller to return it to draft, or leave it.",

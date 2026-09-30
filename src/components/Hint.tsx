@@ -11,15 +11,10 @@ import Tooltip from "@mui/material/Tooltip";
  * the tree, or the control remounts under the operator's cursor. An empty
  * title makes MUI show nothing.
  *
- * `describeChild`: by default MUI copies the tip into `aria-label` on the
- * wrapper, which gives a non-interactive span an accessible name that repeats
- * the field's own words and makes a label query match twice. As a description
- * it is announced after the control's real label instead.
- *
- * `describeChild`: by default MUI copies the tip into `aria-label` on the
- * wrapper, which gives a non-interactive span an accessible name that repeats
- * the field's own words and makes a label query match twice. As a description
- * it is announced after the control's real label instead.
+ * `describeChild`, because a hint describes a control and does not name it.
+ * Without it MUI puts the string on the span as `aria-label`: prohibited on an
+ * element with no role, and it made every `getByLabel` on a hinted field match
+ * the wrapper as well as the input.
  */
 export function Hint({
   hint,

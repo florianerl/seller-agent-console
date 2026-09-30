@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { asUtc, dateOrStamp, day, elapsed, plural, stamp } from "../../src/lib/time";
+import { asUtc, dateOrStamp, day, elapsed, plural, stamp, timeOfDay } from "../../src/lib/time";
 
 describe("naive timestamps are read as UTC", () => {
   /**
@@ -117,5 +117,18 @@ describe("elapsed", () => {
   it("does not invent a duration from nothing", () => {
     expect(elapsed(null, now)).toBe("—");
     expect(elapsed("not a date", now)).toBe("—");
+  });
+});
+
+describe("timeOfDay", () => {
+  it("drops the date and the seconds", () => {
+    const text = timeOfDay("2026-09-30T18:18:56Z");
+    expect(text).not.toMatch(/2026|:56/);
+    expect(text).toMatch(/\d{1,2}:\d{2}/);
+  });
+
+  it("reads a naive timestamp as UTC, and passes nothing through as a dash", () => {
+    expect(timeOfDay("2026-09-30T18:18:00")).toBe(timeOfDay("2026-09-30T18:18:00Z"));
+    expect(timeOfDay(null)).toBe("—");
   });
 });

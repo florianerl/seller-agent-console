@@ -44,6 +44,8 @@ export function WriteForm({
   last,
   onConfirm,
   hint,
+  variant = "outlined",
+  color = "primary",
   children,
 }: {
   title: string;
@@ -56,6 +58,13 @@ export function WriteForm({
   onConfirm: () => void;
   /** Tooltip on the button. Only for what the label and the confirmation do not already say. */
   hint?: ReactNode;
+  /**
+   * The button's weight. Outlined is the default everywhere; a screen that
+   * offers one obvious next move among several can make that one contained
+   * and the rest quieter, so the choice reads before the labels do.
+   */
+  variant?: "contained" | "outlined" | "text";
+  color?: "primary" | "inherit";
   children?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -67,7 +76,8 @@ export function WriteForm({
   const actionButton = (
     <Hint hint={tip}>
       <Button
-        variant="outlined"
+        variant={variant}
+        color={color}
         size="small"
         data-action={action}
         disabled={blocked || pending}
