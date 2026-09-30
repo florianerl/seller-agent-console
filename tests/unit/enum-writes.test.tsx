@@ -112,7 +112,7 @@ describe("forms that send an enum", () => {
     const user = userEvent.setup();
     mount(<DealWrites dealId="D-1" />);
 
-    await confirm(user, "bulk-deals", "Bulk cancel");
+    await confirm(user, "bulk-deals", "Cancel deal");
 
     await waitFor(() => expect(sent).toEqual([{ operations: [{ action: "cancel", deal_id: "D-1" }] }]));
     const failed = await waitFor(() => {
@@ -125,16 +125,61 @@ describe("forms that send an enum", () => {
     expect(document.querySelector('[data-block="write:bulk-deals"] [data-state="write-ok"]')).toBeNull();
   });
 
-  it("sends a bulk create against a quote, not a deal", async () => {
+  it("edits a deal's notes through the bulk route, and offers no bulk create", async () => {
     const sent = capture("post", "/api/v1/deals/bulk", { total: 1, succeeded: 1, failed: 0, results: [] });
     const user = userEvent.setup();
     mount(<DealWrites dealId="D-1" />);
 
-    await choose(user, "Bulk action", "create");
-    await user.type(screen.getAllByLabelText("Quote id").at(-1)!, "Q-9");
-    await confirm(user, "bulk-deals", "Bulk create");
+    await choose(user, "Action", "update");
+    await user.type(screen.getByLabelText("Notes (optional)"), "moved to Q4");
+    await confirm(user, "bulk-deals", "Update notes");
 
-    await waitFor(() => expect(sent).toEqual([{ operations: [{ action: "create", quote_id: "Q-9" }] }]));
+    await waitFor(() =>
+      expect(sent).toEqual([{ operations: [{ action: "update", deal_id: "D-1", notes: "moved to Q4" }] }]),
+    );
+  });
+
+  it("suggests products by name and still accepts a typed id", async () => {
+    server.use(
+      http.get(`${API}/products`, () =>
+        HttpResponse.json({ products: [{ product_id: "prod-91", name: "Premium Display - Homepage" }] }),
+      ),
+    );
+    const sent = capture("post", "/api/v1/deals/from-template");
+    const user = userEvent.setup();
+    mount(<DealWrites />);
+
+    // Matches on the name, not only the id, and fills in the id.
+    await user.type(await enabled("Product id"), "homepage");
+    await user.click(await screen.findByRole("option", { name: /prod-91/ }));
+    await confirm(user, "deal-from-template", "From template");
+    await waitFor(() => expect(sent).toEqual([{ deal_type: "PD", product_id: "prod-91" }]));
+
+    // Nothing on the list is still a valid thing to send.
+    await user.clear(await enabled("Product id"));
+    await user.type(await enabled("Product id"), "prod-typed");
+    await confirm(user, "deal-from-template", "From template");
+    await waitFor(() => expect(sent.at(-1)).toEqual({ deal_type: "PD", product_id: "prod-typed" }));
+  });
+
+  it("offers the registered curators for a curated deal, instead of a free-text id", async () => {
+    server.use(
+      http.get(`${API}/api/v1/curators`, () =>
+        HttpResponse.json({
+          count: 1,
+          curators: [{ curator_id: "cur-1", name: "Acme Curation", domain: "acme.example", is_active: true }],
+        }),
+      ),
+    );
+    const sent = capture("post", "/api/v1/deals/curated");
+    const user = userEvent.setup();
+    mount(<DealWrites />);
+
+    await user.click(await screen.findByLabelText("Curator"));
+    await user.click(await screen.findByRole("option", { name: /cur-1/ }));
+    await confirm(user, "curated-deal", "Curated deal");
+
+    await waitFor(() => expect(sent).toEqual([{ curator_id: "cur-1" }]));
   });
 
   it("migrates with the old deal id the request model requires", async () => {

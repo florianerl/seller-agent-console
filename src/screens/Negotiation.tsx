@@ -1,3 +1,4 @@
+import { JsonView } from "../components/JsonView";
 import { Fragment, useState } from "react";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
@@ -11,7 +12,6 @@ import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
-import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { sessionById, sessions } from "../api/endpoints";
 import { describe } from "../api/errors";
@@ -19,6 +19,8 @@ import { DataPanel, FreshnessNote } from "../components/DataPanel";
 import { Field, FieldGrid } from "../components/Field";
 import { PageHeader } from "../components/PageHeader";
 import { StatusChip } from "../components/StatusChip";
+import { Hint } from "../components/Hint";
+import { TipField } from "../components/TipField";
 import { WritesNotice } from "../components/WritesNotice";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { useCredential } from "../credentials/context";
@@ -82,17 +84,8 @@ function Conversation({ sessionId }: { sessionId: string }) {
                   {/* Message payloads differ per role and the schema is open,
                       so the body is shown as it arrived rather than mapped
                       into fields that may not exist. */}
-                  <Box
-                    component="pre"
-                    sx={{
-                      m: 0,
-                      mt: 0.5,
-                      fontSize: 12,
-                      whiteSpace: "pre-wrap",
-                      wordBreak: "break-word",
-                    }}
-                  >
-                    {JSON.stringify(row["content"] ?? row, null, 2)}
+                  <Box sx={{ mt: 0.5 }}>
+                    <JsonView value={row["content"] ?? row} />
                   </Box>
                 </Box>
               );
@@ -146,7 +139,8 @@ export default function NegotiationScreen() {
       </Alert>
 
       <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }}>
-        <TextField
+        <TipField
+          hint="Filter the sessions by status. The list covers every buyer's sessions."
           select
           size="small"
           label="Status"
@@ -159,7 +153,7 @@ export default function NegotiationScreen() {
               {s || "Any status"}
             </MenuItem>
           ))}
-        </TextField>
+        </TipField>
       </Paper>
 
       <FreshnessNote freshness={list.freshness}>
@@ -214,6 +208,7 @@ export default function NegotiationScreen() {
                       {stamp(row.updated_at)}
                     </TableCell>
                     <TableCell align="right">
+                      <Hint hint="Show or hide the message history of this session.">
                       <Button
                         size="small"
                         onClick={() =>
@@ -223,6 +218,7 @@ export default function NegotiationScreen() {
                       >
                         {open === row.session_id ? "Hide" : "Messages"}
                       </Button>
+                      </Hint>
                     </TableCell>
                   </TableRow>
                   {open === row.session_id && (

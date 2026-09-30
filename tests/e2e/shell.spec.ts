@@ -83,6 +83,7 @@ const ROUTES = [
   { hash: "#/inbox", heading: "Inbox" },
   { hash: "#/events", heading: "Events" },
   { hash: "#/orders", heading: "Orders" },
+  { hash: "#/quotes", heading: "Quotes" },
   { hash: "#/deals", heading: "Deals" },
   // Against the fixture agent, which advertises only opendirect21: this is the
   // not-advertised notice, the state every 2.x agent will show.

@@ -8,7 +8,6 @@ import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
-import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import {
   approvalById,
@@ -34,6 +33,9 @@ import { CADENCE } from "../query/cadence";
 import { useMutation } from "../query/useMutation";
 import { useResource } from "../query/useResource";
 import { FormRow, WriteForm } from "../components/WriteForm";
+import { Hint } from "../components/Hint";
+import { GatePicker } from "./pickers";
+import { TipField } from "../components/TipField";
 import { palette } from "../theme/palette";
 
 /**
@@ -78,7 +80,8 @@ function DecisionControls({
       <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 1 }}>Decide this gate</Typography>
 
       <FormRow>
-        <TextField
+        <TipField
+          hint="Optional. Why you are approving or rejecting; recorded with the decision."
           size="small"
           label="Reason"
           value={reason}
@@ -86,7 +89,8 @@ function DecisionControls({
           disabled={blocked || busy}
           sx={{ minWidth: 240 }}
         />
-        <TextField
+        <TipField
+          hint="Who is deciding. Stored as typed and not verified; without it the agent records the literal anonymous."
           size="small"
           label="Your name"
           value={name}
@@ -94,6 +98,7 @@ function DecisionControls({
           disabled={blocked || busy}
           sx={{ minWidth: 200 }}
         />
+        <Hint hint="Approve this gate. You confirm first; the decision is recorded but the proposal flow is not resumed until you do that separately.">
         <Button
           size="small"
           variant="contained"
@@ -103,6 +108,8 @@ function DecisionControls({
         >
           Approve
         </Button>
+        </Hint>
+        <Hint hint="Reject this gate. You confirm first; the decision is recorded but the proposal flow is not resumed until you do that separately.">
         <Button
           size="small"
           variant="outlined"
@@ -112,6 +119,7 @@ function DecisionControls({
         >
           Reject
         </Button>
+        </Hint>
       </FormRow>
       <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75, mb: 1.5 }}>
         {/* Sent because the agent's own default is the literal "anonymous",
@@ -217,6 +225,7 @@ function ResumeControls({
       <WriteForm
         title="Resume the proposal flow?"
         confirmLabel="Resume flow"
+        hint="Hands the recorded decision back to the proposal flow, which emits the matching proposal event. Resuming twice emits it twice."
         action="resume"
         blocked={!writesEnabled}
         pending={resume.pending}
@@ -472,13 +481,13 @@ export default function InboxScreen() {
               <code>approval.denied</code> event.
             </Typography>
             <FormRow>
-              <TextField
-                size="small"
-                label="Gate id"
+              <GatePicker
                 value={lookupId}
-                onChange={(e) => setLookupId(e.target.value)}
+                onChange={setLookupId}
+                hint="A gate still waiting, or paste the approval id of a decided one from its approval.granted or approval.denied event."
                 sx={{ minWidth: 320 }}
               />
+              <Hint hint="Reads this gate from the agent so you can see its decision and resume it.">
               <Button
                 size="small"
                 variant="outlined"
@@ -488,6 +497,7 @@ export default function InboxScreen() {
               >
                 Open
               </Button>
+              </Hint>
             </FormRow>
             {opened && (
               <Box sx={{ mt: 1.5 }} data-block="opened-gate">

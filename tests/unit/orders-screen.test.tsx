@@ -118,6 +118,26 @@ describe("the orders screen", () => {
     );
   });
 
+  it("links an order's quote id to the Quotes screen without fetching it", async () => {
+    const user = userEvent.setup();
+    const { seen } = recordRequests();
+    server.use(
+      http.get(`${API}/api/v1/orders`, () =>
+        HttpResponse.json({ orders: [{ ...ORDERS[0], quote_id: "qt-abc123" }], count: 1 }),
+      ),
+      http.get(`${API}/api/v1/orders/ORD-ABC123/audit`, () => HttpResponse.json(AUDIT)),
+      http.get(`${API}/api/v1/change-requests`, () =>
+        HttpResponse.json({ change_requests: [], count: 0 }),
+      ),
+    );
+    renderScreen();
+    await expand(user, "ORD-ABC123");
+
+    const link = document.querySelector('[data-link="quote"]');
+    expect(link).toHaveAttribute("href", "#/quotes?id=qt-abc123");
+    expect(seen.some((r) => r.includes("/quotes/"))).toBe(false);
+  });
+
   it("lists orders with their status", async () => {
     renderScreen();
     await waitFor(() => expect(screen.getByText("ORD-ABC123")).toBeInTheDocument());
@@ -788,6 +808,27 @@ describe("an order's change requests", () => {
       expect(document.querySelector('[data-state="change-refused"]')?.textContent).toMatch(/no deal attached/),
     );
     expect(document.querySelector('[data-action="create-change-request"]')).toBeNull();
+  });
+
+  // Suggestions, not a closed list: the agent merges whatever key it is sent.
+  it("suggests the fields for the change type but still takes a typed one", async () => {
+    serve();
+    const user = userEvent.setup();
+    renderScreen();
+    await expand(user, "ORD-ABC123");
+
+    await user.click(await screen.findByRole("button", { name: "Request a change" }));
+    const field = screen.getByLabelText("Field");
+    expect(field).toHaveValue("flight_end");
+
+    await user.click(field);
+    expect(await screen.findByRole("option", { name: "flight_start" })).toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: "flight_start" }));
+    expect(field).toHaveValue("flight_start");
+
+    await user.clear(field);
+    await user.type(field, "po_number");
+    expect(field).toHaveValue("po_number");
   });
 
   it("predicts the severity, sends the field change, and says what happens next", async () => {

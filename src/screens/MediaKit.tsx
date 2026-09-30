@@ -10,7 +10,6 @@ import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
-import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { mediaKit, mediaKitPackage, mediaKitPackages, searchMediaKit } from "../api/endpoints";
 import { describe } from "../api/errors";
@@ -24,6 +23,7 @@ import { plural, stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
 import { useResource } from "../query/useResource";
 import { FormRow } from "../components/WriteForm";
+import { TipField } from "../components/TipField";
 import { AudienceMatchForm } from "./mutations";
 import { palette } from "../theme/palette";
 
@@ -313,7 +313,8 @@ function Search() {
     <Paper variant="outlined" sx={{ p: 2.5, mb: 3 }}>
       <Box component="form" onSubmit={handleSubmit}>
         <FormRow>
-          <TextField
+          <TipField
+            hint="Words to look for in the media kit's packages. Searching happens only when you submit; a blank search submits nothing."
             size="small"
             label="Search the media kit"
             value={queryInput}

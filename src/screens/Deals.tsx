@@ -11,7 +11,6 @@ import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
-import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { dealLineage, dealPerformance, deals, type Money } from "../api/endpoints";
 import { describe } from "../api/errors";
@@ -26,7 +25,8 @@ import { useResource } from "../query/useResource";
 import { palette } from "../theme/palette";
 import { useCredential } from "../credentials/context";
 import { FormRow } from "../components/WriteForm";
-import { DealLookups, DealWrites, Panel } from "./mutations";
+import { TipField } from "../components/TipField";
+import { DealLookups, DealsExportLookup, DealWrites, Panel } from "./mutations";
 
 /**
  * The shared wire vocabulary, taken from the agent's DealStatus enum. The list
@@ -147,8 +147,14 @@ function Detail({ dealId }: { dealId: string }) {
           </Box>
         )}
       </Box>
-      <DealLookups dealId={dealId} />
-      <DealWrites dealId={dealId} />
+      <Box>
+        <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 1.5 }}>Read more about this deal</Typography>
+        <DealLookups dealId={dealId} />
+      </Box>
+      <Box>
+        <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 1.5 }}>Change this deal</Typography>
+        <DealWrites dealId={dealId} />
+      </Box>
     </Stack>
   );
 }
@@ -172,8 +178,11 @@ export default function DealsScreen() {
       <PageHeader title="Deals" subtitle="Every buyer's deals, as the agent has them stored.">
 
       {!writesEnabled && <ReadOnlyNotice what="Booking, pushing, or migrating a deal" />}
-      <Panel title="Deal writes">
+      <Panel title="Create a deal">
         <DealWrites />
+      </Panel>
+      <Panel title="Export">
+        <DealsExportLookup />
       </Panel>
 
       {list.freshness === "blocked" ? (
@@ -182,7 +191,8 @@ export default function DealsScreen() {
         <>
           <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }}>
             <FormRow>
-              <TextField
+              <TipField
+                hint="Shows only deals in this status and reloads the list. Any status shows every deal."
                 select
                 size="small"
                 label="Status"
@@ -195,7 +205,7 @@ export default function DealsScreen() {
                     {s ? s.replace(/_/g, " ") : "Any status"}
                   </MenuItem>
                 ))}
-              </TextField>
+              </TipField>
               <Button
                 variant="outlined"
                 size="small"
@@ -218,6 +228,13 @@ export default function DealsScreen() {
               {skipped.length} stored {skipped.length === 1 ? "deal is" : "deals are"} missing from
               this list. The agent could not read {skipped.length === 1 ? "it" : "them"} into its
               own response shape: {skipped.join(", ")}.
+            </Alert>
+          )}
+
+          {list.data?.fromExport && (
+            <Alert severity="info" variant="outlined" sx={{ mb: 2 }} data-note="from-export">
+              This agent has no deal list route (it answered 405), so these rows come from its
+              export feed. Quote ids and flight terms are not in that feed and show as empty.
             </Alert>
           )}
 

@@ -4,7 +4,6 @@ import Button from "@mui/material/Button";
 import Paper from "@mui/material/Paper";
 import Skeleton from "@mui/material/Skeleton";
 import Stack from "@mui/material/Stack";
-import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { gamDeliveryReport, gamOrders, ordersReport } from "../api/endpoints";
 import { describe } from "../api/errors";
@@ -15,6 +14,8 @@ import { plural, stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
 import { useResource, type ResourceHandle } from "../query/useResource";
 import { FormRow } from "../components/WriteForm";
+import { TipField } from "../components/TipField";
+import { JsonView } from "../components/JsonView";
 import { palette } from "../theme/palette";
 
 /**
@@ -53,25 +54,7 @@ function Counts({ label, counts }: { label: string; counts: Record<string, numbe
  * no way to tell the invention from the network's own answer.
  */
 function RawPayload({ data, testId }: { data: unknown; testId: string }) {
-  return (
-    <Box
-      component="pre"
-      data-payload={testId}
-      sx={{
-        m: 0,
-        p: 1.5,
-        maxHeight: 320,
-        overflow: "auto",
-        fontSize: 12,
-        lineHeight: 1.5,
-        backgroundColor: palette.ground,
-        border: `1px solid ${palette.line}`,
-        borderRadius: 1,
-      }}
-    >
-      {JSON.stringify(data, null, 2)}
-    </Box>
-  );
+  return <JsonView value={data} data-payload={testId} />;
 }
 
 /** The caption every value on this screen carries: what it is, and when it arrived. */
@@ -240,7 +223,8 @@ function DeliveryReport() {
         sx={{ mb: 2 }}
       >
         <FormRow>
-        <TextField
+        <TipField
+          hint="Ad server order ids, separated by commas. Required; sent to the agent as one comma-joined string."
           size="small"
           label="Order IDs"
           // The agent takes one comma-joined string rather than a repeated
@@ -249,7 +233,8 @@ function DeliveryReport() {
           onChange={(e) => setOrderIds(e.target.value)}
           sx={{ minWidth: 280 }}
         />
-        <TextField
+        <TipField
+          hint="How many days of delivery to report on. Optional; blank or zero uses 30."
           size="small"
           label="Days"
           type="number"

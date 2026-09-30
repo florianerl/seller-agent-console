@@ -148,6 +148,7 @@ export default function ChangeRequestsScreen() {
               options={CHANGE_REQUEST_STATUSES}
               onChange={setStatus}
               any="Any status"
+              hint="Filter the change requests by status. Only pending approval ones can be reviewed."
             />
           </Paper>
 

@@ -55,8 +55,13 @@ export function useMutation<TArgs, T>(
      * entries are touched. A trailing `*` is a prefix — filtered lists key on
      * the filter (`change-requests:approved`), and a write has to drop every
      * view of that list, not only the one currently on screen.
+     *
+     * A function is called with the args the call ran with. Use it when the
+     * name embeds an id: the id belongs to the call, and form state read at
+     * render can differ from it (the call site trims, the field is edited
+     * while the request is in flight).
      */
-    readonly invalidates?: readonly string[];
+    readonly invalidates?: readonly string[] | ((args: TArgs) => readonly string[]);
   } = {},
 ): MutationHandle<TArgs, T> {
   const { connection, credential, writesEnabled } = useCredential();
@@ -105,8 +110,9 @@ export function useMutation<TArgs, T>(
       setPending(false);
       setLast(result);
 
-      if (result.kind === "ok" && invalidates?.length) {
-        const names = new Set(invalidates);
+      const stale = typeof invalidates === "function" ? invalidates(args) : invalidates;
+      if (result.kind === "ok" && stale?.length) {
+        const names = new Set(stale);
         // Whatever the call changed, the cached reads of it are now a claim we
         // cannot stand behind. Revalidate rather than patch: the agent decides
         // what the record looks like afterwards, not us.

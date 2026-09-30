@@ -18,6 +18,7 @@ import { Shell } from "./Shell";
 const Setup = lazy(() => import("../screens/Setup"));
 const Events = lazy(() => import("../screens/Events"));
 const Orders = lazy(() => import("../screens/Orders"));
+const Quotes = lazy(() => import("../screens/Quotes"));
 const Deals = lazy(() => import("../screens/Deals"));
 const Inbox = lazy(() => import("../screens/Inbox"));
 const Proposals = lazy(() => import("../screens/Proposals"));
@@ -38,6 +39,7 @@ export function Router() {
           <Route index element={<Setup />} />
           <Route path="events" element={<Events />} />
           <Route path="orders" element={<Orders />} />
+          <Route path="quotes" element={<Quotes />} />
           <Route path="deals" element={<Deals />} />
           <Route path="inbox" element={<Inbox />} />
           <Route path="proposals" element={<Proposals />} />

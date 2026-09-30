@@ -4,6 +4,7 @@ import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import Collapse from "@mui/material/Collapse";
 import IconButton from "@mui/material/IconButton";
+import Tooltip from "@mui/material/Tooltip";
 import Link from "@mui/material/Link";
 import Paper from "@mui/material/Paper";
 import Skeleton from "@mui/material/Skeleton";
@@ -162,16 +163,21 @@ function SummaryChip({
   active,
   attention,
   onClick,
+  hint,
   children,
 }: {
   id: string;
   active: boolean;
   attention: boolean;
   onClick: () => void;
+  hint: string;
   children: ReactNode;
 }) {
   const edge = active ? palette.text : palette.line;
+  // Tooltip directly, not Hint: Hint's wrapping span would take the flex slot
+  // this button is sized for.
   return (
+    <Tooltip title={hint} enterDelay={400} placement="top-start" arrow>
     <Box
       component="button"
       type="button"
@@ -199,6 +205,7 @@ function SummaryChip({
     >
       {children}
     </Box>
+    </Tooltip>
   );
 }
 
@@ -244,6 +251,7 @@ function StageSummary({
             active={active}
             attention={group.needsAction && inGroup.length > 0}
             onClick={() => onFilter(active ? { kind: "all" } : { kind: "group", group: group.id })}
+            hint={`Show only orders in ${group.label.toLowerCase()}. Click again to clear the filter.`}
           >
             <Box sx={{ fontSize: 12, color: palette.textSecondary }}>{group.label}</Box>
             <Box sx={{ fontSize: 18, fontWeight: 700 }} data-count={inGroup.length}>
@@ -260,6 +268,7 @@ function StageSummary({
         active={waitingActive}
         attention={totals.review + totals.apply > 0}
         onClick={() => onFilter(waitingActive ? { kind: "all" } : { kind: "waiting" })}
+        hint="Show only orders with change requests waiting for review or apply. Click again to clear the filter."
       >
         <Box sx={{ fontSize: 12, color: palette.textSecondary }}>Change requests waiting</Box>
         <Box sx={{ fontSize: 18, fontWeight: 700 }} data-count={totals.review + totals.apply}>
@@ -571,9 +580,19 @@ function RecordedOnOrder({ order, applied }: { order: Order; applied: readonly C
           </Box>
         </Field>
         <Field label="Quote">
-          <Box component="span" sx={{ fontFamily: "monospace", fontSize: 12 }}>
-            {order.quote_id || "—"}
-          </Box>
+          {order.quote_id ? (
+            <Link
+              href={`#/quotes?id=${encodeURIComponent(order.quote_id)}`}
+              sx={{ fontFamily: "monospace", fontSize: 12 }}
+              data-link="quote"
+            >
+              {order.quote_id}
+            </Link>
+          ) : (
+            <Box component="span" sx={{ fontFamily: "monospace", fontSize: 12 }}>
+              —
+            </Box>
+          )}
         </Field>
         {fromCreator.map(([k, v]) => (
           <Field key={k} label={words(k)}>
@@ -1020,6 +1039,7 @@ export default function OrdersScreen() {
           options={ORDER_STATUSES}
           onChange={(v) => setFilter(v ? { kind: "status", status: v } : { kind: "all" })}
           any="Any status"
+          hint="Filter the orders by lifecycle status."
         />
         {filter.kind !== "all" && (
           <Button size="small" onClick={() => setFilter({ kind: "all" })} data-action="clear-filter">

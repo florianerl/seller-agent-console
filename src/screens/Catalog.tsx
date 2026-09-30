@@ -11,7 +11,7 @@ import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
-import TextField from "@mui/material/TextField";
+import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
 import {
   checkAvails,
@@ -39,7 +39,9 @@ import { CADENCE } from "../query/cadence";
 import { useResource } from "../query/useResource";
 import { palette } from "../theme/palette";
 import { FormRow } from "../components/WriteForm";
-import { CatalogWrites, CreateQuoteWrite, PackageLookup, QuoteLookup } from "./mutations";
+import { TipField } from "../components/TipField";
+import { ProductPicker } from "./pickers";
+import { CatalogWrites, CreateQuoteWrite, PackageLookup } from "./mutations";
 import { useCredential } from "../credentials/context";
 
 function money(amount: Money | null | undefined): string {
@@ -383,7 +385,8 @@ function Discovery() {
     <Paper variant="outlined" sx={{ p: 2.5 }} data-block="discovery">
       <Box component="form" onSubmit={handleSubmit}>
         <FormRow>
-          <TextField
+          <TipField
+            hint="A plain-language description of what the buyer wants, such as a format or audience. The agent suggests matching products. Submitting a blank brief does nothing."
             size="small"
             label="Brief"
             value={queryInput}
@@ -486,14 +489,9 @@ function AvailsCheck() {
     <Paper variant="outlined" sx={{ p: 2.5 }} data-block="avails">
       <Box component="form" onSubmit={handleSubmit}>
         <FormRow>
-          <TextField
-            size="small"
-            label="Product id"
-            value={productId}
-            onChange={(e) => setProductId(e.target.value)}
-            sx={{ minWidth: 200 }}
-          />
-          <TextField
+          <ProductPicker value={productId} onChange={setProductId} hint="The product to use. Pick one, or type or paste an id. Required." />
+          <TipField
+            hint="First day of the flight to check. Required,; the check will not run without it."
             size="small"
             label="Start"
             type="date"
@@ -501,7 +499,8 @@ function AvailsCheck() {
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
           />
-          <TextField
+          <TipField
+            hint="Last day of the flight to check. Required,; the check will not run without it."
             size="small"
             label="End"
             type="date"
@@ -614,14 +613,9 @@ function Pricing() {
     <Paper variant="outlined" sx={{ p: 2.5 }} data-block="pricing">
       <Box component="form" onSubmit={handleSubmit}>
         <FormRow>
-          <TextField
-            size="small"
-            label="Product id"
-            value={productId}
-            onChange={(e) => setProductId(e.target.value)}
-            sx={{ minWidth: 200 }}
-          />
-          <TextField
+          <ProductPicker value={productId} onChange={setProductId} hint="The product to use. Pick one, or type or paste an id. Required." />
+          <TipField
+            hint="Optional impressions to price for. The agent applies its volume discounts to this figure; leave blank to quote without one."
             size="small"
             label="Volume"
             type="number"
@@ -755,7 +749,9 @@ export default function CatalogScreen() {
         <CatalogWrites />
         <PackageLookup />
         <CreateQuoteWrite />
-        <QuoteLookup />
+        <Typography variant="body2" color="text.secondary" data-note="quote-lookup-moved">
+          Look up an existing quote on <Link href="#/quotes">Quotes</Link>.
+        </Typography>
       </ScreenSection>
       </PageHeader>
     </section>

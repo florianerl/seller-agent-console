@@ -8,7 +8,6 @@ import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
-import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { agents } from "../api/endpoints";
 import { describe } from "../api/errors";
@@ -18,6 +17,7 @@ import { StatusChip } from "../components/StatusChip";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { useCredential } from "../credentials/context";
 import { FormRow } from "../components/WriteForm";
+import { TipField } from "../components/TipField";
 import { AgentDetailLookup, AgentWrites, Panel } from "./mutations";
 import { plural, stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
@@ -60,7 +60,8 @@ export default function AgentsScreen() {
 
       <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }}>
         <FormRow>
-          <TextField
+          <TipField
+            hint="Shows only agents with this trust status; the filter is sent to the agent registry."
             select
             size="small"
             label="Trust"
@@ -73,8 +74,9 @@ export default function AgentsScreen() {
                 {t || "Any trust status"}
               </MenuItem>
             ))}
-          </TextField>
-          <TextField
+          </TipField>
+          <TipField
+            hint="Shows only agents of this type; the filter is sent to the agent registry."
             select
             size="small"
             label="Type"
@@ -87,7 +89,7 @@ export default function AgentsScreen() {
                 {t ? t.replace(/_/g, " ") : "Any type"}
               </MenuItem>
             ))}
-          </TextField>
+          </TipField>
         </FormRow>
       </Paper>
 

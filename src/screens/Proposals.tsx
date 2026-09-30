@@ -1,3 +1,4 @@
+import { JsonView } from "../components/JsonView";
 import { useState, type ReactNode } from "react";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
@@ -13,7 +14,6 @@ import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
-import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import {
@@ -37,6 +37,7 @@ import { PageHeader } from "../components/PageHeader";
 import { ProtocolNotice } from "../components/ProtocolNotice";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { StatusChip } from "../components/StatusChip";
+import { TipField } from "../components/TipField";
 import { useCredential } from "../credentials/context";
 import { dateOrStamp, plural, stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
@@ -521,8 +522,8 @@ function ProposalDetail({ proposalId }: { proposalId: string }) {
         <Field label="Brief">{p.brief_ref ?? (p.type === "custom" ? "missing — required for custom" : "—")}</Field>
         <Field label="Assent">
           {p.assent && Object.keys(p.assent).length > 0 ? (
-            <Box component="pre" sx={{ m: 0, fontSize: 12, whiteSpace: "pre-wrap" }} data-block="assent">
-              {JSON.stringify(p.assent, null, 2)}
+            <Box data-block="assent">
+              <JsonView value={p.assent} />
             </Box>
           ) : (
             "none recorded"
@@ -607,20 +608,20 @@ function ProposalList() {
       {!writesEnabled && <ReadOnlyNotice what="Publishing, withdrawing, holding or assenting" />}
 
       <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5, display: "flex", gap: 2, flexWrap: "wrap" }}>
-        <TextField select size="small" label="Status" value={status} onChange={(e) => setStatus(e.target.value)} sx={{ minWidth: 200 }}>
+        <TipField hint="Filter the list by proposal status." select size="small" label="Status" value={status} onChange={(e) => setStatus(e.target.value)} sx={{ minWidth: 200 }}>
           {STATUSES.map((s) => (
             <MenuItem key={s || "any"} value={s}>
               {s ? s.replace(/_/g, " ") : "Any status"}
             </MenuItem>
           ))}
-        </TextField>
-        <TextField select size="small" label="Type" value={type} onChange={(e) => setType(e.target.value)} sx={{ minWidth: 160 }}>
+        </TipField>
+        <TipField hint="Filter the list by proposal type." select size="small" label="Type" value={type} onChange={(e) => setType(e.target.value)} sx={{ minWidth: 160 }}>
           {TYPES.map((t) => (
             <MenuItem key={t || "any"} value={t}>
               {t || "Any type"}
             </MenuItem>
           ))}
-        </TextField>
+        </TipField>
       </Paper>
 
       <FreshnessNote freshness={list.freshness}>

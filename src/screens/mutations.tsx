@@ -1,11 +1,11 @@
 import { useState, type ReactNode } from "react";
 import Autocomplete from "@mui/material/Autocomplete";
 import Box from "@mui/material/Box";
+import Divider from "@mui/material/Divider";
 import Button from "@mui/material/Button";
 import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
-import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import {
   agentById,
@@ -44,7 +44,6 @@ import {
   postNegotiationMessage,
   pushDeal,
   putRateCard,
-  quoteById,
   registerCurator,
   removeRegisteredAgent,
   reviewChangeRequest,
@@ -84,6 +83,8 @@ import {
   ACTOR_KINDS,
   BULK_DEAL_ACTIONS,
   CHANGE_TYPES,
+  DEAL_EXPORT_FORMATS,
+  DEAL_EXPORT_STATUSES,
   DEAL_TYPES,
   INVENTORY_TYPES,
   LEGACY_DEAL_TYPES,
@@ -91,12 +92,18 @@ import {
   SSP_NAMES,
   words,
   type BulkDealAction,
+  type DealExportFormat,
+  type DealExportStatus,
   type DealTypeCode,
   type QuoteMediaType,
 } from "../api/vocabulary";
 import { ConfirmAction } from "../components/ConfirmAction";
 import { EnumSelect } from "../components/EnumSelect";
-import { FormFields, FormRow, WriteForm } from "../components/WriteForm";
+import { Hint } from "../components/Hint";
+import { TipField } from "../components/TipField";
+import { AgentPicker, CuratorPicker, OrderPicker, PackagePicker, ProductPicker } from "./pickers";
+import { JsonView } from "../components/JsonView";
+import { FormFields, FormRow, ReadForm, WriteForm } from "../components/WriteForm";
 import { WritesNotice } from "../components/WritesNotice";
 import { useCredential } from "../credentials/context";
 import { useMutation } from "../query/useMutation";
@@ -105,6 +112,64 @@ import { palette } from "../theme/palette";
 
 function newKey(): string {
   return crypto.randomUUID();
+}
+
+/** One thing an operator can do, said in a title and a line, above its controls. */
+function ActionBlock({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children?: ReactNode;
+}) {
+  return (
+    <Box>
+      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+        {title}
+      </Typography>
+      <Typography variant="caption" component="p" color="text.secondary" sx={{ mb: 1 }}>
+        {description}
+      </Typography>
+      {children}
+    </Box>
+  );
+}
+
+// Bulk "create" is left out: it books a deal from a quote, which "Book from a
+// quote" does with an idempotency key, and it is the one bulk action that takes
+// no deal id, so it never fitted a form that acts on a deal.
+const DEAL_EDIT_ACTIONS = BULK_DEAL_ACTIONS.filter((o) => o.value !== "create");
+
+/**
+ * What a read came back with: the value as highlighted JSON, or the reason
+ * there is none. Shared so every lookup shows a result the same way.
+ */
+function ReadOutcome({
+  name,
+  data,
+  result,
+}: {
+  name: string;
+  data: unknown;
+  result: Result<unknown> | undefined;
+}) {
+  if (data === undefined || data === null) {
+    return (
+      <Typography variant="caption" component="p">
+        {result ? `${name}: ${describe(result)}` : ""}
+      </Typography>
+    );
+  }
+  return (
+    <Box sx={{ mt: 1 }}>
+      <Typography variant="caption" component="p" color="text.secondary" sx={{ mb: 0.5 }}>
+        {name}
+      </Typography>
+      <JsonView value={data} />
+    </Box>
+  );
 }
 
 function Panel({ title, children }: { title: string; children: ReactNode }) {
@@ -143,7 +208,8 @@ export function InventorySyncWrite() {
         </>
       }
     >
-      <TextField
+      <TipField
+        hint="How much to sync. Full re-reads everything from the ad server; Incremental starts from the stored watermark when one exists."
         select
         size="small"
         label="Mode"
@@ -154,7 +220,7 @@ export function InventorySyncWrite() {
       >
         <MenuItem value="full">Full</MenuItem>
         <MenuItem value="incremental">Incremental</MenuItem>
-      </TextField>
+      </TipField>
     </WriteForm>
   );
 }
@@ -206,7 +272,8 @@ export function ApiKeyWrites() {
           </>
         }
       >
-        <TextField
+        <TipField
+          hint="Optional name for the new buyer key, so you can tell keys apart in the list. Leave empty for an unlabelled key."
           size="small"
           label="Label"
           value={label}
@@ -247,7 +314,8 @@ export function ApiKeyWrites() {
           </>
         }
       >
-        <TextField
+        <TipField
+          hint="Id of the key to revoke, as shown in the API keys list (the key_id, not the secret)."
           size="small"
           label="Key id"
           value={revokeId}
@@ -284,6 +352,8 @@ export function CatalogWrites() {
   const [cpm, setCpm] = useState("12");
   const [rateType, setRateType] = useState<string>("display");
 
+  // The name must be the one ProductDetail (Catalog.tsx) reads, built from
+  // the id the call acted on — the trimmed one — not the raw field.
   const setOverride = useMutation<
     { productId: string; inventory_type: string; reason?: string },
     unknown
@@ -294,11 +364,11 @@ export function CatalogWrites() {
         inventory_type: args.inventory_type,
         ...(args.reason ? { reason: args.reason } : {}),
       }),
-    { invalidates: [`inventory-override:${productId}`] },
+    { invalidates: (args) => [`inventory-type:${args.productId}`] },
   );
   const clearOverride = useMutation<{ productId: string }, unknown>(
     (c, args) => deleteInventoryTypeOverride(c, args.productId),
-    { invalidates: [`inventory-override:${productId}`] },
+    { invalidates: (args) => [`inventory-type:${args.productId}`] },
   );
   const rate = useMutation<
     { inventory_type: string; base_cpm: number },
@@ -313,7 +383,7 @@ export function CatalogWrites() {
   >((c, args) => createPackage(c, args), { invalidates: ["packages"] });
   const updatePkg = useMutation<{ id: string; name: string }, unknown>(
     (c, args) => updatePackage(c, args.id, { name: args.name }),
-    { invalidates: ["packages", `package:${pkgId}`] },
+    { invalidates: (args) => ["packages", `package:${args.id}`] },
   );
   const deletePkg = useMutation<{ id: string }, unknown>(
     (c, args) => deletePackage(c, args.id),
@@ -351,6 +421,7 @@ export function CatalogWrites() {
       >
         <FormFields>
           <EnumSelect
+            hint="Which inventory type this rate applies to. Choose from the types the agent documents."
             label="Inventory type"
             value={rateType}
             options={INVENTORY_TYPES}
@@ -358,7 +429,8 @@ export function CatalogWrites() {
             disabled={blocked}
             sx={{ minWidth: 160 }}
           />
-          <TextField
+          <TipField
+            hint="Base CPM for the chosen inventory type, as a plain number in dollars per thousand impressions, for example 12."
             size="small"
             label="Base CPM"
             value={cpm}
@@ -384,14 +456,9 @@ export function CatalogWrites() {
         consequence="The override persists across inventory syncs. A second set replaces the first."
       >
         <FormFields>
-          <TextField
-            size="small"
-            label="Product id"
-            value={productId}
-            onChange={(e) => setProductId(e.target.value)}
-            disabled={blocked}
-          />
+          <ProductPicker value={productId} onChange={setProductId} disabled={blocked} />
           <EnumSelect
+            hint="Inventory type to force on the product. It replaces the auto-detected type and survives inventory syncs."
             label="Inventory type"
             value={inventoryType}
             options={INVENTORY_TYPES}
@@ -399,7 +466,8 @@ export function CatalogWrites() {
             disabled={blocked}
             sx={{ minWidth: 160 }}
           />
-          <TextField
+          <TipField
+            hint="Optional note on why the type is being overridden. Sent only when filled in."
             size="small"
             label="Reason"
             value={reason}
@@ -435,9 +503,9 @@ export function CatalogWrites() {
         consequence="Not idempotent: each call mints a new package id."
       >
         <FormFields>
-          <TextField size="small" label="Name" value={pkgName} onChange={(e) => setPkgName(e.target.value)} disabled={blocked} />
-          <TextField size="small" label="Base price" value={pkgPrice} onChange={(e) => setPkgPrice(e.target.value)} disabled={blocked} />
-          <TextField size="small" label="Floor" value={pkgFloor} onChange={(e) => setPkgFloor(e.target.value)} disabled={blocked} />
+          <TipField hint="Name of the new package. Also used as the name when assembling a dynamic package or renaming one." size="small" label="Name" value={pkgName} onChange={(e) => setPkgName(e.target.value)} disabled={blocked} />
+          <TipField hint="Base (list) price for the package as a plain number, for example 10. Sent as base_price." size="small" label="Base price" value={pkgPrice} onChange={(e) => setPkgPrice(e.target.value)} disabled={blocked} />
+          <TipField hint="Lowest price the package may be sold at, as a plain number, for example 5. Sent as floor_price." size="small" label="Floor" value={pkgFloor} onChange={(e) => setPkgFloor(e.target.value)} disabled={blocked} />
         </FormFields>
       </WriteForm>
       <WriteForm
@@ -450,7 +518,7 @@ export function CatalogWrites() {
         onConfirm={() => void updatePkg.run({ id: pkgId.trim(), name: pkgName.trim() })}
         consequence="The named fields are overwritten. A missing id 404s."
       >
-        <TextField size="small" label="Package id" value={pkgId} onChange={(e) => setPkgId(e.target.value)} disabled={blocked} />
+        <PackagePicker value={pkgId} onChange={setPkgId} disabled={blocked} />
       </WriteForm>
       <WriteForm
         title="Archive this package?"
@@ -477,7 +545,8 @@ export function CatalogWrites() {
         }
         consequence="Not idempotent. Unresolvable product ids 422."
       >
-        <TextField
+        <TipField
+          hint="Ids of the products to combine, separated by commas. Ids that do not resolve to a product are rejected with a 422."
           size="small"
           label="Product ids (comma-separated)"
           value={productIds}
@@ -497,40 +566,6 @@ export function CatalogWrites() {
         consequence="Not idempotent: each trigger kicks ProductSetupFlow again."
       />
     </Stack>
-  );
-}
-
-export function QuoteLookup() {
-  const [id, setId] = useState("");
-  const [submitted, setSubmitted] = useState<string | undefined>();
-
-  return (
-    <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }} data-block="quote-lookup">
-      <WritesNotice what="Fetching a quote enforces its TTL and may persist status=expired." />
-      <FormRow>
-        <TextField size="small" label="Quote id" value={id} onChange={(e) => setId(e.target.value)} />
-        <WriteForm
-          title="Re-read this quote?"
-          confirmLabel="Fetch quote"
-          action="fetch-quote"
-          blocked={!id.trim()}
-          pending={false}
-          last={undefined}
-          onConfirm={() => setSubmitted(id.trim())}
-          consequence="This GET can expire the stored quote. Re-reading an already-expired quote is a no-op besides the 410."
-        />
-      </FormRow>
-      {submitted && <QuoteBody quoteId={submitted} />}
-    </Paper>
-  );
-}
-
-function QuoteBody({ quoteId }: { quoteId: string }) {
-  const quote = useResource(`quote:${quoteId}`, (c, signal) => quoteById(c, quoteId, signal));
-  return (
-    <Box component="pre" sx={{ mt: 1, fontSize: 12, overflow: "auto" }}>
-      {quote.data ? JSON.stringify(quote.data, null, 2) : quote.result ? describe(quote.result) : ""}
-    </Box>
   );
 }
 
@@ -581,14 +616,9 @@ export function CreateQuoteWrite() {
       }
     >
       <FormFields>
-        <TextField
-          size="small"
-          label="Product id"
-          value={productId}
-          onChange={(e) => setProductId(e.target.value)}
-          disabled={!writesEnabled}
-        />
+        <ProductPicker value={productId} onChange={setProductId} disabled={!writesEnabled} />
         <EnumSelect
+          hint="PG is guaranteed and needs an impression count; PD (preferred) and PA (private auction) do not."
           label="Deal type"
           value={dealType}
           options={DEAL_TYPES}
@@ -597,6 +627,7 @@ export function CreateQuoteWrite() {
           sx={{ minWidth: 220 }}
         />
         <EnumSelect
+          hint="Media type the quote is for. The agent accepts only the listed values."
           label="Media type"
           value={mediaType}
           options={QUOTE_MEDIA_TYPES}
@@ -605,7 +636,8 @@ export function CreateQuoteWrite() {
           sx={{ minWidth: 140 }}
         />
         {needsVolume && (
-          <TextField
+          <TipField
+            hint="Number of impressions to quote. Required for a guaranteed (PG) quote and a whole number above zero; other deal types send none."
             size="small"
             type="number"
             label="Impressions"
@@ -625,16 +657,12 @@ export function PackageLookup() {
   return (
     <Box sx={{ mt: 1 }} data-block="package-lookup">
       <FormRow>
-        <TextField size="small" label="Package id" value={id} onChange={(e) => setId(e.target.value)} />
-        <WriteForm
-          title="Load this package?"
-          confirmLabel="Load package"
+        <PackagePicker value={id} onChange={setId} />
+        <ReadForm
+          label="Load package"
           action="fetch-package"
-          blocked={!id.trim()}
-          pending={false}
-          last={undefined}
-          onConfirm={() => setSubmitted(id.trim())}
-          consequence="A GET. An invalid key is rejected rather than treated as anonymous."
+          disabled={!id.trim()}
+          onRun={() => setSubmitted(id.trim())}
         />
       </FormRow>
       {submitted && <PackageBody packageId={submitted} />}
@@ -694,8 +722,9 @@ function StoredDealOptions({
         );
       }}
       renderInput={(params) => (
-        <TextField
+        <TipField
           {...params}
+          hint="Optional deal to attach. Pick one of the stored deals, or type or paste a deal id."
           label="Deal"
           helperText={
             list.result && list.result.kind !== "ok"
@@ -758,7 +787,8 @@ export function OrderCreateWrite({ onCreated }: { onCreated?: (orderId: string) 
         {pickDeal ? (
           <StoredDealOptions value={dealId} onChange={setDealId} disabled={!writesEnabled} />
         ) : (
-          <TextField
+          <TipField
+            hint="Optional id of the deal the order is for. Leave empty for an order with no deal attached."
             size="small"
             label="Deal id (optional)"
             value={dealId}
@@ -766,7 +796,8 @@ export function OrderCreateWrite({ onCreated }: { onCreated?: (orderId: string) 
             disabled={!writesEnabled}
           />
         )}
-        <TextField
+        <TipField
+          hint="Optional id of the quote the order was priced from. It links to the Quotes screen."
           size="small"
           label="Quote id (optional)"
           value={quoteId}
@@ -774,15 +805,17 @@ export function OrderCreateWrite({ onCreated }: { onCreated?: (orderId: string) 
           disabled={!writesEnabled}
         />
         {!pickDeal && (
-          <Button
-            size="small"
-            onClick={() => setPickDeal(true)}
-            disabled={!writesEnabled}
-            data-action="choose-deal"
-            sx={{ flexShrink: 0 }}
-          >
-            Choose from deals
-          </Button>
+          <Hint hint="Switches the deal box to a list of stored deals. This loads every stored deal, so it only runs when you click.">
+            <Button
+              size="small"
+              onClick={() => setPickDeal(true)}
+              disabled={!writesEnabled}
+              data-action="choose-deal"
+              sx={{ flexShrink: 0 }}
+            >
+              Choose from deals
+            </Button>
+          </Hint>
         )}
       </FormFields>
     </WriteForm>
@@ -949,6 +982,7 @@ export function OrderTransitionWrites({
       </Stack>
       <FormRow>
         <EnumSelect
+          hint="Who the move is recorded as: a person, an agent or the system. Not verified by the agent."
           label="Acting as"
           value={actor.kind}
           options={ACTOR_KINDS}
@@ -957,7 +991,8 @@ export function OrderTransitionWrites({
           sx={{ minWidth: 140 }}
         />
         {actor.kind !== "system" && (
-          <TextField
+          <TipField
+            hint="Who the move is recorded as. The agent stores this as claimed and does not verify it."
             size="small"
             label={actor.kind === "human" ? "Your name or id" : "Agent id"}
             value={actor.id}
@@ -970,7 +1005,8 @@ export function OrderTransitionWrites({
             disabled={!writesEnabled}
           />
         )}
-        <TextField
+        <TipField
+          hint="Optional reason recorded with the move. The placeholder shows how the agent describes the first available step."
           size="small"
           label="Reason (optional)"
           placeholder={steps[0]?.description}
@@ -1009,17 +1045,17 @@ export function DealWrites({ dealId }: { dealId?: string }) {
   const { writesEnabled } = useCredential();
   const [proposalId, setProposalId] = useState("");
   const [quoteId, setQuoteId] = useState("");
-  const [id, setId] = useState(dealId ?? "");
   const [buyerUrl, setBuyerUrl] = useState("https://buyer.example");
   const [ssp, setSsp] = useState("");
   const [curatorId, setCuratorId] = useState("");
   const [reason, setReason] = useState("");
+  const [deprecateReason, setDeprecateReason] = useState("");
+  const id = dealId ?? "";
   const [productId, setProductId] = useState("");
   // Short code: the template route maps PG/PD/PA and 400s on anything else,
   // which is what the old "preferred_deal" default got every time.
   const [dealType, setDealType] = useState<DealTypeCode>("PD");
   const [bulkAction, setBulkAction] = useState<BulkDealAction>("cancel");
-  const [bulkQuote, setBulkQuote] = useState("");
   const [bulkNotes, setBulkNotes] = useState("");
 
   const gen = useMutation<{ proposal_id: string }, unknown>((c, a) => generateDeal(c, a), {
@@ -1064,71 +1100,144 @@ export function DealWrites({ dealId }: { dealId?: string }) {
 
   const blocked = !writesEnabled;
 
+  if (!dealId) {
+    // Nothing here acts on an existing deal: these forms make one. Acting on a
+    // deal lives in that deal's own panel, where the id is already known, so
+    // there is no free-text "Deal id" box to fill in or get wrong.
+    return (
+      <Stack spacing={2.5} divider={<Divider flexItem />}>
+        <ActionBlock
+          title="Generate from a proposal"
+          description="Turns an accepted proposal into a deal."
+        >
+          <WriteForm
+            title="Generate a deal from a proposal?"
+            confirmLabel="Generate deal"
+            action="generate-deal"
+            blocked={blocked || !proposalId.trim()}
+            pending={gen.pending}
+            last={gen.last}
+            onConfirm={() => void gen.run({ proposal_id: proposalId.trim() })}
+            consequence="POST /deals from an accepted proposal. Not the same route as booking a quote. Not idempotent."
+          >
+            <TipField hint="Id of an accepted proposal. Copy it from the Proposals screen." size="small" label="Proposal id" value={proposalId} onChange={(e) => setProposalId(e.target.value)} disabled={blocked} />
+          </WriteForm>
+        </ActionBlock>
+        <ActionBlock
+          title="Book from a quote"
+          description="Binds a quote you already have into a deal. This is the commit point."
+        >
+          <WriteForm
+            title="Book a deal from a quote?"
+            confirmLabel="Book deal"
+            action="book-deal"
+            blocked={blocked || !quoteId.trim()}
+            pending={book.pending}
+            last={book.last}
+            onConfirm={() =>
+              void book.run({ quote_id: quoteId.trim(), idempotency_key: newKey() })
+            }
+            consequence="The commit point: the quote becomes bound. Same idempotency key + body returns the same deal; a different body 409s."
+          >
+            <TipField hint="Id of the quote to book, from the Quotes screen. Quotes expire after 24 hours." size="small" label="Quote id" value={quoteId} onChange={(e) => setQuoteId(e.target.value)} disabled={blocked} />
+          </WriteForm>
+        </ActionBlock>
+        <ActionBlock
+          title="Create from a template"
+          description="Prices a product and books a deal for it in one step."
+        >
+          <WriteForm
+            title="Create a deal from a template?"
+            confirmLabel="From template"
+            action="deal-from-template"
+            blocked={blocked || !productId.trim()}
+            pending={fromTpl.pending}
+            last={fromTpl.last}
+            onConfirm={() => void fromTpl.run({ deal_type: dealType, product_id: productId.trim() })}
+            consequence="Prices and auto-books. 422 if max CPM is below floor. Not a replay-safe mint without an idempotency story on this route."
+          >
+            <FormFields>
+              <ProductPicker value={productId} onChange={setProductId} disabled={blocked} />
+              <EnumSelect
+                hint="Deal type for the template: PG, PD or PA. The route rejects anything else with a 400."
+                label="Deal type"
+                value={dealType}
+                options={DEAL_TYPES}
+                onChange={(v) => v && setDealType(v)}
+                disabled={blocked}
+                sx={{ minWidth: 220 }}
+              />
+            </FormFields>
+          </WriteForm>
+        </ActionBlock>
+        <ActionBlock
+          title="Create a curated deal"
+          description="Makes a deal on behalf of a registered curator."
+        >
+          <WriteForm
+            title="Create a curated deal?"
+            confirmLabel="Curated deal"
+            action="curated-deal"
+            blocked={blocked || !curatorId.trim()}
+            pending={curated.pending}
+            last={curated.last}
+            onConfirm={() => void curated.run({ curator_id: curatorId.trim() })}
+            consequence="Not idempotent: each call mints another curated deal."
+          >
+            <CuratorPicker value={curatorId} onChange={setCuratorId} disabled={blocked} />
+          </WriteForm>
+        </ActionBlock>
+      </Stack>
+    );
+  }
+
   return (
-    <Stack spacing={2}>
-      <WriteForm
-        title="Generate a deal from a proposal?"
-        confirmLabel="Generate deal"
-        action="generate-deal"
-        blocked={blocked || !proposalId.trim()}
-        pending={gen.pending}
-        last={gen.last}
-        onConfirm={() => void gen.run({ proposal_id: proposalId.trim() })}
-        consequence="POST /deals from an accepted proposal. Not the same route as booking a quote. Not idempotent."
+    <Stack spacing={2.5} divider={<Divider flexItem />}>
+      <ActionBlock
+        title="Notify a buyer"
+        description="Sends this deal to a buyer agent at the URL below."
       >
-        <TextField size="small" label="Proposal id" value={proposalId} onChange={(e) => setProposalId(e.target.value)} disabled={blocked} />
-      </WriteForm>
-      <WriteForm
-        title="Book a deal from a quote?"
-        confirmLabel="Book deal"
-        action="book-deal"
-        blocked={blocked || !quoteId.trim()}
-        pending={book.pending}
-        last={book.last}
-        onConfirm={() =>
-          void book.run({ quote_id: quoteId.trim(), idempotency_key: newKey() })
-        }
-        consequence="The commit point: the quote becomes bound. Same idempotency key + body returns the same deal; a different body 409s."
+        <WriteForm
+          title="Push this deal to a buyer?"
+          confirmLabel="Push"
+          action="push-deal"
+          blocked={blocked}
+          pending={push.pending}
+          last={push.last}
+          onConfirm={() => void push.run({ deal_id: id, buyer_urls: [buyerUrl] })}
+          consequence="Notifies the named buyer URLs. A retry may notify twice."
+        >
+          <TipField hint="Full URL of the buyer agent to notify, for example https://buyer.example. Only this one URL is sent." size="small" label="Buyer URL" value={buyerUrl} onChange={(e) => setBuyerUrl(e.target.value)} disabled={blocked} sx={{ minWidth: 240 }} />
+        </WriteForm>
+      </ActionBlock>
+      <ActionBlock
+        title="Send to an SSP"
+        description="Pushes this deal to one SSP connector. Leave the name empty to use the agent's default."
       >
-        <TextField size="small" label="Quote id" value={quoteId} onChange={(e) => setQuoteId(e.target.value)} disabled={blocked} />
-      </WriteForm>
-      <WriteForm
-        title="Create a deal from a template?"
-        confirmLabel="From template"
-        action="deal-from-template"
-        blocked={blocked || !productId.trim()}
-        pending={fromTpl.pending}
-        last={fromTpl.last}
-        onConfirm={() => void fromTpl.run({ deal_type: dealType, product_id: productId.trim() })}
-        consequence="Prices and auto-books. 422 if max CPM is below floor. Not a replay-safe mint without an idempotency story on this route."
+        <WriteForm
+          title="Distribute this deal to an SSP?"
+          confirmLabel="Distribute"
+          action="distribute-deal"
+          blocked={blocked}
+          pending={dist.pending}
+          last={dist.last}
+          onConfirm={() =>
+            void dist.run({ deal_id: id, ...(ssp ? { ssp_name: ssp } : {}) })
+          }
+          consequence="A retry may push a second copy to the SSP."
+        >
+          <SspNameField label="SSP name (optional)" hint="Name of the SSP connector to send the deal to. Pick a known one or type another; an unknown name is a 400 that lists the configured ones." value={ssp} onChange={setSsp} disabled={blocked} />
+        </WriteForm>
+      </ActionBlock>
+      <ActionBlock
+        title="Cancel or edit notes"
+        description="Cancels this deal, or replaces its notes. Cancelling cannot be undone from this console."
       >
-        <FormFields>
-          <TextField size="small" label="Product id" value={productId} onChange={(e) => setProductId(e.target.value)} disabled={blocked} />
-          <EnumSelect
-            label="Deal type"
-            value={dealType}
-            options={DEAL_TYPES}
-            onChange={(v) => v && setDealType(v)}
-            disabled={blocked}
-            sx={{ minWidth: 220 }}
-          />
-        </FormFields>
-      </WriteForm>
-      {/* One deal id feeds every form from here down. It used to sit inside
-          the bulk form, which left it unclear that push, distribute, migrate
-          and deprecate read it too. */}
-      <Box data-block="deal-target">
-        <TextField size="small" label="Deal id" value={id} onChange={(e) => setId(e.target.value)} disabled={blocked} />
-        <Typography variant="caption" component="p" color="text.secondary" sx={{ mt: 0.5 }}>
-          Bulk update and cancel, push, distribute, migrate and deprecate all act on this deal.
-        </Typography>
-      </Box>
-      <Box>
         <WriteForm
           title={`Run a bulk ${bulkAction}?`}
-          confirmLabel={`Bulk ${bulkAction}`}
+          confirmLabel={bulkAction === "cancel" ? "Cancel deal" : "Update notes"}
           action="bulk-deals"
-          blocked={blocked || (bulkAction === "create" ? !bulkQuote.trim() : !id.trim())}
+          blocked={blocked}
           pending={bulk.pending}
           // Reported below instead: a 200 here can still carry failures.
           last={bulk.last?.kind === "ok" ? undefined : bulk.last}
@@ -1137,35 +1246,29 @@ export function DealWrites({ dealId }: { dealId?: string }) {
               operations: [
                 {
                   action: bulkAction,
-                  ...(bulkAction === "create"
-                    ? { quote_id: bulkQuote.trim() }
-                    : { deal_id: id.trim() }),
+                  deal_id: id,
                   ...(bulkNotes.trim() ? { notes: bulkNotes.trim() } : {}),
                 },
               ],
             })
           }
           consequence={
-            bulkAction === "create"
-              ? "Books a deal from the quote and marks the quote booked. Not idempotent: a retry books a second deal if the first landed."
-              : bulkAction === "cancel"
-                ? "Sets the deal to cancelled, with the notes as the cancel reason. Nothing in this console reverses it."
-                : "Replaces the deal's notes and stamps updated_at. Partial success is possible in a batch: re-read the list rather than repeating it blindly."
+            bulkAction === "cancel"
+              ? "Sets the deal to cancelled, with the notes as the cancel reason. Nothing in this console reverses it."
+              : "Replaces the deal's notes and stamps updated_at. Partial success is possible in a batch: re-read the list rather than repeating it blindly."
           }
         >
           <FormFields>
             <EnumSelect
-              label="Bulk action"
+              hint="Cancel ends the deal; update replaces its notes."
+              label="Action"
               value={bulkAction}
-              options={BULK_DEAL_ACTIONS}
+              options={DEAL_EDIT_ACTIONS}
               onChange={(v) => v && setBulkAction(v)}
               disabled={blocked}
               sx={{ minWidth: 140 }}
             />
-            {bulkAction === "create" && (
-              <TextField size="small" label="Quote id" value={bulkQuote} onChange={(e) => setBulkQuote(e.target.value)} disabled={blocked} />
-            )}
-            <TextField size="small" label="Notes (optional)" value={bulkNotes} onChange={(e) => setBulkNotes(e.target.value)} disabled={blocked} />
+            <TipField hint="Optional notes. For update they replace the deal's notes; for cancel they become the cancel reason." size="small" label="Notes (optional)" value={bulkNotes} onChange={(e) => setBulkNotes(e.target.value)} disabled={blocked} />
           </FormFields>
         </WriteForm>
         {bulk.last?.kind === "ok" && (
@@ -1182,103 +1285,109 @@ export function DealWrites({ dealId }: { dealId?: string }) {
             ))}
           </Box>
         )}
-      </Box>
-      <WriteForm
-        title="Push this deal to a buyer?"
-        confirmLabel="Push"
-        action="push-deal"
-        blocked={blocked || !id.trim()}
-        pending={push.pending}
-        last={push.last}
-        onConfirm={() => void push.run({ deal_id: id.trim(), buyer_urls: [buyerUrl] })}
-        consequence="Notifies the named buyer URLs. A retry may notify twice."
+      </ActionBlock>
+      <ActionBlock
+        title="Replace with a new deal"
+        description="Creates a successor deal and links the two in this deal's lineage."
       >
-        <TextField size="small" label="Buyer URL" value={buyerUrl} onChange={(e) => setBuyerUrl(e.target.value)} disabled={blocked} sx={{ minWidth: 240 }} />
-      </WriteForm>
-      <WriteForm
-        title="Distribute this deal to an SSP?"
-        confirmLabel="Distribute"
-        action="distribute-deal"
-        blocked={blocked || !id.trim()}
-        pending={dist.pending}
-        last={dist.last}
-        onConfirm={() =>
-          void dist.run({ deal_id: id.trim(), ...(ssp ? { ssp_name: ssp } : {}) })
-        }
-        consequence="A retry may push a second copy to the SSP."
+        <WriteForm
+          title="Migrate this deal?"
+          confirmLabel="Migrate"
+          action="migrate-deal"
+          blocked={blocked}
+          pending={migrate.pending}
+          last={migrate.last}
+          onConfirm={() => void migrate.run({ id, ...(reason ? { reason } : {}) })}
+          consequence="Mints a successor and records lineage. A retry may mint a second successor."
+        >
+          <TipField hint="Optional reason recorded with the migration." size="small" label="Reason (optional)" value={reason} onChange={(e) => setReason(e.target.value)} disabled={blocked} />
+        </WriteForm>
+      </ActionBlock>
+      <ActionBlock
+        title="Deprecate"
+        description="Marks this deal deprecated. A reason is required."
       >
-        <SspNameField label="SSP name (optional)" value={ssp} onChange={setSsp} disabled={blocked} />
-      </WriteForm>
-      <WriteForm
-        title="Create a curated deal?"
-        confirmLabel="Curated deal"
-        action="curated-deal"
-        blocked={blocked || !curatorId.trim()}
-        pending={curated.pending}
-        last={curated.last}
-        onConfirm={() => void curated.run({ curator_id: curatorId.trim() })}
-        consequence="Not idempotent: each call mints another curated deal."
-      >
-        <TextField size="small" label="Curator id" value={curatorId} onChange={(e) => setCuratorId(e.target.value)} disabled={blocked} />
-      </WriteForm>
-      <WriteForm
-        title="Migrate this deal?"
-        confirmLabel="Migrate"
-        action="migrate-deal"
-        blocked={blocked || !id.trim()}
-        pending={migrate.pending}
-        last={migrate.last}
-        onConfirm={() => void migrate.run({ id: id.trim(), ...(reason ? { reason } : {}) })}
-        consequence="Mints a successor and records lineage. A retry may mint a second successor."
-      >
-        <TextField size="small" label="Reason" value={reason} onChange={(e) => setReason(e.target.value)} disabled={blocked} />
-      </WriteForm>
-      <WriteForm
-        title="Deprecate this deal?"
-        confirmLabel="Deprecate"
-        action="deprecate-deal"
-        blocked={blocked || !id.trim() || !reason.trim()}
-        pending={deprecate.pending}
-        last={deprecate.last}
-        onConfirm={() => void deprecate.run({ id: id.trim(), reason: reason.trim() })}
-        consequence="Marks the deal deprecated. A second deprecate may 409 depending on status."
-      />
+        <WriteForm
+          title="Deprecate this deal?"
+          confirmLabel="Deprecate"
+          action="deprecate-deal"
+          blocked={blocked || !deprecateReason.trim()}
+          pending={deprecate.pending}
+          last={deprecate.last}
+          onConfirm={() => void deprecate.run({ id, reason: deprecateReason.trim() })}
+          consequence="Marks the deal deprecated. A second deprecate may 409 depending on status."
+        >
+          <TipField hint="Why the deal is being deprecated. Required; sent to the agent with the request." size="small" label="Reason" value={deprecateReason} onChange={(e) => setDeprecateReason(e.target.value)} disabled={blocked} />
+        </WriteForm>
+      </ActionBlock>
     </Stack>
   );
 }
 
+/** Reads about one deal. Each is a GET; the first has a side effect worth a line. */
 export function DealLookups({ dealId }: { dealId: string }) {
   const [loadRecord, setLoadRecord] = useState(false);
-  const [loadExport, setLoadExport] = useState(false);
 
   return (
-    <Stack spacing={1} data-block="deal-lookups">
-      {loadRecord && <WritesNotice what="GET /api/v1/deals/{id} runs a lazy expiry check and may persist the outcome." />}
-      <WriteForm
-        title="Fetch this deal record?"
-        confirmLabel="Fetch deal"
-        action="fetch-deal"
-        blocked={false}
-        pending={false}
-        last={undefined}
-        onConfirm={() => setLoadRecord(true)}
-        consequence="This GET can expire a proposed deal and save that. Only fetch when you mean to."
-      />
-      {loadRecord && <DealRecord dealId={dealId} />}
-      <BuyerStatus dealId={dealId} />
-      <SspTrouble dealId={dealId} />
-      <WriteForm
-        title="Export every stored deal?"
-        confirmLabel="Export deals"
-        action="export-deals"
-        blocked={false}
-        pending={false}
-        last={undefined}
-        onConfirm={() => setLoadExport(true)}
-        consequence="An unpaginated scan of stored records. Not a write, but heavy."
-      />
-      {loadExport && <DealsExportBody />}
+    <Stack spacing={2.5} divider={<Divider flexItem />} data-block="deal-lookups">
+      <ActionBlock
+        title="Full record"
+        description="Reads this deal's stored record. The agent may expire a proposed deal when you read it."
+      >
+        {loadRecord && <WritesNotice what="GET /api/v1/deals/{id} runs a lazy expiry check and may persist the outcome." />}
+        <WriteForm
+          title="Fetch this deal record?"
+          confirmLabel="Fetch deal"
+          action="fetch-deal"
+          blocked={false}
+          pending={false}
+          last={undefined}
+          onConfirm={() => setLoadRecord(true)}
+          consequence="This GET can expire a proposed deal and save that. Only fetch when you mean to."
+        />
+        {loadRecord && <DealRecord dealId={dealId} />}
+      </ActionBlock>
+      <ActionBlock title="Buyer's view" description="How a buyer agent currently sees this deal.">
+        <BuyerStatus dealId={dealId} />
+      </ActionBlock>
+      <ActionBlock title="SSP diagnostics" description="Connector diagnostics for this deal at one SSP.">
+        <SspTrouble dealId={dealId} />
+      </ActionBlock>
     </Stack>
+  );
+}
+
+/** Not about any one deal: it scans every stored record, so it sits with the page. */
+export function DealsExportLookup() {
+  const [format, setFormat] = useState<DealExportFormat>("generic");
+  const [status, setStatus] = useState<DealExportStatus | "">("");
+  // What was asked for, frozen at the click: editing a filter afterwards must
+  // not silently re-run a heavy full scan.
+  const [asked, setAsked] = useState<{ format: string; status: string } | undefined>();
+  return (
+    <ActionBlock
+      title="Export every deal"
+      description="Reads all stored deals in one unpaginated pass, reshaped for one DSP's import. Not a write, but heavy."
+    >
+      <ReadForm label="Export deals" action="export-deals" onRun={() => setAsked({ format, status })}>
+        <EnumSelect
+          hint="Which DSP's import format to shape the export for. Generic is the agent's neutral one."
+          label="Export format"
+          value={format}
+          options={DEAL_EXPORT_FORMATS}
+          onChange={(v) => v && setFormat(v)}
+        />
+        <EnumSelect
+          hint="Only export deals in this stored status. These are the agent's stored words, not the ones the deal list shows."
+          label="Export status"
+          value={status}
+          options={DEAL_EXPORT_STATUSES}
+          onChange={setStatus}
+          any="Any status"
+        />
+      </ReadForm>
+      {asked && <DealsExportBody format={asked.format} status={asked.status} />}
+    </ActionBlock>
   );
 }
 
@@ -1297,16 +1406,12 @@ function BuyerStatus({ dealId }: { dealId: string }) {
   return (
     <>
       <FormRow>
-        <TextField size="small" label="Buyer URL" value={buyerUrl} onChange={(e) => setBuyerUrl(e.target.value)} />
-        <WriteForm
-          title="Read buyer activation status?"
-          confirmLabel="Buyer status"
+        <TipField hint="Full URL of the buyer agent whose view of this deal you want to read." size="small" label="Buyer URL" value={buyerUrl} onChange={(e) => setBuyerUrl(e.target.value)} />
+        <ReadForm
+          label="Buyer status"
           action="deal-buyer-status"
-          blocked={!buyerUrl.trim()}
-          pending={false}
-          last={undefined}
-          onConfirm={() => setSubmitted(buyerUrl.trim())}
-          consequence="A GET of how this buyer sees the deal."
+          disabled={!buyerUrl.trim()}
+          onRun={() => setSubmitted(buyerUrl.trim())}
         />
       </FormRow>
       {submitted && <BuyerStatusBody dealId={dealId} buyerUrl={submitted} />}
@@ -1319,9 +1424,7 @@ function BuyerStatusBody({ dealId, buyerUrl }: { dealId: string; buyerUrl: strin
     dealBuyerStatus(c, dealId, buyerUrl, signal),
   );
   return (
-    <Typography variant="caption">
-      Buyer status: {buyer.data ? JSON.stringify(buyer.data) : buyer.result ? describe(buyer.result) : ""}
-    </Typography>
+    <ReadOutcome name="Buyer status" data={buyer.data} result={buyer.result} />
   );
 }
 
@@ -1332,11 +1435,13 @@ function BuyerStatusBody({ dealId, buyerUrl }: { dealId: string; buyerUrl: strin
  */
 function SspNameField({
   label,
+  hint,
   value,
   onChange,
   disabled,
 }: {
   label: string;
+  hint?: string;
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
@@ -1350,7 +1455,7 @@ function SspNameField({
       onInputChange={(_, next) => onChange(next)}
       disabled={disabled}
       sx={{ minWidth: 200 }}
-      renderInput={(params) => <TextField {...params} label={label} />}
+      renderInput={(params) => <TipField {...params} hint={hint} label={label} />}
     />
   );
 }
@@ -1363,16 +1468,12 @@ function SspTrouble({ dealId }: { dealId: string }) {
   return (
     <>
       <FormRow>
-        <SspNameField label="SSP" value={ssp} onChange={setSsp} />
-        <WriteForm
-          title="Troubleshoot this SSP?"
-          confirmLabel="Troubleshoot"
+        <SspNameField label="SSP" hint="Name of the SSP connector to diagnose. Pick a known one or type another; an unknown name is a 400 that lists the configured ones." value={ssp} onChange={setSsp} />
+        <ReadForm
+          label="Troubleshoot"
           action="deal-ssp"
-          blocked={!ssp.trim()}
-          pending={false}
-          last={undefined}
-          onConfirm={() => setSubmitted(ssp.trim())}
-          consequence="A GET of connector diagnostics for one SSP."
+          disabled={!ssp.trim()}
+          onRun={() => setSubmitted(ssp.trim())}
         />
       </FormRow>
       {submitted && <SspTroubleBody dealId={dealId} ssp={submitted} />}
@@ -1385,19 +1486,17 @@ function SspTroubleBody({ dealId, ssp }: { dealId: string; ssp: string }) {
     dealSspTroubleshoot(c, dealId, ssp, signal),
   );
   return (
-    <Typography variant="caption">
-      SSP troubleshoot: {trouble.data ? JSON.stringify(trouble.data) : trouble.result ? describe(trouble.result) : ""}
-    </Typography>
+    <ReadOutcome name="SSP troubleshoot" data={trouble.data} result={trouble.result} />
   );
 }
 
-function DealsExportBody() {
-  const exported = useResource("deals-export", (c, signal) => dealsExport(c, {}, signal));
-  return (
-    <Typography variant="caption">
-      Export: {exported.data ? JSON.stringify(exported.data).slice(0, 200) : exported.result ? describe(exported.result) : ""}
-    </Typography>
+function DealsExportBody({ format, status }: { format: string; status: string }) {
+  // Keyed on both filters: a different format is a different document, and the
+  // cache must not hand back the last one under the new label.
+  const exported = useResource(`deals-export:${format}:${status}`, (c, signal) =>
+    dealsExport(c, { format, ...(status ? { status } : {}) }, signal),
   );
+  return <ReadOutcome name="Export" data={exported.data} result={exported.result} />;
 }
 
 export function SessionWrites({ sessionId }: { sessionId: string }) {
@@ -1424,7 +1523,8 @@ export function SessionWrites({ sessionId }: { sessionId: string }) {
         onConfirm={() => void send.run({ id: sessionId, message: message.trim() })}
         consequence="Appends a turn and gets a response. Not idempotent: a retry sends a second message."
       >
-        <TextField
+        <TipField
+          hint="Text sent to the session as the next turn. Required."
           size="small"
           label="Message"
           value={message}
@@ -1508,8 +1608,9 @@ export function ProposalWrites() {
         consequence="Not idempotent. A retry after an unclear failure may create a second proposal."
       >
         <FormFields>
-          <TextField size="small" label="Product id" value={productId} onChange={(e) => setProductId(e.target.value)} disabled={!writesEnabled} />
+          <ProductPicker value={productId} onChange={setProductId} disabled={!writesEnabled} />
           <EnumSelect
+            hint="Legacy deal type the proposal is checked against; the agent rejects values it does not recognise."
             label="Deal type"
             value={proposalDealType}
             options={LEGACY_DEAL_TYPES}
@@ -1517,10 +1618,10 @@ export function ProposalWrites() {
             disabled={!writesEnabled}
             sx={{ minWidth: 200 }}
           />
-          <TextField size="small" label="Price" value={price} onChange={(e) => setPrice(e.target.value)} disabled={!writesEnabled} />
+          <TipField hint="Price as a plain number in dollars, for example 10. Used as the proposal price, the counter price, and the negotiation message price (sent as USD micros, times 1,000,000)." size="small" label="Price" value={price} onChange={(e) => setPrice(e.target.value)} disabled={!writesEnabled} />
         </FormFields>
       </WriteForm>
-      <TextField size="small" label="Proposal id" value={proposalId} onChange={(e) => setProposalId(e.target.value)} />
+      <TipField hint="Id of the proposal to counter or check negotiation status for. Copy it from the Proposals screen." size="small" label="Proposal id" value={proposalId} onChange={(e) => setProposalId(e.target.value)} />
       {proposalId.trim() ? <NegotiationStatus proposalId={proposalId.trim()} /> : null}
       <WriteForm
         title="Send a legacy counter-offer?"
@@ -1584,7 +1685,7 @@ export function AgentWrites() {
         onConfirm={() => void discover.run({ agent_url: url.trim() })}
         consequence="Fetches the remote card and writes a local registry row. Re-discovering the same URL updates that row."
       >
-        <TextField size="small" label="Agent URL" value={url} onChange={(e) => setUrl(e.target.value)} disabled={!writesEnabled} sx={{ minWidth: 280 }} />
+        <TipField hint="Full URL of the remote agent to look up, for example https://agent.example. Its card is fetched and stored as a local registry row." size="small" label="Agent URL" value={url} onChange={(e) => setUrl(e.target.value)} disabled={!writesEnabled} sx={{ minWidth: 280 }} />
       </WriteForm>
       <WriteForm
         title="Change this agent's trust status?"
@@ -1599,15 +1700,15 @@ export function AgentWrites() {
         consequence="Trust is this operator's decision and caps the buyer's access tier. A blocked agent is refused on later calls."
       >
         <FormFields>
-          <TextField size="small" label="Agent id" value={agentId} onChange={(e) => setAgentId(e.target.value)} disabled={!writesEnabled} />
-          <TextField select size="small" label="Trust" value={trust} onChange={(e) => setTrust(e.target.value)} disabled={!writesEnabled} sx={{ minWidth: 160 }}>
+          <AgentPicker value={agentId} onChange={setAgentId} disabled={!writesEnabled} />
+          <TipField hint="Trust decision for the agent: unknown, registered, approved, preferred or blocked. It caps the buyer's access tier, and a blocked agent is refused on later calls." select size="small" label="Trust" value={trust} onChange={(e) => setTrust(e.target.value)} disabled={!writesEnabled} sx={{ minWidth: 160 }}>
             {["unknown", "registered", "approved", "preferred", "blocked"].map((t) => (
               <MenuItem key={t} value={t}>
                 {t}
               </MenuItem>
             ))}
-          </TextField>
-          <TextField size="small" label="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} disabled={!writesEnabled} />
+          </TipField>
+          <TipField hint="Optional note on why the trust status changed. Sent only when filled in." size="small" label="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} disabled={!writesEnabled} />
         </FormFields>
       </WriteForm>
       <WriteForm
@@ -1644,16 +1745,12 @@ export function AgentDetailLookup() {
   return (
     <Box sx={{ mt: 1 }}>
       <FormRow>
-        <TextField size="small" label="Agent id" value={id} onChange={(e) => setId(e.target.value)} />
-        <WriteForm
-          title="Load this registered agent?"
-          confirmLabel="Load agent"
+        <AgentPicker value={id} onChange={setId} />
+        <ReadForm
+          label="Load agent"
           action="fetch-agent"
-          blocked={!id.trim()}
-          pending={false}
-          last={undefined}
-          onConfirm={() => setSubmitted(id.trim())}
-          consequence="A GET of the local registry row."
+          disabled={!id.trim()}
+          onRun={() => setSubmitted(id.trim())}
         />
       </FormRow>
       {submitted && <AgentBody agentId={submitted} />}
@@ -1694,9 +1791,9 @@ export function CuratorWrite() {
       consequence="Not idempotent if the id is new; a duplicate id may 409."
     >
       <FormFields>
-        <TextField size="small" label="Curator id" value={curatorId} onChange={(e) => setCuratorId(e.target.value)} disabled={!writesEnabled} />
-        <TextField size="small" label="Name" value={name} onChange={(e) => setName(e.target.value)} disabled={!writesEnabled} />
-        <TextField size="small" label="Domain" value={domain} onChange={(e) => setDomain(e.target.value)} disabled={!writesEnabled} />
+        <TipField hint="Your own short identifier for the curator, for example acme-curation. A duplicate id may 409." size="small" label="Curator id" value={curatorId} onChange={(e) => setCuratorId(e.target.value)} disabled={!writesEnabled} />
+        <TipField hint="Display name of the curator. Required." size="small" label="Name" value={name} onChange={(e) => setName(e.target.value)} disabled={!writesEnabled} />
+        <TipField hint="Domain the curator operates from, for example curator.example. Required." size="small" label="Domain" value={domain} onChange={(e) => setDomain(e.target.value)} disabled={!writesEnabled} />
       </FormFields>
     </WriteForm>
   );
@@ -1715,6 +1812,16 @@ const CHANGE_FIELD: Readonly<Record<string, string>> = {
   targeting: "targeting",
   cancellation: "",
   other: "",
+};
+
+/**
+ * Offered, not enforced: applying a change merges `proposed_values` into the
+ * order's metadata under whatever key it carries, so the agent has no field
+ * list to validate against and a closed dropdown would refuse real fields.
+ */
+const SUGGESTED_FIELDS: Readonly<Record<string, readonly string[]>> = {
+  ...Object.fromEntries(Object.entries(CHANGE_FIELD).map(([k, v]) => [k, v ? [v] : []])),
+  flight_dates: ["flight_start", "flight_end"],
 };
 
 function problemList(result: Result<unknown> | undefined, key: string): string[] {
@@ -1812,9 +1919,10 @@ export function ChangeRequestCreate({
         >
           <FormFields>
             {fixedOrder === undefined && (
-              <TextField size="small" label="Order id" value={typedOrder} onChange={(e) => setOrderId(e.target.value)} disabled={!writesEnabled} />
+              <OrderPicker value={typedOrder} onChange={setOrderId} disabled={!writesEnabled} />
             )}
             <EnumSelect
+              hint="What kind of change is being requested. It decides the usual field and how severe the agent treats the request."
               label="Change type"
               value={changeType}
               options={CHANGE_TYPES}
@@ -1826,8 +1934,28 @@ export function ChangeRequestCreate({
               disabled={!writesEnabled}
               sx={{ minWidth: 180 }}
             />
-            <TextField size="small" label="Field" value={fieldName} onChange={(e) => setField(e.target.value)} disabled={!writesEnabled} />
-            <TextField
+            <Autocomplete
+              freeSolo
+              size="small"
+              options={SUGGESTED_FIELDS[changeType] ?? []}
+              // The field starts filled in, and the default text filter would
+              // then hide every suggestion but that one.
+              filterOptions={(all) => all}
+              openOnFocus
+              inputValue={fieldName}
+              onInputChange={(_, next) => setField(next)}
+              disabled={!writesEnabled}
+              sx={{ minWidth: 180 }}
+              renderInput={(params) => (
+                <TipField
+                  {...params}
+                  hint="Name of the order field to change. Pick a suggestion for the change type, or type another; it starts from the usual field."
+                  label="Field"
+                />
+              )}
+            />
+            <TipField
+              hint="The value to set the field to. A whole number for an impressions change, otherwise text. With no value the request changes nothing when applied."
               size="small"
               label="New value"
               type={changeType === "impressions" ? "number" : "text"}
@@ -1835,7 +1963,7 @@ export function ChangeRequestCreate({
               onChange={(e) => setNewValue(e.target.value)}
               disabled={!writesEnabled}
             />
-            <TextField size="small" label="Request reason" value={reason} onChange={(e) => setReason(e.target.value)} disabled={!writesEnabled} />
+            <TipField hint="Optional reason for the request, shown to whoever reviews it." size="small" label="Request reason" value={reason} onChange={(e) => setReason(e.target.value)} disabled={!writesEnabled} />
           </FormFields>
         </WriteForm>
       )}
@@ -1936,7 +2064,8 @@ export function ChangeRequestReviewWrites({
       <FormRow>
         {showReview && (
           <>
-            <TextField
+            <TipField
+              hint="Optional reason for the decision, saved with the change request."
               size="small"
               label="Reason"
               value={reason}
@@ -1944,7 +2073,8 @@ export function ChangeRequestReviewWrites({
               disabled={blocked || !reviewable || busy}
               sx={{ minWidth: 240 }}
             />
-            <TextField
+            <TipField
+              hint="Name recorded as the reviewer (decided_by). It is stored as given and not verified, and is remembered for next time."
               size="small"
               label="Your name"
               value={name}
@@ -1953,36 +2083,42 @@ export function ChangeRequestReviewWrites({
               disabled={blocked || !reviewable || busy}
               sx={{ minWidth: 200 }}
             />
-            <Button
-              size="small"
-              variant="contained"
-              data-action="approve"
-              disabled={blocked || !reviewable || busy}
-              onClick={() => setPendingDecision("approve")}
-            >
-              Approve
-            </Button>
-            <Button
-              size="small"
-              variant="outlined"
-              data-action="reject"
-              disabled={blocked || !reviewable || busy}
-              onClick={() => setPendingDecision("reject")}
-            >
-              Reject
-            </Button>
+            <Hint hint="Approves this pending request so it can be applied. You are asked to confirm first.">
+              <Button
+                size="small"
+                variant="contained"
+                data-action="approve"
+                disabled={blocked || !reviewable || busy}
+                onClick={() => setPendingDecision("approve")}
+              >
+                Approve
+              </Button>
+            </Hint>
+            <Hint hint="Rejects this pending request. The agent keeps the first decision it receives. You are asked to confirm first.">
+              <Button
+                size="small"
+                variant="outlined"
+                data-action="reject"
+                disabled={blocked || !reviewable || busy}
+                onClick={() => setPendingDecision("reject")}
+              >
+                Reject
+              </Button>
+            </Hint>
           </>
         )}
         {showApply && (
-          <Button
-            size="small"
-            variant={compact ? "outlined" : "text"}
-            data-action="apply"
-            disabled={blocked || !applicable || busy}
-            onClick={() => setPendingApply(true)}
-          >
-            {apply.pending ? "Applying…" : "Apply to order"}
-          </Button>
+          <Hint hint="Writes the approved values into the order's metadata. The order's status does not change. You are asked to confirm first.">
+            <Button
+              size="small"
+              variant={compact ? "outlined" : "text"}
+              data-action="apply"
+              disabled={blocked || !applicable || busy}
+              onClick={() => setPendingApply(true)}
+            >
+              {apply.pending ? "Applying…" : "Apply to order"}
+            </Button>
+          </Hint>
         )}
       </FormRow>
       {showReview && (
@@ -2065,12 +2201,8 @@ export function EventLookup({ eventId }: { eventId: string }) {
   const detail = useResource(`event:${eventId}`, (c, signal) => eventById(c, eventId, signal));
   if (!detail.data && !detail.result) return null;
   return (
-    <Box
-      component="pre"
-      data-block="event-by-id"
-      sx={{ mt: 1, p: 1.5, fontSize: 12, overflow: "auto", maxHeight: 240, backgroundColor: palette.ground }}
-    >
-      {detail.data ? JSON.stringify(detail.data, null, 2) : detail.result ? describe(detail.result) : ""}
+    <Box data-block="event-by-id" sx={{ mt: 1 }}>
+      <ReadOutcome name="Event" data={detail.data} result={detail.result} />
     </Box>
   );
 }
@@ -2081,16 +2213,12 @@ export function ApiKeyDetailLookup() {
   return (
     <Box sx={{ mt: 1 }}>
       <FormRow>
-        <TextField size="small" label="Key id" value={id} onChange={(e) => setId(e.target.value)} />
-        <WriteForm
-          title="Load this key's metadata?"
-          confirmLabel="Load key"
+        <TipField hint="Id of the API key to look up, as shown in the API keys list. Metadata only; the secret is never returned." size="small" label="Key id" value={id} onChange={(e) => setId(e.target.value)} />
+        <ReadForm
+          label="Load key"
           action="fetch-key"
-          blocked={!id.trim()}
-          pending={false}
-          last={undefined}
-          onConfirm={() => setSubmitted(id.trim())}
-          consequence="Metadata only. The secret is never on this route."
+          disabled={!id.trim()}
+          onRun={() => setSubmitted(id.trim())}
         />
       </FormRow>
       {submitted && <ApiKeyBody keyId={submitted} />}
@@ -2120,21 +2248,18 @@ export function AudienceMatchForm() {
         A POST that stores nothing, so it runs with writes off.
       </Typography>
       <FormRow>
-        <TextField
+        <TipField
+          hint="Identifier of the audience to score. Sent as an agentic audience reference; required."
           size="small"
           label="Audience identifier"
           value={identifier}
           onChange={(e) => setIdentifier(e.target.value)}
         />
-        <WriteForm
-          title="Score this audience?"
-          confirmLabel="Match"
+        <ReadForm
+          label="Match"
           action="audience-match"
-          blocked={!identifier.trim()}
-          pending={false}
-          last={undefined}
-          onConfirm={() => setSubmitted(identifier.trim())}
-          consequence="Query-shaped: nothing is stored. A missing identifier is a form error, not an outage."
+          disabled={!identifier.trim()}
+          onRun={() => setSubmitted(identifier.trim())}
         />
       </FormRow>
       {submitted && <AudienceMatchBody identifier={submitted} />}
@@ -2302,7 +2427,8 @@ export function ProposalLifecycleWrites({ proposal }: { proposal: Proposal }) {
         </Box>
       )}
       {(canWithdraw || canAssent) && (
-        <TextField
+        <TipField
+          hint="Optional reason sent with a withdraw or an assent (accept or decline). Not used for publish."
           size="small"
           label="Reason (optional, sent with withdraw or assent)"
           value={reason}

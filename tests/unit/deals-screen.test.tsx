@@ -20,7 +20,10 @@ const DEALS = [
       deal_type: "PD",
       status: "booked",
       quote_id: "quote-demo-1",
-      product: { product_id: "prod-91ddc363", name: "Premium Display - Homepage" },
+      product: {
+        product_id: "prod-91ddc363",
+        name: "Premium Display - Homepage",
+      },
       pricing: {
         base_cpm: { amount_micros: 15_000_000, currency: "USD" },
         final_cpm: { amount_micros: 12_500_000, currency: "USD" },
@@ -44,7 +47,10 @@ const DEALS = [
       status: "proposed",
       quote_id: null,
       product: { product_id: "prod-2", name: "Video Preroll" },
-      pricing: { final_cpm: { amount_micros: 30_000_000, currency: "EUR" }, pricing_model: "cpm" },
+      pricing: {
+        final_cpm: { amount_micros: 30_000_000, currency: "EUR" },
+        pricing_model: "cpm",
+      },
       terms: null,
       buyer_tier: "public",
       expires_at: "2026-10-01T00:00:00",
@@ -114,13 +120,17 @@ describe("the deals screen", () => {
       http.get(`${API}/api/v1/deals/deal-console-demo-1/performance`, () =>
         HttpResponse.json(PERFORMANCE),
       ),
-      http.get(`${API}/api/v1/deals/deal-console-demo-1/lineage`, () => HttpResponse.json(LINEAGE)),
+      http.get(`${API}/api/v1/deals/deal-console-demo-1/lineage`, () =>
+        HttpResponse.json(LINEAGE),
+      ),
     );
   });
 
   it("lists deals with their wire status", async () => {
     renderScreen();
-    await waitFor(() => expect(screen.getByText("deal-console-demo-1")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText("deal-console-demo-1")).toBeInTheDocument(),
+    );
 
     expect(document.querySelector('[data-status="booked"]')).toBeTruthy();
     expect(document.querySelector('[data-status="proposed"]')).toBeTruthy();
@@ -133,7 +143,9 @@ describe("the deals screen", () => {
    */
   it("converts micros to currency, in the currency the deal carries", async () => {
     renderScreen();
-    await waitFor(() => expect(screen.getByText("deal-console-demo-1")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText("deal-console-demo-1")).toBeInTheDocument(),
+    );
 
     expect(document.body.textContent).toContain("$12.50");
     expect(document.body.textContent).toMatch(/€30\.00|EUR\s?30\.00/);
@@ -142,7 +154,9 @@ describe("the deals screen", () => {
 
   it("survives a deal with no terms", async () => {
     renderScreen();
-    await waitFor(() => expect(screen.getByText("deal-console-demo-2")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText("deal-console-demo-2")).toBeInTheDocument(),
+    );
     const row = screen.getByText("deal-console-demo-2").closest("tr")!;
     expect(row.textContent).toMatch(/expires/i);
   });
@@ -164,7 +178,9 @@ describe("the deals screen", () => {
     await user.click(screen.getByLabelText("Status"));
     await user.click(await screen.findByRole("option", { name: "booked" }));
 
-    await waitFor(() => expect(seen[seen.length - 1]!.searchParams.get("status")).toBe("booked"));
+    await waitFor(() =>
+      expect(seen[seen.length - 1]!.searchParams.get("status")).toBe("booked"),
+    );
   });
 
   /**
@@ -180,7 +196,9 @@ describe("the deals screen", () => {
     renderScreen();
 
     await waitFor(() =>
-      expect(document.querySelector('[data-state="operator-required"]')).toBeTruthy(),
+      expect(
+        document.querySelector('[data-state="operator-required"]'),
+      ).toBeTruthy(),
     );
     expect(document.body.textContent).not.toMatch(/no deals yet/i);
   });
@@ -197,8 +215,14 @@ describe("the deals screen", () => {
     );
     renderScreen();
 
-    await waitFor(() => expect(document.querySelector('[data-state="key-rejected"]')).toBeTruthy());
-    expect(document.querySelector('[data-state="operator-required"]')).toBeNull();
+    await waitFor(() =>
+      expect(
+        document.querySelector('[data-state="key-rejected"]'),
+      ).toBeTruthy(),
+    );
+    expect(
+      document.querySelector('[data-state="operator-required"]'),
+    ).toBeNull();
     expect(document.body.textContent).toMatch(/expired or been revoked/i);
     expect(document.body.textContent).not.toMatch(/is a buyer key/i);
   });
@@ -212,9 +236,13 @@ describe("the deals screen", () => {
     renderScreen();
 
     await waitFor(() =>
-      expect(document.querySelector('[data-state="empty"]')?.textContent).toMatch(/no deals yet/i),
+      expect(
+        document.querySelector('[data-state="empty"]')?.textContent,
+      ).toMatch(/no deals yet/i),
     );
-    expect(document.body.textContent).not.toMatch(/could not reach|unavailable/i);
+    expect(document.body.textContent).not.toMatch(
+      /could not reach|unavailable/i,
+    );
   });
 
   it("distinguishes an empty filter result from no deals at all", async () => {
@@ -228,15 +256,17 @@ describe("the deals screen", () => {
       }),
     );
     renderScreen();
-    await waitFor(() => expect(screen.getByText("deal-console-demo-1")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText("deal-console-demo-1")).toBeInTheDocument(),
+    );
 
     await user.click(screen.getByLabelText("Status"));
     await user.click(await screen.findByRole("option", { name: "cancelled" }));
 
     await waitFor(() =>
-      expect(document.querySelector('[data-state="empty"]')?.textContent).toMatch(
-        /no deals with status "cancelled"/i,
-      ),
+      expect(
+        document.querySelector('[data-state="empty"]')?.textContent,
+      ).toMatch(/no deals with status "cancelled"/i),
     );
   });
 
@@ -244,7 +274,9 @@ describe("the deals screen", () => {
   it("says so when the agent could not read some of its own deals", async () => {
     server.use(
       http.get(`${API}/api/v1/deals`, () =>
-        HttpResponse.json(list({ skipped: ["deal-broken-1", "deal-broken-2"] })),
+        HttpResponse.json(
+          list({ skipped: ["deal-broken-1", "deal-broken-2"] }),
+        ),
       ),
     );
     renderScreen();
@@ -257,6 +289,101 @@ describe("the deals screen", () => {
     expect(note.textContent).toContain("deal-broken-1");
     expect(note.textContent).toContain("deal-broken-2");
     expect(note.textContent).toMatch(/2 stored deals are missing/i);
+  });
+
+  it("reads the flat `items` list, whose CPMs are float dollars", async () => {
+    server.use(
+      http.get(`${API}/api/v1/deals`, () =>
+        HttpResponse.json({
+          items: [
+            {
+              deal_id: "DEMO-4A95FB54B2AD",
+              deal_type: "PD",
+              status: "proposed",
+              quote_id: "qt-bc77482c2ebd",
+              product: { product_id: "p", name: "Standard Display - ROS" },
+              pricing: {
+                base_cpm: 8.0,
+                final_cpm: 6.8,
+                currency: "USD",
+                pricing_model: "cpm",
+              },
+              terms: {
+                flight_start: "2026-10-15",
+                flight_end: "2026-11-14",
+                guaranteed: false,
+                impressions: null,
+              },
+              buyer_tier: "advertiser",
+              created_at: "2026-09-28T13:25:43.576433Z",
+              expires_at: "2026-10-28T13:25:43.576433Z",
+            },
+          ],
+        }),
+      ),
+    );
+    renderScreen();
+
+    await waitFor(() =>
+      expect(screen.getByText("DEMO-4A95FB54B2AD")).toBeInTheDocument(),
+    );
+    expect(screen.getByText(/6\.80/)).toBeInTheDocument();
+    expect(document.querySelector('[data-note="skipped"]')).toBeNull();
+  });
+
+  it("shows the export exactly as the agent sent it, even when entries are not the shape we expect", async () => {
+    let asked = "";
+    server.use(
+      http.get(`${API}/api/v1/deals/export`, ({ request }) => {
+        asked = new URL(request.url).search;
+        return HttpResponse.json({ items: [{ id: "x-1" }], count: 1 });
+      }),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("combobox", { name: "Export format" }));
+    await user.click(await screen.findByRole("option", { name: "dv360" }));
+    await user.click(screen.getByRole("combobox", { name: "Export status" }));
+    await user.click(await screen.findByRole("option", { name: "proposed" }));
+    await user.click(screen.getByRole("button", { name: "Export deals" }));
+
+    await waitFor(() => expect(document.body.textContent).toContain('"x-1"'));
+    expect(asked).toBe("?format=dv360&status=proposed");
+  });
+
+  it("falls back to the export feed when the agent has no list route", async () => {
+    server.use(
+      http.get(
+        `${API}/api/v1/deals`,
+        () => new HttpResponse(null, { status: 405 }),
+      ),
+      http.get(`${API}/api/v1/deals/export`, () =>
+        HttpResponse.json({
+          format: "generic",
+          count: 1,
+          deals: [
+            {
+              deal_id: "deal-export-1",
+              deal_type: "PD",
+              status: "confirmed",
+              product: { product_id: "p1", name: "Homepage" },
+              base_cpm: 15,
+              final_cpm: 12.5,
+              buyer_tier: "seat",
+            },
+          ],
+        }),
+      ),
+    );
+    renderScreen();
+
+    await waitFor(() =>
+      expect(screen.getByText("deal-export-1")).toBeInTheDocument(),
+    );
+    expect(document.querySelector('[data-note="from-export"]')).toBeTruthy();
+    expect(document.querySelector('[data-status="booked"]')).toBeTruthy();
+    expect(screen.getByText(/12\.50/)).toBeInTheDocument();
   });
 
   it("does not poll — the list only refetches when asked", async () => {
@@ -296,12 +423,16 @@ describe("the deals screen", () => {
 
     const user = userEvent.setup();
     renderScreen();
-    await waitFor(() => expect(screen.getByText("deal-console-demo-1")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText("deal-console-demo-1")).toBeInTheDocument(),
+    );
 
     const row = screen.getByText("deal-console-demo-1").closest("tr")!;
     await user.click(within(row).getByRole("button", { name: "Details" }));
     await waitFor(() =>
-      expect(document.querySelector('[data-block="deal-performance"]')).toBeTruthy(),
+      expect(
+        document.querySelector('[data-block="deal-performance"]'),
+      ).toBeTruthy(),
     );
 
     expect(detailCalls).toEqual([]);
@@ -310,13 +441,17 @@ describe("the deals screen", () => {
   it("marks the delivery figures as not measured", async () => {
     const user = userEvent.setup();
     renderScreen();
-    await waitFor(() => expect(screen.getByText("deal-console-demo-1")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText("deal-console-demo-1")).toBeInTheDocument(),
+    );
 
     const row = screen.getByText("deal-console-demo-1").closest("tr")!;
     await user.click(within(row).getByRole("button", { name: "Details" }));
 
     await waitFor(() =>
-      expect(document.querySelector('[data-block="deal-performance"]')).toBeTruthy(),
+      expect(
+        document.querySelector('[data-block="deal-performance"]'),
+      ).toBeTruthy(),
     );
     expect(document.body.textContent).toMatch(/not measured/i);
     expect(document.body.textContent).toMatch(/placeholder/i);
@@ -325,7 +460,9 @@ describe("the deals screen", () => {
   it("renders the lineage chain with the deal in it", async () => {
     const user = userEvent.setup();
     renderScreen();
-    await waitFor(() => expect(screen.getByText("deal-console-demo-1")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText("deal-console-demo-1")).toBeInTheDocument(),
+    );
 
     const row = screen.getByText("deal-console-demo-1").closest("tr")!;
     await user.click(within(row).getByRole("button", { name: "Details" }));
@@ -343,17 +480,26 @@ describe("the deals screen", () => {
   it("says a deal has no migrations rather than showing an empty box", async () => {
     server.use(
       http.get(`${API}/api/v1/deals/deal-console-demo-1/lineage`, () =>
-        HttpResponse.json({ ...LINEAGE, parents: [], replacements: [], chain_length: 1 }),
+        HttpResponse.json({
+          ...LINEAGE,
+          parents: [],
+          replacements: [],
+          chain_length: 1,
+        }),
       ),
     );
     const user = userEvent.setup();
     renderScreen();
-    await waitFor(() => expect(screen.getByText("deal-console-demo-1")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText("deal-console-demo-1")).toBeInTheDocument(),
+    );
 
     const row = screen.getByText("deal-console-demo-1").closest("tr")!;
     await user.click(within(row).getByRole("button", { name: "Details" }));
 
-    await waitFor(() => expect(document.querySelector('[data-state="no-lineage"]')).toBeTruthy());
+    await waitFor(() =>
+      expect(document.querySelector('[data-state="no-lineage"]')).toBeTruthy(),
+    );
   });
 
   it("degrades one panel without taking the other down", async () => {
@@ -364,12 +510,16 @@ describe("the deals screen", () => {
     );
     const user = userEvent.setup();
     renderScreen();
-    await waitFor(() => expect(screen.getByText("deal-console-demo-1")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText("deal-console-demo-1")).toBeInTheDocument(),
+    );
 
     const row = screen.getByText("deal-console-demo-1").closest("tr")!;
     await user.click(within(row).getByRole("button", { name: "Details" }));
 
-    await waitFor(() => expect(document.body.textContent).toMatch(/the agent returned 500/i));
+    await waitFor(() =>
+      expect(document.body.textContent).toMatch(/the agent returned 500/i),
+    );
     expect(document.querySelector('[data-list="lineage"]')).toBeTruthy();
   });
 
@@ -377,11 +527,17 @@ describe("the deals screen", () => {
     server.use(
       http.get(`${API}/api/v1/deals`, () =>
         // deal_id renamed upstream.
-        HttpResponse.json({ deals: [{ deal: { id: "D-X" } }], count: 1, skipped: [] }),
+        HttpResponse.json({
+          deals: [{ deal: { id: "D-X" } }],
+          count: 1,
+          skipped: [],
+        }),
       ),
     );
     renderScreen();
 
-    await waitFor(() => expect(document.body.textContent).toMatch(/unexpected response shape/i));
+    await waitFor(() =>
+      expect(document.body.textContent).toMatch(/unexpected response shape/i),
+    );
   });
 });

@@ -5,6 +5,7 @@ import Typography from "@mui/material/Typography";
 import { describe, type Result } from "../api/errors";
 import { palette } from "../theme/palette";
 import { ConfirmAction } from "./ConfirmAction";
+import { Hint } from "./Hint";
 
 const formRowSx = {
   display: "flex",
@@ -42,6 +43,7 @@ export function WriteForm({
   pending,
   last,
   onConfirm,
+  hint,
   children,
 }: {
   title: string;
@@ -52,21 +54,29 @@ export function WriteForm({
   pending: boolean;
   last: Result<unknown> | undefined;
   onConfirm: () => void;
+  /** Tooltip on the button. Only for what the label and the confirmation do not already say. */
+  hint?: ReactNode;
   children?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
 
+  const tip = blocked
+    ? "Writes are switched off. Turn them on from the connection menu to use this."
+    : hint;
+
   const actionButton = (
-    <Button
-      variant="outlined"
-      size="small"
-      data-action={action}
-      disabled={blocked || pending}
-      onClick={() => setOpen(true)}
-      sx={{ flexShrink: 0 }}
-    >
-      {pending ? "Working…" : confirmLabel}
-    </Button>
+    <Hint hint={tip}>
+      <Button
+        variant="outlined"
+        size="small"
+        data-action={action}
+        disabled={blocked || pending}
+        onClick={() => setOpen(true)}
+        sx={{ flexShrink: 0 }}
+      >
+        {pending ? "Working…" : confirmLabel}
+      </Button>
+    </Hint>
   );
 
   return (
@@ -109,5 +119,46 @@ export function WriteForm({
         }}
       />
     </Box>
+  );
+}
+
+/**
+ * The read counterpart of `WriteForm`: a button that runs straight away. A read
+ * has nothing to warn about, and a dialog in front of it teaches people to
+ * click through the ones that matter. A GET that writes upstream (`fetch-deal`
+ * and its lazy expiry) is not a read for this purpose and stays on `WriteForm`.
+ */
+export function ReadForm({
+  label,
+  action,
+  disabled = false,
+  onRun,
+  children,
+}: {
+  label: string;
+  action: string;
+  disabled?: boolean;
+  onRun: () => void;
+  children?: ReactNode;
+}) {
+  const button = (
+    <Button
+      variant="outlined"
+      size="small"
+      data-action={action}
+      disabled={disabled}
+      onClick={onRun}
+      sx={{ flexShrink: 0 }}
+    >
+      {label}
+    </Button>
+  );
+  return children ? (
+    <FormRow>
+      {children}
+      {button}
+    </FormRow>
+  ) : (
+    button
   );
 }
