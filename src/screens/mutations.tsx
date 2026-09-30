@@ -1,7 +1,6 @@
 import { useState, type ReactNode } from "react";
 import Autocomplete from "@mui/material/Autocomplete";
 import Box from "@mui/material/Box";
-import Divider from "@mui/material/Divider";
 import Button from "@mui/material/Button";
 import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
@@ -113,7 +112,13 @@ function newKey(): string {
   return crypto.randomUUID();
 }
 
-/** One thing an operator can do, said in a title and a line, above its controls. */
+/**
+ * One thing an operator can do, laid out like a settings row: what it is on the
+ * left, its controls on the right. Stacked controls under a title read as a
+ * wall of identical form rows; two columns lets the eye run down the titles
+ * alone and only stop at the control it wants. It collapses to one column on a
+ * narrow screen.
+ */
 function ActionBlock({
   title,
   description,
@@ -124,14 +129,28 @@ function ActionBlock({
   children?: ReactNode;
 }) {
   return (
-    <Box>
-      <Typography variant="body2" sx={{ fontWeight: 600 }}>
-        {title}
-      </Typography>
-      <Typography variant="caption" component="p" color="text.secondary" sx={{ mb: 1 }}>
-        {description}
-      </Typography>
-      {children}
+    <Box
+      sx={{
+        display: "grid",
+        gridTemplateColumns: { xs: "1fr", md: "minmax(180px, 260px) minmax(0, 1fr)" },
+        columnGap: 4,
+        rowGap: 1,
+        alignItems: "start",
+        py: 2,
+        borderTop: `1px solid ${palette.line}`,
+        "&:first-of-type": { borderTop: 0, pt: 0 },
+        "&:last-of-type": { pb: 0 },
+      }}
+    >
+      <Box>
+        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+          {title}
+        </Typography>
+        <Typography variant="caption" component="p" color="text.secondary">
+          {description}
+        </Typography>
+      </Box>
+      <Box sx={{ minWidth: 0 }}>{children}</Box>
     </Box>
   );
 }
@@ -1025,7 +1044,15 @@ export function OrderTransitionWrites({
   );
 }
 
-export function DealWrites({ dealId }: { dealId?: string }) {
+export function DealWrites({
+  dealId,
+  group,
+}: {
+  dealId?: string;
+  /** Show one group of a deal's actions, for a tabbed panel. Omitted: all of them. */
+  group?: "distribute" | "manage";
+}) {
+  const show = (g: "distribute" | "manage") => !group || group === g;
   const { writesEnabled } = useCredential();
   const [proposalId, setProposalId] = useState("");
   const [quoteId, setQuoteId] = useState("");
@@ -1089,7 +1116,7 @@ export function DealWrites({ dealId }: { dealId?: string }) {
     // deal lives in that deal's own panel, where the id is already known, so
     // there is no free-text "Deal id" box to fill in or get wrong.
     return (
-      <Stack spacing={2.5} divider={<Divider flexItem />}>
+      <Box>
         <ActionBlock
           title="Generate from a proposal"
           description="Turns an accepted proposal into a deal."
@@ -1171,140 +1198,161 @@ export function DealWrites({ dealId }: { dealId?: string }) {
             <CuratorPicker value={curatorId} onChange={setCuratorId} disabled={blocked} />
           </WriteForm>
         </ActionBlock>
-      </Stack>
+      </Box>
     );
   }
 
   return (
-    <Stack spacing={2.5} divider={<Divider flexItem />}>
-      <ActionBlock
-        title="Notify a buyer"
-        description="Sends this deal to a buyer agent at the URL below."
-      >
-        <WriteForm
-          title="Push this deal to a buyer?"
-          confirmLabel="Push"
-          action="push-deal"
-          blocked={blocked}
-          pending={push.pending}
-          last={push.last}
-          onConfirm={() => void push.run({ deal_id: id, buyer_urls: [buyerUrl] })}
-          consequence="Notifies the named buyer URLs. A retry may notify twice."
-        >
-          <TipField hint="Full URL of the buyer agent to notify, for example https://buyer.example. Only this one URL is sent." size="small" label="Buyer URL" value={buyerUrl} onChange={(e) => setBuyerUrl(e.target.value)} disabled={blocked} sx={{ minWidth: 240 }} />
-        </WriteForm>
-      </ActionBlock>
-      <ActionBlock
-        title="Send to an SSP"
-        description="Pushes this deal to one SSP connector. Leave the name empty to use the agent's default."
-      >
-        <WriteForm
-          title="Distribute this deal to an SSP?"
-          confirmLabel="Distribute"
-          action="distribute-deal"
-          blocked={blocked}
-          pending={dist.pending}
-          last={dist.last}
-          onConfirm={() =>
-            void dist.run({ deal_id: id, ...(ssp ? { ssp_name: ssp } : {}) })
-          }
-          consequence="A retry may push a second copy to the SSP."
-        >
-          <SspNameField label="SSP name (optional)" hint="Name of the SSP connector to send the deal to. Pick a known one or type another; an unknown name is a 400 that lists the configured ones." value={ssp} onChange={setSsp} disabled={blocked} />
-        </WriteForm>
-      </ActionBlock>
-      <ActionBlock
-        title="Cancel or edit notes"
-        description="Cancels this deal, or replaces its notes. Cancelling cannot be undone from this console."
-      >
-        <WriteForm
-          title={`Run a bulk ${bulkAction}?`}
-          confirmLabel={bulkAction === "cancel" ? "Cancel deal" : "Update notes"}
-          action="bulk-deals"
-          blocked={blocked}
-          pending={bulk.pending}
-          // Reported below instead: a 200 here can still carry failures.
-          last={bulk.last?.kind === "ok" ? undefined : bulk.last}
-          onConfirm={() =>
-            void bulk.run({
-              operations: [
-                {
-                  action: bulkAction,
-                  deal_id: id,
-                  ...(bulkNotes.trim() ? { notes: bulkNotes.trim() } : {}),
-                },
-              ],
-            })
-          }
-          consequence={
-            bulkAction === "cancel"
-              ? "Sets the deal to cancelled, with the notes as the cancel reason. Nothing in this console reverses it."
-              : "Replaces the deal's notes and stamps updated_at. Partial success is possible in a batch: re-read the list rather than repeating it blindly."
-          }
-        >
-          <FormFields>
-            <EnumSelect
-              hint="Cancel ends the deal; update replaces its notes."
-              label="Action"
-              value={bulkAction}
-              options={DEAL_EDIT_ACTIONS}
-              onChange={(v) => v && setBulkAction(v)}
-              disabled={blocked}
-              sx={{ minWidth: 140 }}
-            />
-            <TipField hint="Optional notes. For update they replace the deal's notes; for cancel they become the cancel reason." size="small" label="Notes (optional)" value={bulkNotes} onChange={(e) => setBulkNotes(e.target.value)} disabled={blocked} />
-          </FormFields>
-        </WriteForm>
-        {bulk.last?.kind === "ok" && (
-          <Box sx={{ mt: 1 }} data-block="bulk-results">
-            {bulk.last.data.results.map((r) => (
-              <Typography
-                key={r.index}
-                variant="body2"
-                sx={{ color: r.success ? undefined : palette.error }}
-                data-state={r.success ? "op-ok" : "op-failed"}
+    <Box>
+      {show("distribute") && (
+        <>
+            <ActionBlock
+              title="Notify a buyer"
+              description="Sends this deal to a buyer agent at the URL below."
+            >
+              <WriteForm
+                title="Push this deal to a buyer?"
+                confirmLabel="Push"
+                action="push-deal"
+                blocked={blocked}
+                pending={push.pending}
+                last={push.last}
+                onConfirm={() => void push.run({ deal_id: id, buyer_urls: [buyerUrl] })}
+                consequence="Notifies the named buyer URLs. A retry may notify twice."
               >
-                {r.action} {r.deal_id ?? ""}: {r.success ? "done" : r.error ?? "failed"}
-              </Typography>
-            ))}
+                <TipField hint="Full URL of the buyer agent to notify, for example https://buyer.example. Only this one URL is sent." size="small" label="Buyer URL" value={buyerUrl} onChange={(e) => setBuyerUrl(e.target.value)} disabled={blocked} sx={{ minWidth: 240 }} />
+              </WriteForm>
+            </ActionBlock>
+            <ActionBlock
+              title="Send to an SSP"
+              description="Pushes this deal to one SSP connector. Leave the name empty to use the agent's default."
+            >
+              <WriteForm
+                title="Distribute this deal to an SSP?"
+                confirmLabel="Distribute"
+                action="distribute-deal"
+                blocked={blocked}
+                pending={dist.pending}
+                last={dist.last}
+                onConfirm={() =>
+                  void dist.run({ deal_id: id, ...(ssp ? { ssp_name: ssp } : {}) })
+                }
+                consequence="A retry may push a second copy to the SSP."
+              >
+                <SspNameField label="SSP name (optional)" hint="Name of the SSP connector to send the deal to. Pick a known one or type another; an unknown name is a 400 that lists the configured ones." value={ssp} onChange={setSsp} disabled={blocked} />
+              </WriteForm>
+            </ActionBlock>
+        </>
+      )}
+      {show("manage") && (
+        <>
+            <ActionBlock
+              title="Replace with a new deal"
+              description="Creates a successor deal and links the two in this deal's lineage."
+            >
+              <WriteForm
+                title="Migrate this deal?"
+                confirmLabel="Migrate"
+                action="migrate-deal"
+                blocked={blocked}
+                pending={migrate.pending}
+                last={migrate.last}
+                onConfirm={() => void migrate.run({ id, ...(reason ? { reason } : {}) })}
+                consequence="Mints a successor and records lineage. A retry may mint a second successor."
+              >
+                <TipField hint="Optional reason recorded with the migration." size="small" label="Reason (optional)" value={reason} onChange={(e) => setReason(e.target.value)} disabled={blocked} />
+              </WriteForm>
+            </ActionBlock>
+          {/* Kept apart: these two cannot be taken back from this console. */}
+          <Box
+            data-block="danger-zone"
+            sx={{ mt: 2, p: 2, border: `1px solid ${palette.error}`, borderRadius: 1 }}
+          >
+            <Typography
+              variant="overline"
+              component="p"
+              sx={{ color: palette.error, fontWeight: 700, lineHeight: 1.5, mb: 0.5 }}
+            >
+              Danger zone
+            </Typography>
+                <ActionBlock
+                  title="Cancel or edit notes"
+                  description="Cancels this deal, or replaces its notes. Cancelling cannot be undone from this console."
+                >
+                  <WriteForm
+                    title={`Run a bulk ${bulkAction}?`}
+                    confirmLabel={bulkAction === "cancel" ? "Cancel deal" : "Update notes"}
+                    action="bulk-deals"
+                    blocked={blocked}
+                    pending={bulk.pending}
+                    // Reported below instead: a 200 here can still carry failures.
+                    last={bulk.last?.kind === "ok" ? undefined : bulk.last}
+                    onConfirm={() =>
+                      void bulk.run({
+                        operations: [
+                          {
+                            action: bulkAction,
+                            deal_id: id,
+                            ...(bulkNotes.trim() ? { notes: bulkNotes.trim() } : {}),
+                          },
+                        ],
+                      })
+                    }
+                    consequence={
+                      bulkAction === "cancel"
+                        ? "Sets the deal to cancelled, with the notes as the cancel reason. Nothing in this console reverses it."
+                        : "Replaces the deal's notes and stamps updated_at. Partial success is possible in a batch: re-read the list rather than repeating it blindly."
+                    }
+                  >
+                    <FormFields>
+                      <EnumSelect
+                        hint="Cancel ends the deal; update replaces its notes."
+                        label="Action"
+                        value={bulkAction}
+                        options={DEAL_EDIT_ACTIONS}
+                        onChange={(v) => v && setBulkAction(v)}
+                        disabled={blocked}
+                        sx={{ minWidth: 140 }}
+                      />
+                      <TipField hint="Optional notes. For update they replace the deal's notes; for cancel they become the cancel reason." size="small" label="Notes (optional)" value={bulkNotes} onChange={(e) => setBulkNotes(e.target.value)} disabled={blocked} />
+                    </FormFields>
+                  </WriteForm>
+                  {bulk.last?.kind === "ok" && (
+                    <Box sx={{ mt: 1 }} data-block="bulk-results">
+                      {bulk.last.data.results.map((r) => (
+                        <Typography
+                          key={r.index}
+                          variant="body2"
+                          sx={{ color: r.success ? undefined : palette.error }}
+                          data-state={r.success ? "op-ok" : "op-failed"}
+                        >
+                          {r.action} {r.deal_id ?? ""}: {r.success ? "done" : r.error ?? "failed"}
+                        </Typography>
+                      ))}
+                    </Box>
+                  )}
+                </ActionBlock>
+                <ActionBlock
+                  title="Deprecate"
+                  description="Marks this deal deprecated. A reason is required."
+                >
+                  <WriteForm
+                    title="Deprecate this deal?"
+                    confirmLabel="Deprecate"
+                    action="deprecate-deal"
+                    blocked={blocked || !deprecateReason.trim()}
+                    pending={deprecate.pending}
+                    last={deprecate.last}
+                    onConfirm={() => void deprecate.run({ id, reason: deprecateReason.trim() })}
+                    consequence="Marks the deal deprecated. A second deprecate may 409 depending on status."
+                  >
+                    <TipField hint="Why the deal is being deprecated. Required; sent to the agent with the request." size="small" label="Reason" value={deprecateReason} onChange={(e) => setDeprecateReason(e.target.value)} disabled={blocked} />
+                  </WriteForm>
+                </ActionBlock>
           </Box>
-        )}
-      </ActionBlock>
-      <ActionBlock
-        title="Replace with a new deal"
-        description="Creates a successor deal and links the two in this deal's lineage."
-      >
-        <WriteForm
-          title="Migrate this deal?"
-          confirmLabel="Migrate"
-          action="migrate-deal"
-          blocked={blocked}
-          pending={migrate.pending}
-          last={migrate.last}
-          onConfirm={() => void migrate.run({ id, ...(reason ? { reason } : {}) })}
-          consequence="Mints a successor and records lineage. A retry may mint a second successor."
-        >
-          <TipField hint="Optional reason recorded with the migration." size="small" label="Reason (optional)" value={reason} onChange={(e) => setReason(e.target.value)} disabled={blocked} />
-        </WriteForm>
-      </ActionBlock>
-      <ActionBlock
-        title="Deprecate"
-        description="Marks this deal deprecated. A reason is required."
-      >
-        <WriteForm
-          title="Deprecate this deal?"
-          confirmLabel="Deprecate"
-          action="deprecate-deal"
-          blocked={blocked || !deprecateReason.trim()}
-          pending={deprecate.pending}
-          last={deprecate.last}
-          onConfirm={() => void deprecate.run({ id, reason: deprecateReason.trim() })}
-          consequence="Marks the deal deprecated. A second deprecate may 409 depending on status."
-        >
-          <TipField hint="Why the deal is being deprecated. Required; sent to the agent with the request." size="small" label="Reason" value={deprecateReason} onChange={(e) => setDeprecateReason(e.target.value)} disabled={blocked} />
-        </WriteForm>
-      </ActionBlock>
-    </Stack>
+        </>
+      )}
+    </Box>
   );
 }
 
@@ -1313,7 +1361,7 @@ export function DealLookups({ dealId }: { dealId: string }) {
   const [loadRecord, setLoadRecord] = useState(false);
 
   return (
-    <Stack spacing={2.5} divider={<Divider flexItem />} data-block="deal-lookups">
+    <Box data-block="deal-lookups">
       <ActionBlock
         title="Full record"
         description="Reads this deal's stored record. The agent may expire a proposed deal when you read it."
@@ -1337,7 +1385,7 @@ export function DealLookups({ dealId }: { dealId: string }) {
       <ActionBlock title="SSP diagnostics" description="Connector diagnostics for this deal at one SSP.">
         <SspTrouble dealId={dealId} />
       </ActionBlock>
-    </Stack>
+    </Box>
   );
 }
 
@@ -1350,7 +1398,7 @@ export function DealsExportLookup() {
   const [asked, setAsked] = useState<{ format: string; status: string } | undefined>();
   return (
     <ActionBlock
-      title="Export every deal"
+      title="All stored deals"
       description="Reads all stored deals in one unpaginated pass, reshaped for one DSP's import. Not a write, but heavy."
     >
       <ReadForm label="Export deals" action="export-deals" onRun={() => setAsked({ format, status })}>

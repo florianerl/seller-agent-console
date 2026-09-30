@@ -10,6 +10,16 @@ import Tooltip from "@mui/material/Tooltip";
  * goes (the writes-off message clears once a form is fillable) must not change
  * the tree, or the control remounts under the operator's cursor. An empty
  * title makes MUI show nothing.
+ *
+ * `describeChild`: by default MUI copies the tip into `aria-label` on the
+ * wrapper, which gives a non-interactive span an accessible name that repeats
+ * the field's own words and makes a label query match twice. As a description
+ * it is announced after the control's real label instead.
+ *
+ * `describeChild`: by default MUI copies the tip into `aria-label` on the
+ * wrapper, which gives a non-interactive span an accessible name that repeats
+ * the field's own words and makes a label query match twice. As a description
+ * it is announced after the control's real label instead.
  */
 export function Hint({
   hint,
@@ -22,7 +32,7 @@ export function Hint({
   block?: boolean | undefined;
 }) {
   return (
-    <Tooltip title={hint ?? ""} enterDelay={400} placement="top-start" arrow>
+    <Tooltip title={hint ?? ""} describeChild enterDelay={400} placement="top-start" arrow>
       <span style={{ display: block ? "block" : "inline-block" }}>{children}</span>
     </Tooltip>
   );

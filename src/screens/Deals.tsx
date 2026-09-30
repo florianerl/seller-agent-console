@@ -11,6 +11,8 @@ import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
+import Tab from "@mui/material/Tab";
+import Tabs from "@mui/material/Tabs";
 import Typography from "@mui/material/Typography";
 import { dealLineage, dealPerformance, deals, type Money } from "../api/endpoints";
 import { describe } from "../api/errors";
@@ -68,7 +70,16 @@ function dollars(amount: number): string {
  * which would make the agent write (it runs a lazy expiry check and persists
  * the outcome).
  */
+const TABS = [
+  { key: "overview", label: "Overview" },
+  { key: "lookup", label: "Look up" },
+  { key: "distribute", label: "Send" },
+  { key: "manage", label: "Manage" },
+] as const;
+type TabKey = (typeof TABS)[number]["key"];
+
 function Detail({ dealId }: { dealId: string }) {
+  const [tab, setTab] = useState<TabKey>("overview");
   const perf = useResource(`deal-perf:${dealId}`, (c, signal) =>
     dealPerformance(c, dealId, signal),
   );
@@ -79,83 +90,100 @@ function Detail({ dealId }: { dealId: string }) {
   const chain = lineage.data;
 
   return (
-    <Stack spacing={2} sx={{ py: 1 }}>
-      <Box>
-        <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 0.5 }}>Delivery</Typography>
-        {/* The agent returns placeholder figures on this route until a real ad
-            server is wired in. Rendering a fill rate as delivery truth would be
-            the most misleading thing this console could do, so the caveat sits
-            above the numbers rather than in a footnote. */}
-        <Typography variant="body2" sx={{ color: palette.warningText, mb: 1 }}>
-          Not measured. The agent returns placeholder delivery figures here until
-          an ad server is connected — read them as a shape, not as data.
-        </Typography>
-        {perf.loading && !perf.data ? (
-          <Skeleton height={24} />
-        ) : !perf.data ? (
-          <Typography variant="body2" color="text.secondary">
-            {perf.result ? describe(perf.result) : "no delivery data"}
-          </Typography>
-        ) : (
-          <FieldGrid data-block="deal-performance" min={120}>
-            <Field label="Served">{perf.data.impressions_served.toLocaleString()}</Field>
-            <Field label="Available">{perf.data.impressions_available.toLocaleString()}</Field>
-            <Field label="Fill rate">{`${Math.round(perf.data.fill_rate * 100)}%`}</Field>
-            <Field label="Win rate">{`${Math.round(perf.data.win_rate * 100)}%`}</Field>
-            <Field label="Avg CPM">{dollars(perf.data.avg_cpm_actual)}</Field>
-            <Field label="Pacing">{perf.data.delivery_pacing.replace(/_/g, " ")}</Field>
-          </FieldGrid>
-        )}
-      </Box>
-
-      <Box>
-        <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 0.5 }}>Lineage</Typography>
-        {lineage.loading && !chain ? (
-          <Skeleton height={20} />
-        ) : !chain ? (
-          <Typography variant="body2" color="text.secondary">
-            {lineage.result ? describe(lineage.result) : "no lineage"}
-          </Typography>
-        ) : chain.parents.length === 0 && chain.replacements.length === 0 ? (
-          <Typography variant="body2" color="text.secondary" data-state="no-lineage">
-            No migrations — this deal has no predecessor and no replacement.
-          </Typography>
-        ) : (
-          <Box component="ol" sx={{ m: 0, pl: 0, listStyle: "none" }} data-list="lineage">
-            {[
-              ...chain.parents.map((link) => ({ link, role: "predecessor" })),
-              {
-                link: { deal_id: chain.deal_id, status: chain.status, reason: null },
-                role: "this deal",
-              },
-              ...chain.replacements.map((link) => ({ link, role: "replacement" })),
-            ].map(({ link, role }, index) => (
-              <Box
-                component="li"
-                key={`${link.deal_id}-${index}`}
-                sx={{ display: "flex", gap: 1.5, alignItems: "baseline", py: 0.5 }}
-              >
-                <Box sx={{ fontFamily: "monospace", fontSize: 12 }}>{link.deal_id}</Box>
-                <Box sx={{ fontSize: 12, color: palette.textSecondary }}>
-                  {/* Lineage reports the stored status, not the wire one, so it
-                      is left unstyled rather than dressed as the row's chip. */}
-                  {link.status} · {role}
-                  {link.reason ? ` — ${link.reason}` : ""}
-                </Box>
-              </Box>
-            ))}
+    <Box sx={{ py: 1 }}>
+      <Tabs
+        value={tab}
+        onChange={(_, next: TabKey) => setTab(next)}
+        aria-label={`Deal ${dealId}`}
+        sx={{ mb: 2, borderBottom: `1px solid ${palette.line}` }}
+      >
+        {TABS.map((t) => (
+          <Tab key={t.key} value={t.key} label={t.label} id={`deal-tab-${t.key}`} aria-controls={`deal-panel-${t.key}`} />
+        ))}
+      </Tabs>
+      {/* Every panel stays mounted and is only hidden: switching tabs must not
+          throw away a half-typed form or a lookup result. */}
+      <Box role="tabpanel" id="deal-panel-overview" aria-labelledby="deal-tab-overview" hidden={tab !== "overview"}>
+        <Stack spacing={2}>
+          <Box>
+            <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 0.5 }}>Delivery</Typography>
+            {/* The agent returns placeholder figures on this route until a real ad
+                server is wired in. Rendering a fill rate as delivery truth would be
+                the most misleading thing this console could do, so the caveat sits
+                above the numbers rather than in a footnote. */}
+            <Typography variant="body2" sx={{ color: palette.warningText, mb: 1 }}>
+              Not measured. The agent returns placeholder delivery figures here until
+              an ad server is connected — read them as a shape, not as data.
+            </Typography>
+            {perf.loading && !perf.data ? (
+              <Skeleton height={24} />
+            ) : !perf.data ? (
+              <Typography variant="body2" color="text.secondary">
+                {perf.result ? describe(perf.result) : "no delivery data"}
+              </Typography>
+            ) : (
+              <FieldGrid data-block="deal-performance" min={120}>
+                <Field label="Served">{perf.data.impressions_served.toLocaleString()}</Field>
+                <Field label="Available">{perf.data.impressions_available.toLocaleString()}</Field>
+                <Field label="Fill rate">{`${Math.round(perf.data.fill_rate * 100)}%`}</Field>
+                <Field label="Win rate">{`${Math.round(perf.data.win_rate * 100)}%`}</Field>
+                <Field label="Avg CPM">{dollars(perf.data.avg_cpm_actual)}</Field>
+                <Field label="Pacing">{perf.data.delivery_pacing.replace(/_/g, " ")}</Field>
+              </FieldGrid>
+            )}
           </Box>
-        )}
+
+          <Box>
+            <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 0.5 }}>Lineage</Typography>
+            {lineage.loading && !chain ? (
+              <Skeleton height={20} />
+            ) : !chain ? (
+              <Typography variant="body2" color="text.secondary">
+                {lineage.result ? describe(lineage.result) : "no lineage"}
+              </Typography>
+            ) : chain.parents.length === 0 && chain.replacements.length === 0 ? (
+              <Typography variant="body2" color="text.secondary" data-state="no-lineage">
+                No migrations — this deal has no predecessor and no replacement.
+              </Typography>
+            ) : (
+              <Box component="ol" sx={{ m: 0, pl: 0, listStyle: "none" }} data-list="lineage">
+                {[
+                  ...chain.parents.map((link) => ({ link, role: "predecessor" })),
+                  {
+                    link: { deal_id: chain.deal_id, status: chain.status, reason: null },
+                    role: "this deal",
+                  },
+                  ...chain.replacements.map((link) => ({ link, role: "replacement" })),
+                ].map(({ link, role }, index) => (
+                  <Box
+                    component="li"
+                    key={`${link.deal_id}-${index}`}
+                    sx={{ display: "flex", gap: 1.5, alignItems: "baseline", py: 0.5 }}
+                  >
+                    <Box sx={{ fontFamily: "monospace", fontSize: 12 }}>{link.deal_id}</Box>
+                    <Box sx={{ fontSize: 12, color: palette.textSecondary }}>
+                      {/* Lineage reports the stored status, not the wire one, so it
+                          is left unstyled rather than dressed as the row's chip. */}
+                      {link.status} · {role}
+                      {link.reason ? ` — ${link.reason}` : ""}
+                    </Box>
+                  </Box>
+                ))}
+              </Box>
+            )}
+          </Box>
+        </Stack>
       </Box>
-      <Box>
-        <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 1.5 }}>Read more about this deal</Typography>
+      <Box role="tabpanel" id="deal-panel-lookup" aria-labelledby="deal-tab-lookup" hidden={tab !== "lookup"}>
         <DealLookups dealId={dealId} />
       </Box>
-      <Box>
-        <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 1.5 }}>Change this deal</Typography>
-        <DealWrites dealId={dealId} />
+      <Box role="tabpanel" id="deal-panel-distribute" aria-labelledby="deal-tab-distribute" hidden={tab !== "distribute"}>
+        <DealWrites dealId={dealId} group="distribute" />
       </Box>
-    </Stack>
+      <Box role="tabpanel" id="deal-panel-manage" aria-labelledby="deal-tab-manage" hidden={tab !== "manage"}>
+        <DealWrites dealId={dealId} group="manage" />
+      </Box>
+    </Box>
   );
 }
 

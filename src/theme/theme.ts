@@ -89,6 +89,20 @@ export const theme = createTheme({
   shape: { borderRadius: 4 },
 
   components: {
+    // MUI's default tip is translucent grey with 11px white text, which axe
+    // measures against whatever it happens to float over. Opaque brand black
+    // has a fixed ratio the contrast guard can assert.
+    MuiTooltip: {
+      styleOverrides: {
+        tooltip: {
+          backgroundColor: palette.brandBlack,
+          color: palette.paper,
+          fontSize: 12,
+          lineHeight: 1.4,
+        },
+        arrow: { color: palette.brandBlack },
+      },
+    },
     MuiButton: {
       defaultProps: {
         disableElevation: true,
