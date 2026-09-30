@@ -44,7 +44,6 @@ import {
   postNegotiationMessage,
   pushDeal,
   putRateCard,
-  quoteById,
   registerCurator,
   removeRegisteredAgent,
   reviewChangeRequest,
@@ -498,40 +497,6 @@ export function CatalogWrites() {
         consequence="Not idempotent: each trigger kicks ProductSetupFlow again."
       />
     </Stack>
-  );
-}
-
-export function QuoteLookup() {
-  const [id, setId] = useState("");
-  const [submitted, setSubmitted] = useState<string | undefined>();
-
-  return (
-    <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }} data-block="quote-lookup">
-      <WritesNotice what="Fetching a quote enforces its TTL and may persist status=expired." />
-      <FormRow>
-        <TextField size="small" label="Quote id" value={id} onChange={(e) => setId(e.target.value)} />
-        <WriteForm
-          title="Re-read this quote?"
-          confirmLabel="Fetch quote"
-          action="fetch-quote"
-          blocked={!id.trim()}
-          pending={false}
-          last={undefined}
-          onConfirm={() => setSubmitted(id.trim())}
-          consequence="This GET can expire the stored quote. Re-reading an already-expired quote is a no-op besides the 410."
-        />
-      </FormRow>
-      {submitted && <QuoteBody quoteId={submitted} />}
-    </Paper>
-  );
-}
-
-function QuoteBody({ quoteId }: { quoteId: string }) {
-  const quote = useResource(`quote:${quoteId}`, (c, signal) => quoteById(c, quoteId, signal));
-  return (
-    <Box component="pre" sx={{ mt: 1, fontSize: 12, overflow: "auto" }}>
-      {quote.data ? JSON.stringify(quote.data, null, 2) : quote.result ? describe(quote.result) : ""}
-    </Box>
   );
 }
 

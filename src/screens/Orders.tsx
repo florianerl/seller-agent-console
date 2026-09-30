@@ -469,9 +469,19 @@ function RecordedOnOrder({ order, applied }: { order: Order; applied: readonly C
           </Box>
         </Field>
         <Field label="Quote">
-          <Box component="span" sx={{ fontFamily: "monospace", fontSize: 12 }}>
-            {order.quote_id || "—"}
-          </Box>
+          {order.quote_id ? (
+            <Link
+              href={`#/quotes?id=${encodeURIComponent(order.quote_id)}`}
+              sx={{ fontFamily: "monospace", fontSize: 12 }}
+              data-link="quote"
+            >
+              {order.quote_id}
+            </Link>
+          ) : (
+            <Box component="span" sx={{ fontFamily: "monospace", fontSize: 12 }}>
+              —
+            </Box>
+          )}
         </Field>
         {fromCreator.map(([k, v]) => (
           <Field key={k} label={words(k)}>

@@ -118,6 +118,26 @@ describe("the orders screen", () => {
     );
   });
 
+  it("links an order's quote id to the Quotes screen without fetching it", async () => {
+    const user = userEvent.setup();
+    const { seen } = recordRequests();
+    server.use(
+      http.get(`${API}/api/v1/orders`, () =>
+        HttpResponse.json({ orders: [{ ...ORDERS[0], quote_id: "qt-abc123" }], count: 1 }),
+      ),
+      http.get(`${API}/api/v1/orders/ORD-ABC123/audit`, () => HttpResponse.json(AUDIT)),
+      http.get(`${API}/api/v1/change-requests`, () =>
+        HttpResponse.json({ change_requests: [], count: 0 }),
+      ),
+    );
+    renderScreen();
+    await expand(user, "ORD-ABC123");
+
+    const link = document.querySelector('[data-link="quote"]');
+    expect(link).toHaveAttribute("href", "#/quotes?id=qt-abc123");
+    expect(seen.some((r) => r.includes("/quotes/"))).toBe(false);
+  });
+
   it("lists orders with their status", async () => {
     renderScreen();
     await waitFor(() => expect(screen.getByText("ORD-ABC123")).toBeInTheDocument());

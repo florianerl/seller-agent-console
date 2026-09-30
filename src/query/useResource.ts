@@ -23,7 +23,15 @@ export type ResourceHandle<T> = Resource<T> & {
 export function useResource<T>(
   name: string,
   fetcher: (connection: Connection, signal?: AbortSignal) => Promise<Result<T>>,
-  options: { refreshInterval?: number } = {},
+  options: {
+    refreshInterval?: number;
+    /**
+     * Turn off the focus/reconnect refetch the provider enables by default.
+     * For a GET that writes upstream, where the operator confirmed one fetch
+     * and a tab switch must not quietly issue another.
+     */
+    manual?: boolean;
+  } = {},
 ): ResourceHandle<T> {
   const { credential, connection } = useCredential();
 
@@ -55,6 +63,7 @@ export function useResource<T>(
     () => fetcher(connection as Connection),
     {
       refreshInterval: options.refreshInterval ?? 0,
+      ...(options.manual ? { revalidateOnFocus: false, revalidateOnReconnect: false } : {}),
       compare: sameResult,
       onSuccess: (value) => {
         if (value.kind === "ok") setCheckedAt(value.fetchedAt);

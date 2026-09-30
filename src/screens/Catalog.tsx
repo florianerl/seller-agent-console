@@ -12,6 +12,7 @@ import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
+import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
 import {
   checkAvails,
@@ -39,7 +40,7 @@ import { CADENCE } from "../query/cadence";
 import { useResource } from "../query/useResource";
 import { palette } from "../theme/palette";
 import { FormRow } from "../components/WriteForm";
-import { CatalogWrites, CreateQuoteWrite, PackageLookup, QuoteLookup } from "./mutations";
+import { CatalogWrites, CreateQuoteWrite, PackageLookup } from "./mutations";
 import { useCredential } from "../credentials/context";
 
 function money(amount: Money | null | undefined): string {
@@ -755,7 +756,9 @@ export default function CatalogScreen() {
         <CatalogWrites />
         <PackageLookup />
         <CreateQuoteWrite />
-        <QuoteLookup />
+        <Typography variant="body2" color="text.secondary" data-note="quote-lookup-moved">
+          Look up an existing quote on <Link href="#/quotes">Quotes</Link>.
+        </Typography>
       </ScreenSection>
       </PageHeader>
     </section>
