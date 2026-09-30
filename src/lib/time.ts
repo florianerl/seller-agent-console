@@ -97,3 +97,14 @@ export function elapsed(iso: string | null | undefined, now: number = Date.now()
   if (hours < 48) return `${hours} h`;
   return `${Math.floor(hours / 24)} d`;
 }
+
+/**
+ * Hours and minutes only, for a card's "as of" beside data read seconds ago:
+ * the date is today's, and seconds are noise the eye has to skip.
+ */
+export function timeOfDay(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const at = parse(iso);
+  if (!at) return iso;
+  return new Intl.DateTimeFormat(undefined, { timeStyle: "short" }).format(at);
+}

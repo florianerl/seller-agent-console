@@ -29,6 +29,7 @@ import {
   type ChangeRequestList,
   type Order,
   type OrderAudit,
+  type OrderList,
 } from "../api/endpoints";
 import { describe, type Result } from "../api/errors";
 import {
@@ -50,6 +51,7 @@ import { DataPanel, FreshnessNote } from "../components/DataPanel";
 import { EnumSelect } from "../components/EnumSelect";
 import { Field, FieldGrid } from "../components/Field";
 import { GatedNotice } from "../components/GatedNotice";
+import { InfoTip } from "../components/InfoTip";
 import { PageHeader } from "../components/PageHeader";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { StatusChip } from "../components/StatusChip";
@@ -60,13 +62,67 @@ import {
   OrderCreateWrite,
   OrderTransitionWrites,
 } from "./mutations";
-import { elapsed, plural, stamp } from "../lib/time";
+import { elapsed, plural, stamp, timeOfDay } from "../lib/time";
 import { CADENCE } from "../query/cadence";
 import type { ResourceHandle } from "../query/useResource";
 import { useResource } from "../query/useResource";
 import { palette } from "../theme/palette";
 
-const sectionHeading = { fontSize: 12, fontWeight: 600, mb: 0.75 } as const;
+/**
+ * One section of an open order: a titled, outlined card. The row used to be
+ * one grey column of 12px headings and captions, where nothing separated
+ * one concern from the next; a card per concern gives the eye edges to stop
+ * at. `info` holds the background a reader wants once, `meta` the section's
+ * freshness.
+ */
+function DetailCard({
+  title,
+  info,
+  infoNote,
+  meta,
+  children,
+  block,
+}: {
+  title: ReactNode;
+  info?: string | undefined;
+  /** `data-note` on the (i), for the tests that read what it explains. */
+  infoNote?: string;
+  meta?: ReactNode;
+  children: ReactNode;
+  block: string;
+}) {
+  return (
+    <Paper variant="outlined" sx={{ p: 2, borderColor: palette.line }} data-block={block}>
+      <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 1.25, minHeight: 28 }} flexWrap="wrap" useFlexGap>
+        <Typography component="h3" sx={{ fontSize: 14, fontWeight: 600 }}>
+          {title}
+        </Typography>
+        {info && <InfoTip title={info} {...(infoNote ? { "data-note": infoNote } : {})} />}
+        <Box sx={{ flex: 1 }} />
+        {meta}
+      </Stack>
+      {children}
+    </Paper>
+  );
+}
+
+function Freshness({ resource, what }: { resource: ResourceHandle<unknown>; what: string }) {
+  return (
+    <Typography
+      variant="caption"
+      data-freshness={resource.freshness}
+      sx={{ color: resource.freshness === "stale" ? palette.warningText : palette.textSecondary }}
+    >
+      {resource.freshness === "stale"
+        ? `couldn't refresh — last ${what} shown`
+        : resource.asOf !== undefined
+          ? `as of ${timeOfDay(new Date(resource.asOf).toISOString())}`
+          : resource.loading
+            ? "reading…"
+            : ""}
+    </Typography>
+  );
+}
 
 function asOf(at: number | undefined): string {
   return at === undefined ? "" : `as of ${stamp(new Date(at).toISOString())}`;
@@ -394,7 +450,7 @@ function StateMap({ status, visited }: { status: string; visited: ReadonlySet<st
         style={{ listStyle: "none", margin: 0, padding: 0 }}
       >
         <Typography component="li" variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>
-          Off the path:
+          Other outcomes
         </Typography>
         {offPath.map((s) => {
           const kind = kindOf(s);
@@ -484,7 +540,6 @@ function Timeline({ audit }: { audit: ResourceHandle<OrderAudit> }) {
   }
 
   const { transitions, created_at } = audit.data;
-  const anySystem = transitions.some((t) => actorKind(t.actor) === "system");
   const connector = { "& .MuiStepConnector-line": { borderColor: palette.line, minHeight: 12 } } as const;
   const label = (primary: ReactNode, when: string | null) => (
     <Stack direction="row" spacing={1.5} alignItems="baseline" flexWrap="wrap" useFlexGap>
@@ -500,9 +555,8 @@ function Timeline({ audit }: { audit: ResourceHandle<OrderAudit> }) {
           <StepLabel icon={<TimelineDot tone="start" />}>
             {label(<>Created, in <strong>draft</strong></>, created_at)}
           </StepLabel>
-          <StepContent sx={{ borderColor: palette.line, fontSize: 12, color: palette.textSecondary }}>
-            Creating an order writes no transition.
-          </StepContent>
+          {/* An empty content block keeps the connector running to the next dot. */}
+          <StepContent sx={{ borderColor: palette.line }} />
         </Step>
         {transitions.map((t, index) => (
           <Step key={t.transition_id ?? `${t.timestamp}-${index}`} completed expanded>
@@ -532,15 +586,8 @@ function Timeline({ audit }: { audit: ResourceHandle<OrderAudit> }) {
         ))}
       </Stepper>
       {transitions.length === 0 && (
-        <Typography variant="body2" color="text.secondary" data-state="no-transitions">
-          No transitions recorded yet.
-        </Typography>
-      )}
-      {anySystem && (
-        <Typography variant="caption" color="text.secondary" data-note="system-actor">
-          &ldquo;system&rdquo; is what the agent records when a move names no actor — which includes
-          every move made with the MCP <code>transition_order</code> tool, from Claude Code or any
-          other client, because that tool sends none.
+        <Typography variant="caption" color="text.secondary" data-state="no-transitions">
+          No moves recorded yet.
         </Typography>
       )}
     </Stack>
@@ -571,8 +618,7 @@ function RecordedOnOrder({ order, applied }: { order: Order; applied: readonly C
 
   return (
     <Box data-block="order-metadata">
-      <Typography sx={sectionHeading}>Recorded on the order</Typography>
-      <FieldGrid min={160}>
+      <FieldGrid min={150}>
         <Field label="Source">{origin(order)}</Field>
         <Field label="Deal">
           <Box component="span" sx={{ fontFamily: "monospace", fontSize: 12 }}>
@@ -600,14 +646,11 @@ function RecordedOnOrder({ order, applied }: { order: Order; applied: readonly C
           </Field>
         ))}
       </FieldGrid>
-      <Box sx={{ mt: 1.5 }} data-list="applied-values">
-        <Typography sx={{ fontSize: 12, color: palette.textSecondary, mb: 0.5 }}>
-          Written by applied change requests
-        </Typography>
+      <Box sx={{ mt: 2, pt: 1.5, borderTop: `1px solid ${palette.line}` }} data-list="applied-values">
+        <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 0.5 }}>Applied changes</Typography>
         {fromChanges.length === 0 ? (
-          <Typography variant="body2" color="text.secondary" data-state="no-applied-values">
-            Nothing yet. Applying a change request writes its values here; it never changes the
-            order&apos;s status.
+          <Typography variant="caption" color="text.secondary" data-state="no-applied-values">
+            None yet.
           </Typography>
         ) : (
           fromChanges.map(([k, v]) => (
@@ -708,22 +751,17 @@ function OrderChangeRequests({
     status !== "cancelled" && rows.some((cr) => cr.change_type === "cancellation" && cr.status === "applied");
 
   return (
-    <Box data-block="order-change-requests">
-      <Stack direction="row" spacing={1.5} alignItems="baseline" sx={{ mb: 0.5 }} flexWrap="wrap" useFlexGap>
-        <Typography sx={{ ...sectionHeading, mb: 0 }}>{plural(rows.length, "change request")}</Typography>
-        <Link href="#/change-requests" sx={{ fontSize: 12 }}>
-          All change requests
-        </Link>
-        <Button
-          size="small"
-          onClick={() => setRaising((v) => !v)}
-          aria-expanded={raising}
-          data-action="raise-change-request"
-          disabled={!writesEnabled}
-        >
-          {raising ? "Close" : "Request a change"}
-        </Button>
-      </Stack>
+    <DetailCard
+      block="order-change-requests"
+      title={
+        <>
+          Change requests{" "}
+          <Chip size="small" label={rows.length} sx={{ height: 20, ml: 0.5, fontSize: 11 }} data-count={rows.length} />
+        </>
+      }
+      info="A pending request reaches no approval queue and has no MCP tool, so it is reviewed here or on the Change requests screen. The name given on a review is stored as claimed; the agent does not verify it. Applying writes the request's values into the order's metadata, never its status."
+      meta={list.data ? <Freshness resource={list} what="list" /> : null}
+    >
 
       {cancelNote && (
         <Typography variant="body2" sx={{ color: palette.warningText, mb: 1 }} data-state="cancel-prompt">
@@ -744,8 +782,8 @@ function OrderChangeRequests({
           {list.result ? describe(list.result) : ""}
         </Typography>
       ) : rows.length === 0 ? (
-        <Typography variant="body2" color="text.secondary" data-state="no-change-requests">
-          No change requests recorded yet.
+        <Typography variant="caption" color="text.secondary" data-state="no-change-requests">
+          None yet.
         </Typography>
       ) : (
         <Box data-list="change-requests">
@@ -756,23 +794,27 @@ function OrderChangeRequests({
           ))}
         </Box>
       )}
-      {list.data && (
-        <Typography
-          variant="caption"
-          component="p"
-          data-freshness={list.freshness}
-          sx={{ mt: 0.5, color: list.freshness === "stale" ? palette.warningText : palette.textSecondary }}
-        >
-          {list.freshness === "stale" ? "couldn't refresh — showing the last list received" : asOf(list.asOf)}
-        </Typography>
-      )}
-
       <Collapse in={raising} unmountOnExit>
-        <Box sx={{ mt: 1.5 }}>
+        <Box sx={{ mt: 1.5, pt: 1.5, borderTop: `1px solid ${palette.line}` }}>
           <ChangeRequestCreate orderId={order.order_id} order={{ status, deal_id: order.deal_id }} />
         </Box>
       </Collapse>
-    </Box>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 1.5 }} flexWrap="wrap" useFlexGap>
+        <Button
+          size="small"
+          variant="outlined"
+          onClick={() => setRaising((v) => !v)}
+          aria-expanded={raising}
+          data-action="raise-change-request"
+          disabled={!writesEnabled}
+        >
+          {raising ? "Close" : "Request a change"}
+        </Button>
+        <Link href="#/change-requests" sx={{ fontSize: 12 }}>
+          All change requests
+        </Link>
+      </Stack>
+    </DetailCard>
   );
 }
 
@@ -810,15 +852,15 @@ function GamCheck({ dealId, onFinding }: { dealId: string; onFinding: (finding: 
           Asking GAM…
         </Typography>
       ) : (
-        <Typography variant="body2" data-state={scan.result?.kind === "ok" ? "gam-checked" : "gam-failed"}>
-          GAM: {finding}{" "}
-          <Box component="span" sx={{ color: palette.textSecondary, fontSize: 12 }}>
-            {scan.asOf !== undefined ? asOf(scan.asOf) : ""}
-          </Box>{" "}
+        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+          <Typography variant="body2" data-state={scan.result?.kind === "ok" ? "gam-checked" : "gam-failed"}>
+            GAM: {finding}
+          </Typography>
+          <Freshness resource={scan} what="answer" />
           <Button size="small" onClick={scan.refresh} disabled={scan.validating} data-action="gam-recheck">
             Check again
           </Button>
-        </Typography>
+        </Stack>
       )}
     </Box>
   );
@@ -829,6 +871,7 @@ const CHECKABLE = new Set(["approved", "in_progress", "syncing", "booked", "unbo
 
 function OrderDetail({
   order,
+  list,
   changes,
   actor,
   onActorChange,
@@ -837,6 +880,7 @@ function OrderDetail({
   onAccepted,
 }: {
   order: Order;
+  list: ResourceHandle<OrderList>;
   changes: ResourceHandle<ChangeRequestList>;
   actor: OrderActor;
   onActorChange: (actor: OrderActor) => void;
@@ -865,85 +909,116 @@ function OrderDetail({
     return <GatedNotice what="Order audit trail" result={audit.result} />;
   }
 
+  const anySystem = transitions.some((t) => actorKind(t.actor) === "system");
+
   return (
-    <Stack spacing={2.5} data-block="order-detail">
-      <Box>
-        <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 0.75 }} flexWrap="wrap" useFlexGap>
+    // Measured as a container: the row's width follows the table, not the
+    // viewport, so the two-column switch has to key off the row itself.
+    <Box data-block="order-detail" sx={{ containerType: "inline-size" }}>
+      <Stack spacing={2}>
+        <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap>
           <StatusChip status={status} />
-          <Typography variant="body2" data-block="stage">
+          <Typography variant="body1" sx={{ fontWeight: 500 }} data-block="stage">
             {isOrderStatus(status) ? STAGE[status] : "This console does not recognise this status."}
           </Typography>
-        </Stack>
-        <Typography variant="body2" color="text.secondary" data-block="moved-by">
-          {isOrderStatus(status) ? `${MOVED_BY[status]} ` : ""}In this status for {elapsed(since)},
-          since {stamp(since)}.
-        </Typography>
-        <Typography
-          variant="caption"
-          component="p"
-          data-freshness={audit.freshness}
-          sx={{ mt: 0.5, color: audit.freshness === "stale" ? palette.warningText : palette.textSecondary }}
-        >
-          {audit.freshness === "stale"
-            ? "couldn't refresh — showing the last audit received"
-            : audit.data
-              ? asOf(audit.asOf)
-              : audit.loading
-                ? "reading the order…"
-                : ""}
-          {drifted && ` · the list still shows ${words(order.status)}; the agent now reports ${words(status)}`}
-        </Typography>
-      </Box>
-
-      <StateMap status={status} visited={visited} />
-
-      <Box>
-        <Typography sx={sectionHeading}>Next step</Typography>
-        {CHECKABLE.has(status) && order.deal_id && (
-          <Box sx={{ mb: 1.5 }}>
-            {checkGam ? (
-              <GamCheck dealId={order.deal_id} onFinding={setGam} />
-            ) : (
-              <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-                <Button size="small" variant="outlined" onClick={() => setCheckGam(true)} data-action="gam-check">
-                  Check the ad server
-                </Button>
-                <Typography variant="caption" color="text.secondary">
-                  Asks GAM whether it has an order for deal {order.deal_id}. The steps below only record a
-                  status; this is how to see whether the ad server agrees. Spends GAM API quota.
-                </Typography>
-              </Stack>
-            )}
-          </Box>
-        )}
-        {audit.data || audit.result ? (
-          <OrderTransitionWrites
-            orderId={order.order_id}
-            status={status}
-            actor={actor}
-            onActorChange={onActorChange}
-            onStale={() => {
-              audit.refresh();
-              onListStale();
-            }}
-            accepted={accepted}
-            onAccepted={onAccepted}
-            {...(gam ? { adServer: gam } : {})}
+          <Box sx={{ flex: 1 }} />
+          <Typography variant="caption" color="text.secondary">
+            in this status for {elapsed(since)}
+          </Typography>
+          <InfoTip
+            title={`${isOrderStatus(status) ? `${MOVED_BY[status]} ` : ""}In this status since ${stamp(since)}.`}
+            data-block="moved-by"
           />
-        ) : (
-          <Skeleton height={32} />
+        </Stack>
+        {drifted && (
+          <Typography variant="body2" sx={{ color: palette.warningText }} data-state="drifted">
+            The list still shows {words(order.status)}; the agent now reports {words(status)}.
+          </Typography>
         )}
-      </Box>
 
-      <Box>
-        <Typography sx={sectionHeading}>Timeline</Typography>
-        <Timeline audit={audit} />
-      </Box>
+        <StateMap status={status} visited={visited} />
 
-      <RecordedOnOrder order={order} applied={applied} />
+        <Box
+          sx={{
+            display: "grid",
+            gap: 2,
+            gridTemplateColumns: "minmax(0, 1fr)",
+            "@container (min-width: 880px)": { gridTemplateColumns: "minmax(0, 3fr) minmax(0, 2fr)" },
+            alignItems: "start",
+          }}
+        >
+          <Stack spacing={2}>
+            <DetailCard
+              block="next-step"
+              title="Next step"
+              info="From Claude Code, the same move is the MCP tool transition_order. It records the actor as “system” whoever calls it, and cannot read this timeline back."
+              infoNote="mcp"
+            >
+              {CHECKABLE.has(status) && order.deal_id && (
+                <Box sx={{ mb: 2 }}>
+                  {checkGam ? (
+                    <GamCheck dealId={order.deal_id} onFinding={setGam} />
+                  ) : (
+                    <Stack direction="row" spacing={0.5} alignItems="center">
+                      <Button size="small" onClick={() => setCheckGam(true)} data-action="gam-check">
+                        Check the ad server
+                      </Button>
+                      <InfoTip
+                        title={`Asks GAM whether it has an order for deal ${order.deal_id}. The steps below only record a status; this is how to see whether the ad server agrees. Each check spends GAM API quota.`}
+                      />
+                    </Stack>
+                  )}
+                </Box>
+              )}
+              {audit.data || audit.result ? (
+                <OrderTransitionWrites
+                  orderId={order.order_id}
+                  status={status}
+                  actor={actor}
+                  onActorChange={onActorChange}
+                  onStale={() => {
+                    audit.refresh();
+                    onListStale();
+                  }}
+                  accepted={accepted}
+                  onAccepted={onAccepted}
+                  {...(gam ? { adServer: gam } : {})}
+                />
+              ) : (
+                <Skeleton height={32} />
+              )}
+            </DetailCard>
 
-      <OrderChangeRequests order={order} status={status} list={changes} />
-    </Stack>
+            <DetailCard
+              block="timeline"
+              title="Timeline"
+              info={
+                anySystem
+                  ? "“system” is what the agent records when a move names no actor — which includes every move made with the MCP transition_order tool, from Claude Code or any other client, because that tool sends none."
+                  : undefined
+              }
+              infoNote="system-actor"
+              meta={<Freshness resource={audit} what="audit" />}
+            >
+              <Timeline audit={audit} />
+            </DetailCard>
+          </Stack>
+
+          <Stack spacing={2}>
+            <DetailCard
+              block="record"
+              title="Order record"
+              info="What the agent stores beside the status. Applying a change request merges its values in here, and a _changed_ key per field; it never changes the order's status."
+              meta={<Freshness resource={list} what="list" />}
+            >
+              <RecordedOnOrder order={order} applied={applied} />
+            </DetailCard>
+
+            <OrderChangeRequests order={order} status={status} list={changes} />
+          </Stack>
+        </Box>
+      </Stack>
+    </Box>
   );
 }
 
@@ -1148,6 +1223,7 @@ export default function OrdersScreen() {
                         <TableCell colSpan={8} sx={{ backgroundColor: palette.ground, py: 2.5, px: 3 }}>
                           <OrderDetail
                             order={order}
+                            list={list}
                             changes={changes}
                             actor={actor}
                             onActorChange={(next) => {

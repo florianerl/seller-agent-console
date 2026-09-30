@@ -918,6 +918,11 @@ export function OrderTransitionWrites({
   const button = (step: NextStep) => (
     <WriteForm
       key={step.to}
+      // One obvious move: the forward step is the filled button, and ways
+      // off the path are quiet text, so the one a hurried operator hits is
+      // never the one that cancels.
+      variant={step.kind === "forward" ? "contained" : "text"}
+      color={step.kind === "forward" ? "primary" : "inherit"}
       title={`${step.label}?`}
       confirmLabel={step.label}
       action={`transition-order:${step.to}`}
@@ -954,32 +959,7 @@ export function OrderTransitionWrites({
   const other = steps.filter((s) => s.kind !== "forward");
 
   return (
-    <Stack spacing={1.5} data-block="order-transitions">
-      <Stack direction="row" spacing={3} flexWrap="wrap" useFlexGap alignItems="flex-start">
-        {forward.length > 0 && (
-          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap data-group="forward">
-            {forward.map(button)}
-          </Stack>
-        )}
-        {other.length > 0 && (
-          <Stack
-            direction="row"
-            spacing={1}
-            flexWrap="wrap"
-            useFlexGap
-            alignItems="center"
-            data-group="off-path"
-            sx={forward.length > 0 ? { pl: 3, borderLeft: `1px solid ${palette.line}` } : undefined}
-          >
-            {forward.length > 0 && (
-              <Typography variant="caption" color="text.secondary">
-                or
-              </Typography>
-            )}
-            {other.map(button)}
-          </Stack>
-        )}
-      </Stack>
+    <Stack spacing={2} data-block="order-transitions">
       <FormRow>
         <EnumSelect
           hint="Who the move is recorded as: a person, an agent or the system. Not verified by the agent."
@@ -1013,14 +993,28 @@ export function OrderTransitionWrites({
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           disabled={!writesEnabled}
-          sx={{ flex: "1 1 240px" }}
+          sx={{ flex: "1 1 200px" }}
         />
       </FormRow>
-      <Typography variant="caption" color="text.secondary" data-note="actor">
-        {/* The API stores whatever actor it is sent and verifies none of it. */}
-        {writesEnabled && !claim && `Enter ${actor.kind === "human" ? "your name" : "the agent's id"} to enable these moves. `}
-        The actor is recorded as claimed; the agent does not verify it.
-      </Typography>
+      {/* Who and why come first so the buttons read as the last step; the
+          fields' own hints say the agent verifies neither. */}
+      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap alignItems="center">
+        {forward.length > 0 && (
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap data-group="forward">
+            {forward.map(button)}
+          </Stack>
+        )}
+        {other.length > 0 && (
+          <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap data-group="off-path">
+            {other.map(button)}
+          </Stack>
+        )}
+      </Stack>
+      {writesEnabled && !claim && (
+        <Typography variant="caption" color="text.secondary" data-note="actor">
+          Enter {actor.kind === "human" ? "your name" : "the agent's id"} to enable these moves.
+        </Typography>
+      )}
       {accepted && (
         <Typography variant="body2" data-state="write-ok">
           The agent accepted the move to {words(accepted)}.
@@ -1033,10 +1027,6 @@ export function OrderTransitionWrites({
           Nothing was applied; the order has been re-read.
         </Typography>
       )}
-      <Typography variant="caption" color="text.secondary" data-note="mcp">
-        From Claude Code, the same move is the MCP tool <code>transition_order</code>. It records
-        the actor as &ldquo;system&rdquo; whoever calls it, and cannot read this timeline back.
-      </Typography>
     </Stack>
   );
 }
@@ -2121,7 +2111,9 @@ export function ChangeRequestReviewWrites({
           </Hint>
         )}
       </FormRow>
-      {showReview && (
+      {/* In an order row the card already says it once; repeating it under
+          every request is what made that column read as clutter. */}
+      {showReview && !compact && (
         <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75 }}>
           Name is stored as given; the agent does not verify it
         </Typography>

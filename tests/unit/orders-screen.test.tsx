@@ -324,7 +324,8 @@ describe("the orders screen", () => {
     expect(transitionButtons()).toEqual(["approved", "rejected", "cancelled"]);
     expect(within(detail).getByText(/waiting for a human decision/i)).toBeInTheDocument();
     // No approval queue lists orders; the screen has to say so.
-    expect(detail.querySelector('[data-block="moved-by"]')?.textContent).toMatch(/no approval queue/i);
+    // Held in an (i) whose accessible name is the explanation itself.
+    expect(detail.querySelector('[data-block="moved-by"]')?.getAttribute("aria-label")).toMatch(/no approval queue/i);
     const map = detail.querySelector('[data-block="state-map"]')!;
     expect(map.querySelector('[data-node="current"]')?.getAttribute("data-state-node")).toBe("pending_approval");
     expect([...map.querySelectorAll('[data-node="next"]')].map((n) => n.getAttribute("data-state-node")).sort()).toEqual(
@@ -365,7 +366,7 @@ describe("the orders screen", () => {
     const detail = await expand(user, "ORD-ABC123");
 
     await waitFor(() => expect(transitionButtons()).toEqual(["in_progress", "cancelled"]));
-    expect(detail.textContent).toMatch(/the list still shows pending approval/);
+    expect(detail.textContent).toMatch(/the list still shows pending approval/i);
   });
 
   it("keeps the moves disabled, and sends nothing, while writes are off", async () => {
@@ -956,10 +957,10 @@ describe("moving an order, round two", () => {
     await expand(user, "ORD-ABC123");
 
     await waitFor(() =>
-      expect(document.querySelector('[data-note="system-actor"]')?.textContent).toMatch(/transition_order/),
+      expect(document.querySelector('[data-note="system-actor"]')?.getAttribute("aria-label")).toMatch(/transition_order/),
     );
     expect(document.querySelector('[data-actor-kind="agent"]')).toBeTruthy();
-    expect(document.querySelector('[data-note="mcp"]')?.textContent).toMatch(/transition_order/);
+    expect(document.querySelector('[data-note="mcp"]')?.getAttribute("aria-label")).toMatch(/transition_order/);
   });
 });
 
