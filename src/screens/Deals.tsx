@@ -26,7 +26,7 @@ import { palette } from "../theme/palette";
 import { useCredential } from "../credentials/context";
 import { FormRow } from "../components/WriteForm";
 import { TipField } from "../components/TipField";
-import { DealLookups, DealWrites, Panel } from "./mutations";
+import { DealLookups, DealsExportLookup, DealWrites, Panel } from "./mutations";
 
 /**
  * The shared wire vocabulary, taken from the agent's DealStatus enum. The list
@@ -147,8 +147,14 @@ function Detail({ dealId }: { dealId: string }) {
           </Box>
         )}
       </Box>
-      <DealLookups dealId={dealId} />
-      <DealWrites dealId={dealId} />
+      <Box>
+        <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 1.5 }}>Read more about this deal</Typography>
+        <DealLookups dealId={dealId} />
+      </Box>
+      <Box>
+        <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 1.5 }}>Change this deal</Typography>
+        <DealWrites dealId={dealId} />
+      </Box>
     </Stack>
   );
 }
@@ -172,8 +178,11 @@ export default function DealsScreen() {
       <PageHeader title="Deals" subtitle="Every buyer's deals, as the agent has them stored.">
 
       {!writesEnabled && <ReadOnlyNotice what="Booking, pushing, or migrating a deal" />}
-      <Panel title="Deal writes">
+      <Panel title="Create a deal">
         <DealWrites />
+      </Panel>
+      <Panel title="Export">
+        <DealsExportLookup />
       </Panel>
 
       {list.freshness === "blocked" ? (

@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import Autocomplete from "@mui/material/Autocomplete";
 import Box from "@mui/material/Box";
+import Divider from "@mui/material/Divider";
 import Button from "@mui/material/Button";
 import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
@@ -105,6 +106,34 @@ import { palette } from "../theme/palette";
 function newKey(): string {
   return crypto.randomUUID();
 }
+
+/** One thing an operator can do, said in a title and a line, above its controls. */
+function ActionBlock({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children?: ReactNode;
+}) {
+  return (
+    <Box>
+      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+        {title}
+      </Typography>
+      <Typography variant="caption" component="p" color="text.secondary" sx={{ mb: 1 }}>
+        {description}
+      </Typography>
+      {children}
+    </Box>
+  );
+}
+
+// Bulk "create" is left out: it books a deal from a quote, which "Book from a
+// quote" does with an idempotency key, and it is the one bulk action that takes
+// no deal id, so it never fitted a form that acts on a deal.
+const DEAL_EDIT_ACTIONS = BULK_DEAL_ACTIONS.filter((o) => o.value !== "create");
 
 function Panel({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -982,17 +1011,17 @@ export function DealWrites({ dealId }: { dealId?: string }) {
   const { writesEnabled } = useCredential();
   const [proposalId, setProposalId] = useState("");
   const [quoteId, setQuoteId] = useState("");
-  const [id, setId] = useState(dealId ?? "");
   const [buyerUrl, setBuyerUrl] = useState("https://buyer.example");
   const [ssp, setSsp] = useState("");
   const [curatorId, setCuratorId] = useState("");
   const [reason, setReason] = useState("");
+  const [deprecateReason, setDeprecateReason] = useState("");
+  const id = dealId ?? "";
   const [productId, setProductId] = useState("");
   // Short code: the template route maps PG/PD/PA and 400s on anything else,
   // which is what the old "preferred_deal" default got every time.
   const [dealType, setDealType] = useState<DealTypeCode>("PD");
   const [bulkAction, setBulkAction] = useState<BulkDealAction>("cancel");
-  const [bulkQuote, setBulkQuote] = useState("");
   const [bulkNotes, setBulkNotes] = useState("");
 
   const gen = useMutation<{ proposal_id: string }, unknown>((c, a) => generateDeal(c, a), {
@@ -1037,72 +1066,144 @@ export function DealWrites({ dealId }: { dealId?: string }) {
 
   const blocked = !writesEnabled;
 
+  if (!dealId) {
+    // Nothing here acts on an existing deal: these forms make one. Acting on a
+    // deal lives in that deal's own panel, where the id is already known, so
+    // there is no free-text "Deal id" box to fill in or get wrong.
+    return (
+      <Stack spacing={2.5} divider={<Divider flexItem />}>
+        <ActionBlock
+          title="Generate from a proposal"
+          description="Turns an accepted proposal into a deal."
+        >
+          <WriteForm
+            title="Generate a deal from a proposal?"
+            confirmLabel="Generate deal"
+            action="generate-deal"
+            blocked={blocked || !proposalId.trim()}
+            pending={gen.pending}
+            last={gen.last}
+            onConfirm={() => void gen.run({ proposal_id: proposalId.trim() })}
+            consequence="POST /deals from an accepted proposal. Not the same route as booking a quote. Not idempotent."
+          >
+            <TipField hint="Id of an accepted proposal. Copy it from the Proposals screen." size="small" label="Proposal id" value={proposalId} onChange={(e) => setProposalId(e.target.value)} disabled={blocked} />
+          </WriteForm>
+        </ActionBlock>
+        <ActionBlock
+          title="Book from a quote"
+          description="Binds a quote you already have into a deal. This is the commit point."
+        >
+          <WriteForm
+            title="Book a deal from a quote?"
+            confirmLabel="Book deal"
+            action="book-deal"
+            blocked={blocked || !quoteId.trim()}
+            pending={book.pending}
+            last={book.last}
+            onConfirm={() =>
+              void book.run({ quote_id: quoteId.trim(), idempotency_key: newKey() })
+            }
+            consequence="The commit point: the quote becomes bound. Same idempotency key + body returns the same deal; a different body 409s."
+          >
+            <TipField hint="Id of the quote to book, from the Quotes screen. Quotes expire after 24 hours." size="small" label="Quote id" value={quoteId} onChange={(e) => setQuoteId(e.target.value)} disabled={blocked} />
+          </WriteForm>
+        </ActionBlock>
+        <ActionBlock
+          title="Create from a template"
+          description="Prices a product and books a deal for it in one step."
+        >
+          <WriteForm
+            title="Create a deal from a template?"
+            confirmLabel="From template"
+            action="deal-from-template"
+            blocked={blocked || !productId.trim()}
+            pending={fromTpl.pending}
+            last={fromTpl.last}
+            onConfirm={() => void fromTpl.run({ deal_type: dealType, product_id: productId.trim() })}
+            consequence="Prices and auto-books. 422 if max CPM is below floor. Not a replay-safe mint without an idempotency story on this route."
+          >
+            <FormFields>
+              <TipField hint="Id of the product to price. Copy it from the Catalog screen." size="small" label="Product id" value={productId} onChange={(e) => setProductId(e.target.value)} disabled={blocked} />
+              <EnumSelect
+                hint="Deal type for the template: PG, PD or PA. The route rejects anything else with a 400."
+                label="Deal type"
+                value={dealType}
+                options={DEAL_TYPES}
+                onChange={(v) => v && setDealType(v)}
+                disabled={blocked}
+                sx={{ minWidth: 220 }}
+              />
+            </FormFields>
+          </WriteForm>
+        </ActionBlock>
+        <ActionBlock
+          title="Create a curated deal"
+          description="Makes a deal on behalf of a registered curator."
+        >
+          <WriteForm
+            title="Create a curated deal?"
+            confirmLabel="Curated deal"
+            action="curated-deal"
+            blocked={blocked || !curatorId.trim()}
+            pending={curated.pending}
+            last={curated.last}
+            onConfirm={() => void curated.run({ curator_id: curatorId.trim() })}
+            consequence="Not idempotent: each call mints another curated deal."
+          >
+            <TipField hint="Id of the curator the deal is created for. Use an id registered under Curators." size="small" label="Curator id" value={curatorId} onChange={(e) => setCuratorId(e.target.value)} disabled={blocked} />
+          </WriteForm>
+        </ActionBlock>
+      </Stack>
+    );
+  }
+
   return (
-    <Stack spacing={2}>
-      <WriteForm
-        title="Generate a deal from a proposal?"
-        confirmLabel="Generate deal"
-        action="generate-deal"
-        blocked={blocked || !proposalId.trim()}
-        pending={gen.pending}
-        last={gen.last}
-        onConfirm={() => void gen.run({ proposal_id: proposalId.trim() })}
-        consequence="POST /deals from an accepted proposal. Not the same route as booking a quote. Not idempotent."
+    <Stack spacing={2.5} divider={<Divider flexItem />}>
+      <ActionBlock
+        title="Notify a buyer"
+        description="Sends this deal to a buyer agent at the URL below."
       >
-        <TipField hint="Id of an accepted proposal. Copy it from the Proposals screen." size="small" label="Proposal id" value={proposalId} onChange={(e) => setProposalId(e.target.value)} disabled={blocked} />
-      </WriteForm>
-      <WriteForm
-        title="Book a deal from a quote?"
-        confirmLabel="Book deal"
-        action="book-deal"
-        blocked={blocked || !quoteId.trim()}
-        pending={book.pending}
-        last={book.last}
-        onConfirm={() =>
-          void book.run({ quote_id: quoteId.trim(), idempotency_key: newKey() })
-        }
-        consequence="The commit point: the quote becomes bound. Same idempotency key + body returns the same deal; a different body 409s."
+        <WriteForm
+          title="Push this deal to a buyer?"
+          confirmLabel="Push"
+          action="push-deal"
+          blocked={blocked}
+          pending={push.pending}
+          last={push.last}
+          onConfirm={() => void push.run({ deal_id: id, buyer_urls: [buyerUrl] })}
+          consequence="Notifies the named buyer URLs. A retry may notify twice."
+        >
+          <TipField hint="Full URL of the buyer agent to notify, for example https://buyer.example. Only this one URL is sent." size="small" label="Buyer URL" value={buyerUrl} onChange={(e) => setBuyerUrl(e.target.value)} disabled={blocked} sx={{ minWidth: 240 }} />
+        </WriteForm>
+      </ActionBlock>
+      <ActionBlock
+        title="Send to an SSP"
+        description="Pushes this deal to one SSP connector. Leave the name empty to use the agent's default."
       >
-        <TipField hint="Id of the quote to book, from the Quotes screen. Quotes expire after 24 hours." size="small" label="Quote id" value={quoteId} onChange={(e) => setQuoteId(e.target.value)} disabled={blocked} />
-      </WriteForm>
-      <WriteForm
-        title="Create a deal from a template?"
-        confirmLabel="From template"
-        action="deal-from-template"
-        blocked={blocked || !productId.trim()}
-        pending={fromTpl.pending}
-        last={fromTpl.last}
-        onConfirm={() => void fromTpl.run({ deal_type: dealType, product_id: productId.trim() })}
-        consequence="Prices and auto-books. 422 if max CPM is below floor. Not a replay-safe mint without an idempotency story on this route."
+        <WriteForm
+          title="Distribute this deal to an SSP?"
+          confirmLabel="Distribute"
+          action="distribute-deal"
+          blocked={blocked}
+          pending={dist.pending}
+          last={dist.last}
+          onConfirm={() =>
+            void dist.run({ deal_id: id, ...(ssp ? { ssp_name: ssp } : {}) })
+          }
+          consequence="A retry may push a second copy to the SSP."
+        >
+          <SspNameField label="SSP name (optional)" hint="Name of the SSP connector to send the deal to. Pick a known one or type another; an unknown name is a 400 that lists the configured ones." value={ssp} onChange={setSsp} disabled={blocked} />
+        </WriteForm>
+      </ActionBlock>
+      <ActionBlock
+        title="Cancel or edit notes"
+        description="Cancels this deal, or replaces its notes. Cancelling cannot be undone from this console."
       >
-        <FormFields>
-          <TipField hint="Id of the product to price. Copy it from the Catalog screen." size="small" label="Product id" value={productId} onChange={(e) => setProductId(e.target.value)} disabled={blocked} />
-          <EnumSelect
-            hint="Deal type for the template: PG, PD or PA. The route rejects anything else with a 400."
-            label="Deal type"
-            value={dealType}
-            options={DEAL_TYPES}
-            onChange={(v) => v && setDealType(v)}
-            disabled={blocked}
-            sx={{ minWidth: 220 }}
-          />
-        </FormFields>
-      </WriteForm>
-      {/* One deal id feeds every form from here down. It used to sit inside
-          the bulk form, which left it unclear that push, distribute, migrate
-          and deprecate read it too. */}
-      <Box data-block="deal-target">
-        <TipField hint="The deal that bulk update and cancel, push, distribute, migrate and deprecate act on. Copy it from the Deals screen." size="small" label="Deal id" value={id} onChange={(e) => setId(e.target.value)} disabled={blocked} />
-        <Typography variant="caption" component="p" color="text.secondary" sx={{ mt: 0.5 }}>
-          Bulk update and cancel, push, distribute, migrate and deprecate all act on this deal.
-        </Typography>
-      </Box>
-      <Box>
         <WriteForm
           title={`Run a bulk ${bulkAction}?`}
-          confirmLabel={`Bulk ${bulkAction}`}
+          confirmLabel={bulkAction === "cancel" ? "Cancel deal" : "Update notes"}
           action="bulk-deals"
-          blocked={blocked || (bulkAction === "create" ? !bulkQuote.trim() : !id.trim())}
+          blocked={blocked}
           pending={bulk.pending}
           // Reported below instead: a 200 here can still carry failures.
           last={bulk.last?.kind === "ok" ? undefined : bulk.last}
@@ -1111,35 +1212,28 @@ export function DealWrites({ dealId }: { dealId?: string }) {
               operations: [
                 {
                   action: bulkAction,
-                  ...(bulkAction === "create"
-                    ? { quote_id: bulkQuote.trim() }
-                    : { deal_id: id.trim() }),
+                  deal_id: id,
                   ...(bulkNotes.trim() ? { notes: bulkNotes.trim() } : {}),
                 },
               ],
             })
           }
           consequence={
-            bulkAction === "create"
-              ? "Books a deal from the quote and marks the quote booked. Not idempotent: a retry books a second deal if the first landed."
-              : bulkAction === "cancel"
-                ? "Sets the deal to cancelled, with the notes as the cancel reason. Nothing in this console reverses it."
-                : "Replaces the deal's notes and stamps updated_at. Partial success is possible in a batch: re-read the list rather than repeating it blindly."
+            bulkAction === "cancel"
+              ? "Sets the deal to cancelled, with the notes as the cancel reason. Nothing in this console reverses it."
+              : "Replaces the deal's notes and stamps updated_at. Partial success is possible in a batch: re-read the list rather than repeating it blindly."
           }
         >
           <FormFields>
             <EnumSelect
-              hint="What the bulk call does to the deal: create books from a quote, cancel cancels it, update replaces its notes."
-              label="Bulk action"
+              hint="Cancel ends the deal; update replaces its notes."
+              label="Action"
               value={bulkAction}
-              options={BULK_DEAL_ACTIONS}
+              options={DEAL_EDIT_ACTIONS}
               onChange={(v) => v && setBulkAction(v)}
               disabled={blocked}
               sx={{ minWidth: 140 }}
             />
-            {bulkAction === "create" && (
-              <TipField hint="Id of the quote to book a deal from. Quotes expire after 24 hours." size="small" label="Quote id" value={bulkQuote} onChange={(e) => setBulkQuote(e.target.value)} disabled={blocked} />
-            )}
             <TipField hint="Optional notes. For update they replace the deal's notes; for cancel they become the cancel reason." size="small" label="Notes (optional)" value={bulkNotes} onChange={(e) => setBulkNotes(e.target.value)} disabled={blocked} />
           </FormFields>
         </WriteForm>
@@ -1157,91 +1251,86 @@ export function DealWrites({ dealId }: { dealId?: string }) {
             ))}
           </Box>
         )}
-      </Box>
-      <WriteForm
-        title="Push this deal to a buyer?"
-        confirmLabel="Push"
-        action="push-deal"
-        blocked={blocked || !id.trim()}
-        pending={push.pending}
-        last={push.last}
-        onConfirm={() => void push.run({ deal_id: id.trim(), buyer_urls: [buyerUrl] })}
-        consequence="Notifies the named buyer URLs. A retry may notify twice."
+      </ActionBlock>
+      <ActionBlock
+        title="Replace with a new deal"
+        description="Creates a successor deal and links the two in this deal's lineage."
       >
-        <TipField hint="Full URL of the buyer agent to notify, for example https://buyer.example. Only this one URL is sent." size="small" label="Buyer URL" value={buyerUrl} onChange={(e) => setBuyerUrl(e.target.value)} disabled={blocked} sx={{ minWidth: 240 }} />
-      </WriteForm>
-      <WriteForm
-        title="Distribute this deal to an SSP?"
-        confirmLabel="Distribute"
-        action="distribute-deal"
-        blocked={blocked || !id.trim()}
-        pending={dist.pending}
-        last={dist.last}
-        onConfirm={() =>
-          void dist.run({ deal_id: id.trim(), ...(ssp ? { ssp_name: ssp } : {}) })
-        }
-        consequence="A retry may push a second copy to the SSP."
+        <WriteForm
+          title="Migrate this deal?"
+          confirmLabel="Migrate"
+          action="migrate-deal"
+          blocked={blocked}
+          pending={migrate.pending}
+          last={migrate.last}
+          onConfirm={() => void migrate.run({ id, ...(reason ? { reason } : {}) })}
+          consequence="Mints a successor and records lineage. A retry may mint a second successor."
+        >
+          <TipField hint="Optional reason recorded with the migration." size="small" label="Reason (optional)" value={reason} onChange={(e) => setReason(e.target.value)} disabled={blocked} />
+        </WriteForm>
+      </ActionBlock>
+      <ActionBlock
+        title="Deprecate"
+        description="Marks this deal deprecated. A reason is required."
       >
-        <SspNameField label="SSP name (optional)" hint="Name of the SSP connector to send the deal to. Pick a known one or type another; an unknown name is a 400 that lists the configured ones." value={ssp} onChange={setSsp} disabled={blocked} />
-      </WriteForm>
-      <WriteForm
-        title="Create a curated deal?"
-        confirmLabel="Curated deal"
-        action="curated-deal"
-        blocked={blocked || !curatorId.trim()}
-        pending={curated.pending}
-        last={curated.last}
-        onConfirm={() => void curated.run({ curator_id: curatorId.trim() })}
-        consequence="Not idempotent: each call mints another curated deal."
-      >
-        <TipField hint="Id of the curator the deal is created for. Use an id registered under Curators." size="small" label="Curator id" value={curatorId} onChange={(e) => setCuratorId(e.target.value)} disabled={blocked} />
-      </WriteForm>
-      <WriteForm
-        title="Migrate this deal?"
-        confirmLabel="Migrate"
-        action="migrate-deal"
-        blocked={blocked || !id.trim()}
-        pending={migrate.pending}
-        last={migrate.last}
-        onConfirm={() => void migrate.run({ id: id.trim(), ...(reason ? { reason } : {}) })}
-        consequence="Mints a successor and records lineage. A retry may mint a second successor."
-      >
-        <TipField hint="Optional reason recorded with the migration, which mints a successor deal. Deprecate below requires a reason and reads this same box." size="small" label="Reason" value={reason} onChange={(e) => setReason(e.target.value)} disabled={blocked} />
-      </WriteForm>
-      <WriteForm
-        title="Deprecate this deal?"
-        confirmLabel="Deprecate"
-        action="deprecate-deal"
-        blocked={blocked || !id.trim() || !reason.trim()}
-        pending={deprecate.pending}
-        last={deprecate.last}
-        onConfirm={() => void deprecate.run({ id: id.trim(), reason: reason.trim() })}
-        consequence="Marks the deal deprecated. A second deprecate may 409 depending on status."
-      />
+        <WriteForm
+          title="Deprecate this deal?"
+          confirmLabel="Deprecate"
+          action="deprecate-deal"
+          blocked={blocked || !deprecateReason.trim()}
+          pending={deprecate.pending}
+          last={deprecate.last}
+          onConfirm={() => void deprecate.run({ id, reason: deprecateReason.trim() })}
+          consequence="Marks the deal deprecated. A second deprecate may 409 depending on status."
+        >
+          <TipField hint="Why the deal is being deprecated. Required; sent to the agent with the request." size="small" label="Reason" value={deprecateReason} onChange={(e) => setDeprecateReason(e.target.value)} disabled={blocked} />
+        </WriteForm>
+      </ActionBlock>
     </Stack>
   );
 }
 
+/** Reads about one deal. Each is a GET; the first has a side effect worth a line. */
 export function DealLookups({ dealId }: { dealId: string }) {
   const [loadRecord, setLoadRecord] = useState(false);
-  const [loadExport, setLoadExport] = useState(false);
 
   return (
-    <Stack spacing={1} data-block="deal-lookups">
-      {loadRecord && <WritesNotice what="GET /api/v1/deals/{id} runs a lazy expiry check and may persist the outcome." />}
-      <WriteForm
-        title="Fetch this deal record?"
-        confirmLabel="Fetch deal"
-        action="fetch-deal"
-        blocked={false}
-        pending={false}
-        last={undefined}
-        onConfirm={() => setLoadRecord(true)}
-        consequence="This GET can expire a proposed deal and save that. Only fetch when you mean to."
-      />
-      {loadRecord && <DealRecord dealId={dealId} />}
-      <BuyerStatus dealId={dealId} />
-      <SspTrouble dealId={dealId} />
+    <Stack spacing={2.5} divider={<Divider flexItem />} data-block="deal-lookups">
+      <ActionBlock
+        title="Full record"
+        description="Reads this deal's stored record. The agent may expire a proposed deal when you read it."
+      >
+        {loadRecord && <WritesNotice what="GET /api/v1/deals/{id} runs a lazy expiry check and may persist the outcome." />}
+        <WriteForm
+          title="Fetch this deal record?"
+          confirmLabel="Fetch deal"
+          action="fetch-deal"
+          blocked={false}
+          pending={false}
+          last={undefined}
+          onConfirm={() => setLoadRecord(true)}
+          consequence="This GET can expire a proposed deal and save that. Only fetch when you mean to."
+        />
+        {loadRecord && <DealRecord dealId={dealId} />}
+      </ActionBlock>
+      <ActionBlock title="Buyer's view" description="How a buyer agent currently sees this deal.">
+        <BuyerStatus dealId={dealId} />
+      </ActionBlock>
+      <ActionBlock title="SSP diagnostics" description="Connector diagnostics for this deal at one SSP.">
+        <SspTrouble dealId={dealId} />
+      </ActionBlock>
+    </Stack>
+  );
+}
+
+/** Not about any one deal: it scans every stored record, so it sits with the page. */
+export function DealsExportLookup() {
+  const [loadExport, setLoadExport] = useState(false);
+  return (
+    <ActionBlock
+      title="Export every deal"
+      description="Reads all stored deals in one unpaginated pass. Not a write, but heavy."
+    >
       <WriteForm
         title="Export every stored deal?"
         confirmLabel="Export deals"
@@ -1253,7 +1342,7 @@ export function DealLookups({ dealId }: { dealId: string }) {
         consequence="An unpaginated scan of stored records. Not a write, but heavy."
       />
       {loadExport && <DealsExportBody />}
-    </Stack>
+    </ActionBlock>
   );
 }
 

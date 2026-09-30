@@ -112,7 +112,7 @@ describe("forms that send an enum", () => {
     const user = userEvent.setup();
     mount(<DealWrites dealId="D-1" />);
 
-    await confirm(user, "bulk-deals", "Bulk cancel");
+    await confirm(user, "bulk-deals", "Cancel deal");
 
     await waitFor(() => expect(sent).toEqual([{ operations: [{ action: "cancel", deal_id: "D-1" }] }]));
     const failed = await waitFor(() => {
@@ -125,16 +125,18 @@ describe("forms that send an enum", () => {
     expect(document.querySelector('[data-block="write:bulk-deals"] [data-state="write-ok"]')).toBeNull();
   });
 
-  it("sends a bulk create against a quote, not a deal", async () => {
+  it("edits a deal's notes through the bulk route, and offers no bulk create", async () => {
     const sent = capture("post", "/api/v1/deals/bulk", { total: 1, succeeded: 1, failed: 0, results: [] });
     const user = userEvent.setup();
     mount(<DealWrites dealId="D-1" />);
 
-    await choose(user, "Bulk action", "create");
-    await user.type(screen.getAllByLabelText("Quote id").at(-1)!, "Q-9");
-    await confirm(user, "bulk-deals", "Bulk create");
+    await choose(user, "Action", "update");
+    await user.type(screen.getByLabelText("Notes (optional)"), "moved to Q4");
+    await confirm(user, "bulk-deals", "Update notes");
 
-    await waitFor(() => expect(sent).toEqual([{ operations: [{ action: "create", quote_id: "Q-9" }] }]));
+    await waitFor(() =>
+      expect(sent).toEqual([{ operations: [{ action: "update", deal_id: "D-1", notes: "moved to Q4" }] }]),
+    );
   });
 
   it("migrates with the old deal id the request model requires", async () => {
