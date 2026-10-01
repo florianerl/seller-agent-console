@@ -85,7 +85,7 @@ import { ConfirmAction } from "../components/ConfirmAction";
 import { EnumSelect } from "../components/EnumSelect";
 import { Hint } from "../components/Hint";
 import { TipField } from "../components/TipField";
-import { AgentPicker, OrderPicker, PackagePicker, ProductPicker } from "./pickers";
+import { AgentPicker, OrderPicker, PackagePicker, ProductPicker, ProposalPicker } from "./pickers";
 import { ApiKeyTable } from "./ApiKeyTable";
 import { JsonView } from "../components/JsonView";
 import { FormFields, FormRow, ReadForm, WriteForm } from "../components/WriteForm";
@@ -1257,6 +1257,11 @@ export function ProposalWrites() {
     { product_id: string; deal_type: string; price: number; impressions: number; start_date: string; end_date: string },
     unknown
   >((c, a) => submitProposal(c, a));
+  // The submit ack is loose; offer its id if it carries one, since no list
+  // of legacy proposals exists to find it again.
+  const ack = submit.last?.kind === "ok" ? (submit.last.data as { proposal_id?: unknown; id?: unknown }) : undefined;
+  const submitted = ack?.proposal_id ?? ack?.id;
+  const submittedId = typeof submitted === "string" ? submitted : undefined;
   const counter = useMutation<{ id: string; buyer_price: number }, unknown>(
     (c, a) => counterProposal(c, a.id, { buyer_price: a.buyer_price }),
   );
@@ -1300,7 +1305,12 @@ export function ProposalWrites() {
           <TipField hint="Price as a plain number in dollars, for example 10. Used as the proposal price, the counter price, and the negotiation message price (sent as USD micros, times 1,000,000)." size="small" label="Price" value={price} onChange={(e) => setPrice(e.target.value)} disabled={!writesEnabled} />
         </FormFields>
       </WriteForm>
-      <TipField hint="Id of the proposal to counter or check negotiation status for. Copy it from the Proposals screen." size="small" label="Proposal id" value={proposalId} onChange={(e) => setProposalId(e.target.value)} />
+      <ProposalPicker
+        value={proposalId}
+        onChange={setProposalId}
+        known={submittedId ? [submittedId] : []}
+        hint="Id of the proposal to counter or check negotiation status for. Pick one, or type or paste an id."
+      />
       {proposalId.trim() ? <NegotiationStatus proposalId={proposalId.trim()} /> : null}
       <WriteForm
         title="Send a legacy counter-offer?"
