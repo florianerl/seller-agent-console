@@ -148,8 +148,10 @@ describe("accessibility", () => {
       window.location.hash = `#${path}`;
       const { container } = renderApp();
       await screen.findByRole("navigation", { name: /console sections/i });
-      // Let the lazy screen resolve, or axe inspects only the spinner.
-      await screen.findByRole("heading", { level: 2 });
+      // Let the lazy screen resolve, or axe inspects only the spinner. The
+      // default 1s was enough until the Deals and Orders screens grew; a CI
+      // runner then took longer than that to load and render the chunk.
+      await screen.findByRole("heading", { level: 2 }, { timeout: 5_000 });
 
       expect(await axeViolations(container)).toEqual([]);
     },
