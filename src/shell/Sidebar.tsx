@@ -6,7 +6,7 @@ import ListItemButton from "@mui/material/ListItemButton";
 import ListItemText from "@mui/material/ListItemText";
 import Typography from "@mui/material/Typography";
 import { NavLink, useLocation } from "react-router";
-import { NAV_GROUPS, SCREENS, type Screen } from "./screens";
+import { NAV_GROUPS, NAV_SCREENS, type Screen } from "./screens";
 import { palette } from "../theme/palette";
 
 export function BrandMark({
@@ -95,7 +95,7 @@ export function ConsoleNav({
             "&::-webkit-scrollbar": { display: "none" },
           }}
         >
-          {SCREENS.map((screen) => {
+          {NAV_SCREENS.map((screen) => {
             if (screen.soon) {
               return <SoonItem key={screen.id} screen={screen} />;
             }
@@ -132,7 +132,7 @@ export function ConsoleNav({
     );
   }
 
-  const byId = new Map(SCREENS.map((screen) => [screen.id, screen]));
+  const byId = new Map(NAV_SCREENS.map((screen) => [screen.id, screen]));
 
   return (
     <nav aria-label="Console sections">

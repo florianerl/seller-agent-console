@@ -11,6 +11,11 @@ export type Screen = {
   readonly label: string;
   /** Not yet built. Rendered disabled, excluded from the router. */
   readonly soon?: true;
+  /**
+   * Built and routed, but left out of the nav. For a screen whose upstream
+   * has not landed: a direct link still works, nothing invites an operator in.
+   */
+  readonly hidden?: true;
   /** Needs an operator key; a buyer key sees a gated state rather than a 403. */
   readonly operatorOnly?: true;
 };
@@ -21,7 +26,9 @@ export const SCREENS: readonly Screen[] = [
   { id: "catalog", path: "/catalog", label: "Catalog" },
   { id: "media-kit", path: "/media-kit", label: "Media kit" },
   { id: "curators", path: "/curators", label: "Curators" },
-  { id: "proposals", path: "/proposals", label: "Proposals" },
+  // Hidden until upstream serves OpenProposal (AAMP 3.0); see ADR 14. Every
+  // 2.x agent would land on the not-advertised notice.
+  { id: "proposals", path: "/proposals", label: "Proposals", hidden: true },
   { id: "negotiation", path: "/negotiation", label: "Negotiation" },
   { id: "deals", path: "/deals", label: "Deals" },
   { id: "orders", path: "/orders", label: "Orders" },
@@ -30,6 +37,9 @@ export const SCREENS: readonly Screen[] = [
 ];
 
 export const BUILT_SCREENS = SCREENS.filter((s) => !s.soon);
+
+/** What the nav renders. Hidden screens keep their place in `NAV_GROUPS`. */
+export const NAV_SCREENS = SCREENS.filter((s) => !s.hidden);
 
 /**
  * Sidebar grouping only. Order of `SCREENS` is still the source of "which

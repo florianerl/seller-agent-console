@@ -7,7 +7,7 @@ import CssBaseline from "@mui/material/CssBaseline";
 import { CredentialProvider } from "../../src/credentials/context";
 import { Router } from "../../src/shell/router";
 import { theme } from "../../src/theme/theme";
-import { NAV_GROUP_IDS, SCREENS } from "../../src/shell/screens";
+import { NAV_GROUP_IDS, NAV_SCREENS, SCREENS } from "../../src/shell/screens";
 import { setViewport } from "../setup/dom";
 
 // HashRouter reads window.location, which persists across tests in a file.
@@ -43,8 +43,16 @@ describe("shell navigation", () => {
   it("renders every screen in the sidebar", async () => {
     renderApp();
     const nav = await screen.findByRole("navigation", { name: /console sections/i });
-    for (const s of SCREENS) {
+    for (const s of NAV_SCREENS) {
       expect(within(nav).getByText(s.label)).toBeInTheDocument();
+    }
+  });
+
+  it("leaves hidden screens out of the nav", async () => {
+    renderApp();
+    const nav = await screen.findByRole("navigation", { name: /console sections/i });
+    for (const s of SCREENS.filter((x) => x.hidden)) {
+      expect(within(nav).queryByText(s.label)).toBeNull();
     }
   });
 
@@ -56,7 +64,7 @@ describe("shell navigation", () => {
     renderApp();
     const nav = await screen.findByRole("navigation", { name: /console sections/i });
 
-    for (const s of SCREENS.filter((x) => !x.soon)) {
+    for (const s of NAV_SCREENS.filter((x) => !x.soon)) {
       expect(within(nav).getByRole("link", { name: s.label })).toBeInTheDocument();
     }
 
@@ -109,8 +117,8 @@ describe("shell navigation", () => {
       if (el && el.tagName === "A") reachable.push(el.textContent ?? "");
     }
 
-    // Every built screen must be reachable without a pointer.
-    for (const s of SCREENS.filter((x) => !x.soon)) {
+    // Every built screen in the nav must be reachable without a pointer.
+    for (const s of NAV_SCREENS.filter((x) => !x.soon)) {
       expect(reachable, `${s.label} was not reachable by tabbing`).toContain(s.label);
     }
   });
