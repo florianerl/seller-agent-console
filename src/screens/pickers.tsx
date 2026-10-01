@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import Autocomplete from "@mui/material/Autocomplete";
 import Box from "@mui/material/Box";
+import Chip from "@mui/material/Chip";
 import type { SxProps, Theme } from "@mui/material/styles";
 import { agents, approvals, curators, deals, openProposals, packages, products } from "../api/endpoints";
 import { describe, type Result } from "../api/errors";
@@ -93,6 +94,94 @@ function EntityPicker({
   );
 }
 
+/**
+ * The same suggestion list for a field that takes several ids. Typed ids are
+ * kept as chips too (Enter or comma adds one), for the same reason a single
+ * picker accepts free text: a short or unreadable list must not lock the form.
+ * Chips show the name when the list knows it and the id otherwise; the id is
+ * what is sent either way.
+ */
+function EntityMultiPicker({
+  label,
+  hint,
+  value,
+  onChange,
+  options,
+  loading,
+  result,
+  empty,
+  disabled,
+  sx,
+}: {
+  label: string;
+  hint: ReactNode;
+  value: readonly string[];
+  onChange: (value: string[]) => void;
+  options: readonly PickerOption[];
+  loading: boolean;
+  result: Result<unknown> | undefined;
+  empty: string;
+  disabled?: boolean | undefined;
+  sx?: SxProps<Theme> | undefined;
+}) {
+  const byId = new Map(options.map((o) => [o.id, o]));
+  return (
+    <Autocomplete<string, true, false, true>
+      multiple
+      freeSolo
+      openOnFocus
+      filterSelectedOptions
+      size="small"
+      options={options.map((o) => o.id)}
+      value={[...value]}
+      onChange={(_, next) => {
+        // Pasted lists arrive as one string: split on commas and whitespace so
+        // "a, b c" is three ids, not one.
+        const ids = next.flatMap((v) => v.split(/[\s,]+/)).filter(Boolean);
+        onChange([...new Set(ids)]);
+      }}
+      filterOptions={(ids, state) => {
+        const q = state.inputValue.trim().toLowerCase();
+        const open = ids.filter((id) => !value.includes(id));
+        if (!q) return open;
+        return open.filter((id) => {
+          const o = byId.get(id);
+          return [id, o?.title, o?.detail].some((t) => t?.toLowerCase().includes(q));
+        });
+      }}
+      loading={loading}
+      disabled={disabled ?? false}
+      sx={sx ?? { minWidth: 320 }}
+      noOptionsText={
+        result && result.kind !== "ok" ? `${describe(result)} — type an id instead.` : empty
+      }
+      renderOption={(props, id) => {
+        const o = byId.get(id);
+        return (
+          <li {...props} key={id}>
+            <Box sx={{ minWidth: 0 }}>
+              <Box sx={{ fontFamily: "monospace", fontSize: 12 }}>{id}</Box>
+              {(o?.title || o?.detail) && (
+                <Box sx={{ fontSize: 12, color: palette.textSecondary }}>
+                  {[o.title, o.detail].filter(Boolean).join(" · ")}
+                </Box>
+              )}
+            </Box>
+          </li>
+        );
+      }}
+      renderValue={(ids, getItemProps) =>
+        ids.map((id, index) => {
+          const { key, ...chip } = getItemProps({ index });
+          const title = byId.get(id)?.title;
+          return <Chip key={key} size="small" label={title ? `${title} · ${id}` : id} {...chip} />;
+        })
+      }
+      renderInput={(params) => <TipField {...params} hint={hint} label={label} />}
+    />
+  );
+}
+
 type PickerProps = {
   value: string;
   onChange: (value: string) => void;
@@ -111,6 +200,38 @@ export function ProductPicker({ label = "Product id", hint, ...rest }: PickerPro
       {...rest}
       label={label}
       hint={hint ?? "A product from the catalog. Pick one, or type or paste an id."}
+      options={(list.data?.products ?? []).map((p) => ({
+        id: p.product_id,
+        title: p.name,
+        detail: p.delivery_type ?? undefined,
+      }))}
+      loading={list.loading}
+      result={list.result}
+      empty="The catalog has no products."
+    />
+  );
+}
+
+export function ProductMultiPicker({
+  label = "Products",
+  hint,
+  ...rest
+}: {
+  value: readonly string[];
+  onChange: (value: string[]) => void;
+  label?: string;
+  hint?: ReactNode;
+  disabled?: boolean;
+  sx?: SxProps<Theme>;
+}) {
+  const list = useResource("products", (c, signal) => products(c, { limit: 200 }, signal), {
+    refreshInterval: CADENCE.rateCard,
+  });
+  return (
+    <EntityMultiPicker
+      {...rest}
+      label={label}
+      hint={hint ?? "Products from the catalog. Pick as many as you need, or type or paste ids."}
       options={(list.data?.products ?? []).map((p) => ({
         id: p.product_id,
         title: p.name,

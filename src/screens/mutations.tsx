@@ -85,7 +85,7 @@ import { ConfirmAction } from "../components/ConfirmAction";
 import { EnumSelect } from "../components/EnumSelect";
 import { Hint } from "../components/Hint";
 import { TipField } from "../components/TipField";
-import { AgentPicker, PackagePicker, ProductPicker, ProposalPicker } from "./pickers";
+import { AgentPicker, PackagePicker, ProductMultiPicker, ProductPicker, ProposalPicker } from "./pickers";
 import { ApiKeyTable } from "./ApiKeyTable";
 import { JsonView } from "../components/JsonView";
 import { FormFields, FormRow, ReadForm, WriteForm } from "../components/WriteForm";
@@ -398,7 +398,7 @@ export function CatalogWrites() {
   const [pkgPrice, setPkgPrice] = useState("10");
   const [pkgFloor, setPkgFloor] = useState("5");
   const [pkgId, setPkgId] = useState("");
-  const [productIds, setProductIds] = useState("");
+  const [productIds, setProductIds] = useState<string[]>([]);
   const [cpm, setCpm] = useState("12");
   const [rateType, setRateType] = useState<string>("display");
 
@@ -584,25 +584,24 @@ export function CatalogWrites() {
         title="Assemble a dynamic package?"
         confirmLabel="Assemble"
         action="assemble-package"
-        blocked={blocked || !pkgName.trim() || !productIds.trim()}
+        blocked={blocked || !pkgName.trim() || productIds.length === 0}
         pending={assemble.pending}
         last={assemble.last}
         onConfirm={() =>
           void assemble.run({
             name: pkgName.trim(),
-            product_ids: productIds.split(",").map((id) => id.trim()).filter(Boolean),
+            product_ids: productIds,
           })
         }
         consequence="Not idempotent. Unresolvable product ids 422."
       >
-        <TipField
-          hint="Ids of the products to combine, separated by commas. Ids that do not resolve to a product are rejected with a 422."
-          size="small"
-          label="Product ids (comma-separated)"
+        <ProductMultiPicker
+          label="Products"
+          hint="The products to combine into the package. Pick as many as you need, or type or paste ids. Ids that do not resolve to a product are rejected with a 422."
           value={productIds}
-          onChange={(e) => setProductIds(e.target.value)}
+          onChange={setProductIds}
           disabled={blocked}
-          sx={{ minWidth: 280 }}
+          sx={{ minWidth: 360 }}
         />
       </WriteForm>
       <WriteForm
