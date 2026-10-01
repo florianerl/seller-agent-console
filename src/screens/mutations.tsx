@@ -301,7 +301,6 @@ export function ApiKeysDialog() {
         <DialogTitle>API keys</DialogTitle>
         <DialogContent>
           <ApiKeyWrites />
-          <ApiKeyDetailLookup />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpen(false)}>Close</Button>
@@ -314,7 +313,9 @@ export function ApiKeysDialog() {
 export function ApiKeyWrites() {
   const { writesEnabled } = useCredential();
   const [label, setLabel] = useState("");
-  const [revokeId, setRevokeId] = useState("");
+  // One picker drives both the revoke and the look-up below it.
+  const [keyId, setKeyId] = useState("");
+  const [loaded, setLoaded] = useState<string | undefined>();
   const [secret, setSecret] = useState<CreatedApiKey | undefined>();
 
   const buyer = useMutation<{ label?: string }, CreatedApiKey>(
@@ -327,7 +328,7 @@ export function ApiKeyWrites() {
   );
   const revoke = useMutation<{ id: string }, unknown>(
     (c, args) => revokeApiKey(c, args.id),
-    { invalidates: ["api-keys", `api-key:${revokeId}`] },
+    { invalidates: ["api-keys", `api-key:${keyId}`] },
   );
 
   function showSecret(result: { kind: string; data?: CreatedApiKey }) {
@@ -386,28 +387,35 @@ export function ApiKeyWrites() {
           }
         />
       </FormRow>
-      <WriteForm
-        title="Revoke this API key?"
-        confirmLabel="Revoke key"
-        action="revoke-key"
-        blocked={!writesEnabled || !revokeId.trim()}
-        pending={revoke.pending}
-        last={revoke.last}
-        onConfirm={() => void revoke.run({ id: revokeId.trim() })}
-        consequence={
-          <>
-            The key stops working. A second revoke 404s. If this fails without
-            a clear answer, re-read the key rather than assuming it is dead.
-          </>
-        }
-      >
+      <FormRow>
         <ApiKeyPicker
-          hint="Key to revoke. Pick one, or type or paste a key_id (not the secret)."
-          value={revokeId}
-          onChange={setRevokeId}
-          disabled={!writesEnabled}
+          hint="Pick a key, or type or paste a key_id (not the secret). Load shows its metadata; Revoke ends it."
+          value={keyId}
+          onChange={setKeyId}
         />
-      </WriteForm>
+        <ReadForm
+          label="Load key"
+          action="fetch-key"
+          disabled={!keyId.trim()}
+          onRun={() => setLoaded(keyId.trim())}
+        />
+        <WriteForm
+          title="Revoke this API key?"
+          confirmLabel="Revoke key"
+          action="revoke-key"
+          blocked={!writesEnabled || !keyId.trim()}
+          pending={revoke.pending}
+          last={revoke.last}
+          onConfirm={() => void revoke.run({ id: keyId.trim() })}
+          consequence={
+            <>
+              The key stops working. A second revoke 404s. If this fails without
+              a clear answer, re-read the key rather than assuming it is dead.
+            </>
+          }
+        />
+      </FormRow>
+      {loaded && loaded === keyId.trim() && <ApiKeyBody keyId={loaded} />}
       {secret?.api_key ? (
         <Box
           component="pre"
@@ -2000,25 +2008,6 @@ export function EventLookup({ eventId }: { eventId: string }) {
   return (
     <Box data-block="event-by-id" sx={{ mt: 1 }}>
       <ReadOutcome name="Event" data={detail.data} result={detail.result} />
-    </Box>
-  );
-}
-
-export function ApiKeyDetailLookup() {
-  const [id, setId] = useState("");
-  const [submitted, setSubmitted] = useState<string | undefined>();
-  return (
-    <Box sx={{ mt: 1 }}>
-      <FormRow>
-        <ApiKeyPicker hint="Key to look up. Metadata only; the secret is never returned." value={id} onChange={setId} />
-        <ReadForm
-          label="Load key"
-          action="fetch-key"
-          disabled={!id.trim()}
-          onRun={() => setSubmitted(id.trim())}
-        />
-      </FormRow>
-      {submitted && <ApiKeyBody keyId={submitted} />}
     </Box>
   );
 }
