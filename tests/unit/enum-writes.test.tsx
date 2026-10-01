@@ -71,7 +71,16 @@ function enabled(label: string, index = 0) {
 }
 
 async function choose(user: ReturnType<typeof userEvent.setup>, label: string, option: string) {
-  await user.click(screen.getByLabelText(label));
+  // Like `enabled`: the select stays disabled until the stored credential
+  // has loaded and said writes are on, and a click before then opens
+  // nothing. Fast locally, it lost that race on CI. MUI marks a disabled
+  // select with aria-disabled, which toBeEnabled does not read.
+  const select = await waitFor(() => {
+    const el = screen.getByLabelText(label);
+    expect(el).not.toHaveAttribute("aria-disabled", "true");
+    return el;
+  });
+  await user.click(select);
   await user.click(await screen.findByRole("option", { name: option }));
 }
 
