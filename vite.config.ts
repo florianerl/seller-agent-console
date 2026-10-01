@@ -168,6 +168,15 @@ export default defineConfig({
            * means something.
            */
           maxWorkers: 4,
+          /**
+           * Vitest's 5s default is a budget for a unit test, not for a whole
+           * screen. The Orders tests render the full table, an open row and
+           * its dialogs and type into them keystroke by keystroke: under a
+           * second here, past 5s on a CI runner, where two of them timed out
+           * on a push whose code was fine. 15s still fails a genuine hang,
+           * well before the job does.
+           */
+          testTimeout: 15_000,
         },
       },
       {
