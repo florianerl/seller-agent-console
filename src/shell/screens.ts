@@ -18,14 +18,14 @@ export type Screen = {
 export const SCREENS: readonly Screen[] = [
   { id: "setup", path: "/", label: "Setup and health" },
   { id: "inbox", path: "/inbox", label: "Inbox" },
-  { id: "events", path: "/events", label: "Events", operatorOnly: true },
-  { id: "orders", path: "/orders", label: "Orders" },
-  { id: "deals", path: "/deals", label: "Deals" },
-  { id: "proposals", path: "/proposals", label: "Proposals" },
-  { id: "negotiation", path: "/negotiation", label: "Negotiation" },
   { id: "catalog", path: "/catalog", label: "Catalog" },
   { id: "media-kit", path: "/media-kit", label: "Media kit" },
   { id: "curators", path: "/curators", label: "Curators" },
+  { id: "proposals", path: "/proposals", label: "Proposals" },
+  { id: "negotiation", path: "/negotiation", label: "Negotiation" },
+  { id: "deals", path: "/deals", label: "Deals" },
+  { id: "orders", path: "/orders", label: "Orders" },
+  { id: "events", path: "/events", label: "Events", operatorOnly: true },
   { id: "agents", path: "/agents", label: "Agents" },
 ];
 
@@ -35,10 +35,14 @@ export const BUILT_SCREENS = SCREENS.filter((s) => !s.soon);
  * Sidebar grouping only. Order of `SCREENS` is still the source of "which
  * screens exist"; this table must list every id or the shell test fails.
  */
+// Groups follow the deal lifecycle top to bottom: discover what is for sale,
+// agree terms (proposal or quote, then negotiation), book the deal, run the
+// order, then read the event log of what happened. Keep it in that order.
 export const NAV_GROUPS: ReadonlyArray<{ label: string; ids: readonly string[] }> = [
-  { label: "Overview", ids: ["setup", "inbox", "events"] },
-  { label: "Pipeline", ids: ["orders", "deals", "proposals", "negotiation"] },
-  { label: "Inventory", ids: ["catalog", "media-kit", "curators"] },
+  { label: "Overview", ids: ["setup", "inbox"] },
+  { label: "Discover", ids: ["catalog", "media-kit", "curators"] },
+  { label: "Pipeline", ids: ["proposals", "negotiation", "deals", "orders"] },
+  { label: "Monitor", ids: ["events"] },
   { label: "Network", ids: ["agents"] },
 ];
 
