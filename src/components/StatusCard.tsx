@@ -26,11 +26,14 @@ export function StatusCard<T>({
   title,
   testId,
   resource,
+  actions,
   children,
 }: {
   title: string;
   testId: string;
   resource: Resource<T>;
+  /** A control that acts on what the card shows, below the value and above the timestamp. */
+  actions?: ReactNode;
   children: (data: T) => ReactNode;
 }) {
   const { data, asOf, freshness, result, loading } = resource;
@@ -78,6 +81,8 @@ export function StatusCard<T>({
           </Typography>
         )}
       </Box>
+
+      {actions && <Box sx={{ mt: 2 }}>{actions}</Box>}
 
       <Typography
         variant="caption"

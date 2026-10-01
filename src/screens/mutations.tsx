@@ -2,6 +2,10 @@ import { useState, type ReactNode } from "react";
 import Autocomplete from "@mui/material/Autocomplete";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
 import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
@@ -199,8 +203,14 @@ function Panel({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
+/**
+ * The sync trigger lives on the Inventory sync card as one button; the dialog
+ * is both the mode choice and the confirmation, so there is no second prompt
+ * behind the first.
+ */
 export function InventorySyncWrite() {
   const { writesEnabled } = useCredential();
+  const [open, setOpen] = useState(false);
   const [incremental, setIncremental] = useState(false);
   const run = useMutation<{ incremental: boolean }, unknown>(
     (c, args) => triggerInventorySync(c, args),
@@ -208,36 +218,96 @@ export function InventorySyncWrite() {
   );
 
   return (
-    <WriteForm
-      title="Trigger an inventory sync?"
-      confirmLabel="Sync now"
-      action="trigger-sync"
-      blocked={!writesEnabled}
-      pending={run.pending}
-      last={run.last}
-      onConfirm={() => void run.run({ incremental })}
-      consequence={
-        <>
-          Each trigger starts another pass against the ad server. It is not
-          idempotent: a retry after an unclear failure may run a second sync.
-          Incremental uses the stored watermark when one exists.
-        </>
-      }
-    >
-      <TipField
-        hint="How much to sync. Full re-reads everything from the ad server; Incremental starts from the stored watermark when one exists."
-        select
-        size="small"
-        label="Mode"
-        value={incremental ? "incremental" : "full"}
-        onChange={(e) => setIncremental(e.target.value === "incremental")}
-        disabled={!writesEnabled || run.pending}
-        sx={{ minWidth: 180 }}
+    <Box data-block="write:trigger-sync">
+      <Hint
+        hint={
+          writesEnabled
+            ? undefined
+            : "Writes are switched off. Turn them on from the connection menu to use this."
+        }
       >
-        <MenuItem value="full">Full</MenuItem>
-        <MenuItem value="incremental">Incremental</MenuItem>
-      </TipField>
-    </WriteForm>
+        <Button
+          variant="outlined"
+          size="small"
+          data-action="trigger-sync"
+          disabled={!writesEnabled || run.pending}
+          onClick={() => setOpen(true)}
+        >
+          {run.pending ? "Working…" : "Sync now"}
+        </Button>
+      </Hint>
+      {run.last && run.last.kind !== "ok" && (
+        <Typography variant="body2" sx={{ mt: 1, color: palette.error }} data-state="write-failed">
+          {describe(run.last)}
+        </Typography>
+      )}
+      {run.last?.kind === "ok" && (
+        <Typography variant="body2" sx={{ mt: 1 }} data-state="write-ok">
+          The agent accepted this call.
+        </Typography>
+      )}
+      <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="xs">
+        <DialogTitle>Trigger an inventory sync?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Each trigger starts another pass against the ad server. It is not
+            idempotent: a retry after an unclear failure may run a second sync.
+            Incremental uses the stored watermark when one exists.
+          </Typography>
+          <TipField
+            hint="How much to sync. Full re-reads everything from the ad server; Incremental starts from the stored watermark when one exists."
+            select
+            size="small"
+            label="Mode"
+            value={incremental ? "incremental" : "full"}
+            onChange={(e) => setIncremental(e.target.value === "incremental")}
+            sx={{ minWidth: 180 }}
+          >
+            <MenuItem value="full">Full</MenuItem>
+            <MenuItem value="incremental">Incremental</MenuItem>
+          </TipField>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            data-action="confirm-mutation"
+            onClick={() => {
+              setOpen(false);
+              void run.run({ incremental });
+            }}
+          >
+            Sync now
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+}
+
+/**
+ * Key administration is rare and not a health signal, so it sits behind one
+ * button on the Console access card. The dialog unmounts on close, which drops
+ * the one-time secret from state — shown once, as the copy says.
+ */
+export function ApiKeysDialog() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button variant="outlined" size="small" data-action="manage-keys" onClick={() => setOpen(true)}>
+        API keys
+      </Button>
+      <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>API keys</DialogTitle>
+        <DialogContent>
+          <ApiKeyWrites />
+          <ApiKeyDetailLookup />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+    </>
   );
 }
 

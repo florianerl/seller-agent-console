@@ -10,9 +10,7 @@ import {
   root,
   supplyChain,
 } from "../api/endpoints";
-import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
-import { ScreenSection } from "../components/ScreenSection";
-import { ApiKeyDetailLookup, ApiKeyWrites, InventorySyncWrite, Panel } from "./mutations";
+import { ApiKeysDialog, InventorySyncWrite } from "./mutations";
 import { StatusCard } from "../components/StatusCard";
 import { stamp } from "../lib/time";
 import { useCredential } from "../credentials/context";
@@ -25,11 +23,17 @@ function when(iso: string | null | undefined): string {
 }
 
 export function HealthCards() {
-  const { credential, writesEnabled } = useCredential();
+  const { credential } = useCredential();
 
-  const agent = useResource("health", health, { refreshInterval: CADENCE.health });
-  const identity = useResource("root", root, { refreshInterval: CADENCE.health });
-  const access = useResource("api-keys", apiKeys, { refreshInterval: CADENCE.health });
+  const agent = useResource("health", health, {
+    refreshInterval: CADENCE.health,
+  });
+  const identity = useResource("root", root, {
+    refreshInterval: CADENCE.health,
+  });
+  const access = useResource("api-keys", apiKeys, {
+    refreshInterval: CADENCE.health,
+  });
   const sync = useResource("inventory-sync", inventorySyncStatus, {
     refreshInterval: CADENCE.inventorySync,
   });
@@ -39,7 +43,9 @@ export function HealthCards() {
   const chain = useResource("supply-chain", supplyChain, {
     refreshInterval: CADENCE.supplyChain,
   });
-  const card = useResource("agent-card", agentCard, { refreshInterval: CADENCE.agentCard });
+  const card = useResource("agent-card", agentCard, {
+    refreshInterval: CADENCE.agentCard,
+  });
   const lastEvent = useResource(
     "last-event",
     (connection, signal) => events(connection, { limit: 1 }, signal),
@@ -47,7 +53,6 @@ export function HealthCards() {
   );
 
   return (
-    <>
     <Box
       sx={{
         display: "grid",
@@ -58,7 +63,9 @@ export function HealthCards() {
       <StatusCard title="Agent" testId="agent" resource={agent}>
         {(data) => (
           <>
-            <Typography sx={{ fontSize: 18, fontWeight: 700 }}>{data.status}</Typography>
+            <Typography sx={{ fontSize: 18, fontWeight: 700 }}>
+              {data.status}
+            </Typography>
             <Typography variant="body2" color="text.secondary">
               {identity.data?.name ?? "—"}
             </Typography>
@@ -73,7 +80,14 @@ export function HealthCards() {
         )}
       </StatusCard>
 
-      <StatusCard title="Console access" testId="access" resource={access}>
+      <StatusCard
+        title="Console access"
+        testId="access"
+        resource={access}
+        actions={
+          credential?.role === "operator" ? <ApiKeysDialog /> : undefined
+        }
+      >
         {() => (
           <>
             <Typography sx={{ fontSize: 18, fontWeight: 700 }}>
@@ -86,7 +100,14 @@ export function HealthCards() {
         )}
       </StatusCard>
 
-      <StatusCard title="Inventory sync" testId="sync" resource={sync}>
+      <StatusCard
+        title="Inventory sync"
+        testId="sync"
+        resource={sync}
+        actions={
+          credential?.role === "operator" ? <InventorySyncWrite /> : undefined
+        }
+      >
         {(data) => (
           <>
             <Typography sx={{ fontSize: 18, fontWeight: 700 }}>
@@ -100,7 +121,10 @@ export function HealthCards() {
               {data.task_running ? " · running now" : ""}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              watermark {watermark.data?.last_sync_at ? when(watermark.data.last_sync_at) : "none"}
+              watermark{" "}
+              {watermark.data?.last_sync_at
+                ? when(watermark.data.last_sync_at)
+                : "none"}
             </Typography>
           </>
         )}
@@ -120,7 +144,8 @@ export function HealthCards() {
               {/* The chain is what a buyer verifies against sellers.json. A
                   count with no length is the one number worth showing here;
                   the nodes themselves belong on a screen with room. */}
-              {data.schain.length} node{data.schain.length === 1 ? "" : "s"} declared
+              {data.schain.length} node{data.schain.length === 1 ? "" : "s"}{" "}
+              declared
             </Typography>
           </>
         )}
@@ -129,7 +154,9 @@ export function HealthCards() {
       <StatusCard title="Advertised card" testId="agent-card" resource={card}>
         {(data) => (
           <>
-            <Typography sx={{ fontSize: 18, fontWeight: 700 }}>{data.name}</Typography>
+            <Typography sx={{ fontSize: 18, fontWeight: 700 }}>
+              {data.name}
+            </Typography>
             <Typography variant="body2" color="text.secondary">
               {/* What the agent tells other agents about itself, which is
                   routinely wrong behind a proxy — it hardcodes localhost in the
@@ -166,21 +193,5 @@ export function HealthCards() {
         }}
       </StatusCard>
     </Box>
-    <Box sx={{ mt: 4 }}>
-      <ScreenSection
-        title="Operator writes"
-        caption="Mint keys and trigger inventory sync. Visible while the switch is off, disabled."
-      >
-        {!writesEnabled && <ReadOnlyNotice what="Minting keys or triggering a sync" />}
-        <Panel title="Inventory sync">
-          <InventorySyncWrite />
-        </Panel>
-        <Panel title="API keys">
-          <ApiKeyWrites />
-          <ApiKeyDetailLookup />
-        </Panel>
-      </ScreenSection>
-    </Box>
-    </>
   );
 }
