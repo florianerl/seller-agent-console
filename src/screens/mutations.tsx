@@ -13,7 +13,6 @@ import Typography from "@mui/material/Typography";
 import {
   agentById,
   applyChangeRequest,
-  apiKeyById,
   assemblePackage,
   audienceMatch,
   bulkDealOperations,
@@ -43,7 +42,6 @@ import {
   registerCurator,
   removeRegisteredAgent,
   reviewChangeRequest,
-  revokeApiKey,
   sendSessionMessage,
   setInventoryTypeOverride,
   submitProposal,
@@ -92,7 +90,8 @@ import { ConfirmAction } from "../components/ConfirmAction";
 import { EnumSelect } from "../components/EnumSelect";
 import { Hint } from "../components/Hint";
 import { TipField } from "../components/TipField";
-import { AgentPicker, ApiKeyPicker, OrderPicker, PackagePicker, ProductPicker } from "./pickers";
+import { AgentPicker, OrderPicker, PackagePicker, ProductPicker } from "./pickers";
+import { ApiKeyTable } from "./ApiKeyTable";
 import { JsonView } from "../components/JsonView";
 import { FormFields, FormRow, ReadForm, WriteForm } from "../components/WriteForm";
 import { WritesNotice } from "../components/WritesNotice";
@@ -297,7 +296,7 @@ export function ApiKeysDialog() {
       <Button variant="outlined" size="small" data-action="manage-keys" onClick={() => setOpen(true)}>
         API keys
       </Button>
-      <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
+      <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="md">
         <DialogTitle>API keys</DialogTitle>
         <DialogContent>
           <ApiKeyWrites />
@@ -313,9 +312,6 @@ export function ApiKeysDialog() {
 export function ApiKeyWrites() {
   const { writesEnabled } = useCredential();
   const [label, setLabel] = useState("");
-  // One picker drives both the revoke and the look-up below it.
-  const [keyId, setKeyId] = useState("");
-  const [loaded, setLoaded] = useState<string | undefined>();
   const [secret, setSecret] = useState<CreatedApiKey | undefined>();
 
   const buyer = useMutation<{ label?: string }, CreatedApiKey>(
@@ -326,11 +322,6 @@ export function ApiKeyWrites() {
     (c, args) => createOperatorApiKey(c, args),
     { invalidates: ["api-keys"] },
   );
-  const revoke = useMutation<{ id: string }, unknown>(
-    (c, args) => revokeApiKey(c, args.id),
-    { invalidates: ["api-keys", `api-key:${keyId}`] },
-  );
-
   function showSecret(result: { kind: string; data?: CreatedApiKey }) {
     if (result.kind === "ok" && result.data) setSecret(result.data);
   }
@@ -387,35 +378,6 @@ export function ApiKeyWrites() {
           }
         />
       </FormRow>
-      <FormRow>
-        <ApiKeyPicker
-          hint="Pick a key, or type or paste a key_id (not the secret). Load shows its metadata; Revoke ends it."
-          value={keyId}
-          onChange={setKeyId}
-        />
-        <ReadForm
-          label="Load key"
-          action="fetch-key"
-          disabled={!keyId.trim()}
-          onRun={() => setLoaded(keyId.trim())}
-        />
-        <WriteForm
-          title="Revoke this API key?"
-          confirmLabel="Revoke key"
-          action="revoke-key"
-          blocked={!writesEnabled || !keyId.trim()}
-          pending={revoke.pending}
-          last={revoke.last}
-          onConfirm={() => void revoke.run({ id: keyId.trim() })}
-          consequence={
-            <>
-              The key stops working. A second revoke 404s. If this fails without
-              a clear answer, re-read the key rather than assuming it is dead.
-            </>
-          }
-        />
-      </FormRow>
-      {loaded && loaded === keyId.trim() && <ApiKeyBody keyId={loaded} />}
       {secret?.api_key ? (
         <Box
           component="pre"
@@ -425,6 +387,7 @@ export function ApiKeyWrites() {
           {`key_id ${secret.key_id}\nrole ${secret.role}\n${secret.api_key}`}
         </Box>
       ) : null}
+      <ApiKeyTable />
     </Stack>
   );
 }
@@ -2009,16 +1972,6 @@ export function EventLookup({ eventId }: { eventId: string }) {
     <Box data-block="event-by-id" sx={{ mt: 1 }}>
       <ReadOutcome name="Event" data={detail.data} result={detail.result} />
     </Box>
-  );
-}
-
-function ApiKeyBody({ keyId }: { keyId: string }) {
-  const detail = useResource(`api-key:${keyId}`, (c, signal) => apiKeyById(c, keyId, signal));
-  if (!detail.data) return null;
-  return (
-    <Typography variant="body2" sx={{ mt: 1, fontFamily: "monospace", fontSize: 12 }}>
-      {detail.data.key_id} · {detail.data.role} · revoked {String(detail.data.revoked)}
-    </Typography>
   );
 }
 

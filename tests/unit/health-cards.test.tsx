@@ -223,12 +223,15 @@ describe("the four health cards", () => {
     }
   });
 
-  it("offers the listed key ids when revoking or looking up a key", async () => {
+  it("lists the keys with Load and Revoke on each row", async () => {
     server.use(
       http.get(`${API}/auth/api-keys`, () =>
         HttpResponse.json({
           keys: [{ key_id: "key-abc", label: "ci runner", role: "buyer", is_active: true }],
         }),
+      ),
+      http.get(`${API}/auth/api-keys/key-abc`, () =>
+        HttpResponse.json({ key_id: "key-abc", role: "buyer", revoked: false, use_count: 3 }),
       ),
     );
     await saveCredential({ ...CREDENTIAL, writesEnabled: true });
@@ -239,9 +242,11 @@ describe("the four health cards", () => {
 
     await user.click(document.querySelector('[data-action="manage-keys"]') as HTMLElement);
     const dialog = await screen.findByRole("dialog");
-    const [revoke] = within(dialog).getAllByRole("combobox", { name: /key id/i });
-    await user.click(revoke as HTMLElement);
+    const row = (await within(dialog).findByText("key-abc")).closest("tr") as HTMLElement;
+    expect(within(row).getByText("ci runner")).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "Revoke" })).toBeEnabled();
 
-    expect(await screen.findByRole("option", { name: /key-abc.*ci runner · buyer/ })).toBeInTheDocument();
+    await user.click(within(row).getByRole("button", { name: "Load" }));
+    expect(await within(dialog).findByText(/3 uses · revoked false/)).toBeInTheDocument();
   });
 });
