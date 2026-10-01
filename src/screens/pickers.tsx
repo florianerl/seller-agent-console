@@ -130,6 +130,9 @@ function EntityMultiPicker({
       multiple
       freeSolo
       openOnFocus
+      // An id typed and left in the box counts: the next thing most people do
+      // is press Next, and a chip they never made would silently not be sent.
+      autoSelect
       filterSelectedOptions
       size="small"
       options={options.map((o) => o.id)}

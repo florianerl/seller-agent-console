@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import Accordion from "@mui/material/Accordion";
 import AccordionDetails from "@mui/material/AccordionDetails";
 import AccordionSummary from "@mui/material/AccordionSummary";
@@ -40,7 +40,7 @@ import { useOpenProposalSupport } from "../query/useOpenProposalSupport";
 import { useResource } from "../query/useResource";
 import { palette } from "../theme/palette";
 import { SspNameField } from "./mutations";
-import { CuratorPicker, ProductPicker } from "./pickers";
+import { CuratorPicker, ProductMultiPicker } from "./pickers";
 import { QuoteView, type QuoteAnswer } from "./QuoteView";
 
 type Method = "new-quote" | "quote" | "proposal" | "template" | "curated";
@@ -207,6 +207,48 @@ function SendNow({ dealId }: { dealId: string }) {
 }
 
 /**
+ * One line per product with what became of it. Multi-product runs are a series
+ * of independent calls, so some can land and some fail; the operator has to
+ * see exactly which, and a product the agent will not quote can be dropped.
+ */
+function ProductRows({
+  rows,
+  onRemove,
+  removable,
+}: {
+  rows: readonly { id: string; text: string; bad?: boolean }[];
+  onRemove: (id: string) => void;
+  removable: (id: string) => boolean;
+}) {
+  return (
+    <Box component="ul" sx={{ m: 0, p: 0, listStyle: "none" }}>
+      {rows.map((r) => (
+        <Box
+          component="li"
+          key={r.id}
+          data-product={r.id}
+          sx={{ display: "flex", gap: 1.5, alignItems: "baseline", py: 0.5 }}
+        >
+          <Box sx={{ fontFamily: "monospace", fontSize: 12, flexShrink: 0 }}>{r.id}</Box>
+          <Typography
+            variant="body2"
+            sx={{ flex: 1, color: r.bad ? palette.error : palette.textSecondary, wordBreak: "break-word" }}
+            data-state={r.bad ? "product-failed" : "product-status"}
+          >
+            {r.text}
+          </Typography>
+          {removable(r.id) && (
+            <Button size="small" onClick={() => onRemove(r.id)} aria-label={`Remove ${r.id}`}>
+              Remove
+            </Button>
+          )}
+        </Box>
+      ))}
+    </Box>
+  );
+}
+
+/**
  * Reports how many proposals the agent will list. Its own component because it
  * must only read when the agent advertises OpenProposal (a 2.x agent has no
  * `/api/v3` and must see none of that traffic), and a hook cannot be called
@@ -256,7 +298,7 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
   // id on the previous step drops an answer about a different quote.
   const [looked, setLooked] = useState<{ id: string; answer: QuoteAnswer } | undefined>();
   const [proposalId, setProposalId] = useState("");
-  const [productId, setProductId] = useState("");
+  const [productIds, setProductIds] = useState<string[]>([]);
   // Short code: the template and quote routes map PG/PD/PA and 400 on anything else.
   const [dealType, setDealType] = useState<DealTypeCode>("PD");
   const [mediaType, setMediaType] = useState<QuoteMediaType>("digital");
@@ -270,7 +312,9 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
   const [notes, setNotes] = useState("");
   const [buyer, setBuyer] = useState({ advertiser_id: "", agency_id: "", seat_id: "", dsp_platform: "" });
 
-  const prod = productId.trim();
+  const prods = productIds.map((id) => id.trim()).filter(Boolean);
+  const prod = prods[0] ?? "";
+  const multi = prods.length > 1;
   // `QuoteRequest` says impressions are required for PG; the others take them optionally.
   const volume = Number(impressions);
   const needsVolume = dealType === "PG";
@@ -292,8 +336,8 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
   const hasBuyer = Object.keys(buyerIdentity).length > 0;
   const flight = flightStart !== "" ? { flight_start: flightStart, flight_end: flightEnd } : {};
   const bookNotes = notes.trim() ? { notes: notes.trim() } : {};
-  const quoteBody = {
-    product_id: prod,
+  // What every product's quote shares; the product is the only thing that differs.
+  const quoteCommon = {
     deal_type: dealType,
     media_type: mediaType,
     ...(hasVolume || needsVolume ? { impressions: volume } : {}),
@@ -301,17 +345,27 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
     ...(hasCpm ? { target_cpm: { amount_micros: Math.round(cpmValue * 1_000_000), currency: "USD" } } : {}),
     ...(hasBuyer ? { buyer_identity: buyerIdentity } : {}),
   };
-  // The quote is only worth booking for the request it answered. Edit the
-  // product or the volume after quoting and this changes, which drops the
-  // quote instead of letting a stale price be booked.
-  const requestSignature = JSON.stringify(quoteBody);
+  // The quotes are only worth booking for the request they answered. Change a
+  // term after quoting and this changes, which drops them all instead of
+  // letting a stale price be booked. The product list is deliberately not in
+  // it: each quote is keyed by its product, so adding one product leaves the
+  // others' quotes good, and removing one that failed leaves the rest.
+  const requestSignature = JSON.stringify(quoteCommon);
 
-  // One idempotency key per request: asking again for the same quote replays
-  // it, and a different request is a different body, which the agent refuses
-  // under a key it has already seen.
-  const quoteKey = useMemo(() => newKey(), [requestSignature]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Idempotency keys, minted once per thing asked and kept: asking again for
+  // the same quote replays it, and a different request is a different key. A
+  // ref, not state, because minting one must not re-render and a key must not
+  // change between a failed call and its retry.
+  const keys = useRef(new Map<string, string>());
+  const keyFor = (name: string): string => {
+    let key = keys.current.get(name);
+    if (!key) {
+      key = newKey();
+      keys.current.set(name, key);
+    }
+    return key;
+  };
   const q = quoteId.trim();
-  const bookingKey = useMemo(() => newKey(), [q]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const invalidates = ["deals:*"];
   const quoteReq = useMutation<
@@ -356,24 +410,41 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
     { invalidates },
   );
 
-  // Which request the held quote answers; `undefined` until one has landed.
+  // Per-product results. The two routes that take a product (quote then book,
+  // template) can take several, and each product is its own call with its own
+  // outcome: a batch can half succeed, and the operator has to see which half.
+  const [quotes, setQuotes] = useState<Record<string, Result<{ quote: Quote }>>>({});
+  const [deals, setDeals] = useState<Record<string, Result<unknown>>>({});
+  const [running, setRunning] = useState(false);
+  // Which request the held quotes answer; `undefined` until one has been asked.
   const [quotedFor, setQuotedFor] = useState<string | undefined>();
-  const quote =
-    quoteReq.last?.kind === "ok" && quotedFor === requestSignature ? quoteReq.last.data.quote : undefined;
+  const quoteFor = (id: string): Quote | undefined => {
+    const r = quotedFor === requestSignature ? quotes[id] : undefined;
+    return r?.kind === "ok" ? r.data.quote : undefined;
+  };
+  const batchRoute = method === "new-quote" || method === "template";
+  const allQuoted = prods.length > 0 && prods.every((id) => quoteFor(id));
+  const remaining = prods.filter((id) => deals[id]?.kind !== "ok");
+  const firstDeal = deals[prod];
+  const firstQuote = quotedFor === requestSignature ? quotes[prod] : undefined;
+  const firstQuoteHeld = quoteFor(prod);
 
-  const bookable = method === "new-quote" ? quote?.quote_id : q;
-  const active = {
-    "new-quote": quote ? book : quoteReq,
-    quote: book,
-    proposal: gen,
-    template,
-    curated,
-  }[method];
+  const active = { "new-quote": book, quote: book, proposal: gen, template, curated }[method];
   // A deal exists only once a booking-type call lands. Getting a quote is not it.
-  const dealResult = { "new-quote": book, quote: book, proposal: gen, template, curated }[method].last;
-  const done = dealResult?.kind === "ok";
-  const last = active.last;
-  const dealId = done ? createdDealId(dealResult.data) : undefined;
+  const done = batchRoute
+    ? prods.length > 0 && remaining.length === 0
+    : { quote: book, proposal: gen, curated }[method].last?.kind === "ok";
+  const busy = running || active.pending;
+  // The one result worth showing as an error when there is a single product.
+  const last: Result<unknown> | undefined = batchRoute
+    ? multi
+      ? undefined
+      : (firstDeal ?? firstQuote)
+    : active.last;
+  const dealId =
+    done && !multi
+      ? createdDealId((batchRoute ? (firstDeal?.kind === "ok" ? firstDeal.data : undefined) : active.last?.kind === "ok" ? active.last.data : undefined))
+      : undefined;
 
   const onQuoteAnswer = useCallback(
     (answer: QuoteAnswer | undefined) => setLooked(answer ? { id: q, answer } : undefined),
@@ -386,10 +457,10 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
   const p = proposalId.trim();
   const cur = curatorId.trim();
   const ready = {
-    "new-quote": prod !== "" && impressionsOk && cpmOk && flightOk,
+    "new-quote": prods.length > 0 && impressionsOk && cpmOk && flightOk,
     quote: q !== "",
     proposal: p !== "",
-    template: prod !== "" && impressionsOk && cpmOk && flightOk,
+    template: prods.length > 0 && impressionsOk && cpmOk && flightOk,
     curated: cur !== "",
   }[method];
 
@@ -405,7 +476,7 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
   if (notes.trim()) quoteRows.push(["Notes", notes.trim()]);
   const summary: [string, string][] = {
     "new-quote": [
-      ["Product", prod],
+      [multi ? "Products" : "Product", prods.join(", ")],
       ["Deal type", dealTypeLabel],
       ["Media type", mediaType],
       ...termRows,
@@ -413,48 +484,96 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
     quote: quoteRows,
     proposal: [["Proposal", p]] as [string, string][],
     template: [
-      ["Product", prod],
+      [multi ? "Products" : "Product", prods.join(", ")],
       ["Deal type", dealTypeLabel],
       ...termRows,
     ] as [string, string][],
     curated: [["Curator", cur]] as [string, string][],
   }[method];
 
+  async function runQuotes() {
+    setRunning(true);
+    // A changed request starts a fresh set; the same request keeps what already landed.
+    let current = quotedFor === requestSignature ? quotes : {};
+    setQuotedFor(requestSignature);
+    for (const id of prods) {
+      if (current[id]?.kind === "ok") continue;
+      const r = await quoteReq.run({
+        ...quoteCommon,
+        product_id: id,
+        idempotency_key: keyFor(`quote-request|${requestSignature}|${id}`),
+      });
+      current = { ...current, [id]: r };
+      setQuotes(current);
+    }
+    setRunning(false);
+  }
+
+  /**
+   * One booking call per product, in turn. Each carries a key tied to its quote,
+   * so booking again after a failure replays what already landed instead of
+   * booking twice; that is why this does not use the bulk route, which has no key.
+   */
+  async function runBooking() {
+    setRunning(true);
+    let current = deals;
+    for (const id of prods) {
+      const held = quoteFor(id);
+      if (current[id]?.kind === "ok" || !held) continue;
+      const r = await book.run({
+        quote_id: held.quote_id,
+        idempotency_key: keyFor(`quote|${held.quote_id}`),
+        ...bookNotes,
+        // The identity the quote was priced for: the agent re-verifies the tier at booking.
+        ...(hasBuyer ? { buyer_identity: buyerIdentity } : {}),
+      });
+      current = { ...current, [id]: r };
+      setDeals(current);
+    }
+    setRunning(false);
+  }
+
+  /**
+   * Not idempotent, so no key and no automatic second try: a product that
+   * failed is run again only when the operator presses the button again.
+   */
+  async function runTemplates() {
+    setRunning(true);
+    let current = deals;
+    for (const id of prods) {
+      if (current[id]?.kind === "ok") continue;
+      const r = await template.run({
+        deal_type: dealType,
+        product_id: id,
+        ...(hasVolume ? { impressions: volume } : {}),
+        ...(hasCpm ? { max_cpm: cpmValue } : {}),
+        ...flight,
+        ...(hasBuyer ? { buyer_identity: buyerIdentity } : {}),
+        ...bookNotes,
+      });
+      current = { ...current, [id]: r };
+      setDeals(current);
+    }
+    setRunning(false);
+  }
+
   function finish() {
     switch (method) {
       case "new-quote":
-        if (quote)
-          return void book.run({
-            quote_id: quote.quote_id,
-            idempotency_key: bookingKey,
-            ...bookNotes,
-            // The identity the quote was priced for: the agent re-verifies the tier at booking.
-            ...(hasBuyer ? { buyer_identity: buyerIdentity } : {}),
-          });
-        return void quoteReq
-          .run({ ...quoteBody, idempotency_key: quoteKey })
-          .then((r) => r.kind === "ok" && setQuotedFor(requestSignature));
+        return void (allQuoted ? runBooking() : runQuotes());
       case "quote":
-        return void book.run({ quote_id: q, idempotency_key: bookingKey, ...bookNotes });
+        return void book.run({ quote_id: q, idempotency_key: keyFor(`quote|${q}`), ...bookNotes });
       case "proposal":
         return void gen.run({ proposal_id: p });
       case "template":
-        return void template.run({
-          deal_type: dealType,
-          product_id: prod,
-          ...(hasVolume ? { impressions: volume } : {}),
-          ...(hasCpm ? { max_cpm: cpmValue } : {}),
-          ...flight,
-          ...(hasBuyer ? { buyer_identity: buyerIdentity } : {}),
-          ...bookNotes,
-        });
+        return void runTemplates();
       case "curated":
         return void curated.run({ curator_id: cur });
     }
   }
 
   function close() {
-    if (active.pending) return;
+    if (busy) return;
     onClose();
     // Reset after the dialog has gone, so a closing dialog does not flash back
     // to its first step. A finished wizard starts clean; an abandoned one too.
@@ -464,7 +583,10 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
       setLooked(undefined);
       setHaveQuote(false);
       setProposalId("");
-      setProductId("");
+      setProductIds([]);
+      setQuotes({});
+      setDeals({});
+      keys.current.clear();
       setImpressions("");
       setCuratorId("");
       setFlightStart("");
@@ -585,6 +707,20 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
     </>
   );
 
+  const left = remaining.length;
+  const finishLabel =
+    method === "new-quote"
+      ? allQuoted
+        ? multi
+          ? `Book ${left === 1 ? "deal" : `${left} deals`}`
+          : "Book deal"
+        : multi
+          ? "Get quotes"
+          : "Get quote"
+      : method === "template" && multi
+        ? `Create ${left === 1 ? "deal" : `${left} deals`}`
+        : "Create deal";
+
   let body: ReactNode;
   if (step === 0) {
     body = (
@@ -608,10 +744,11 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
         )}
         {method === "new-quote" && (
           <>
-            <ProductPicker
-              value={productId}
-              onChange={setProductId}
-              hint="The product to quote. Pick one, or type or paste an id."
+            <ProductMultiPicker
+              value={productIds}
+              onChange={setProductIds}
+              label="Products"
+              hint="The products to quote. Pick one or several, or type or paste ids. Each gets its own quote and its own deal, with the terms below."
               sx={{ width: "100%" }}
             />
             <EnumSelect
@@ -658,10 +795,11 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
         )}
         {method === "template" && (
           <>
-            <ProductPicker
-              value={productId}
-              onChange={setProductId}
-              hint="The product to price and book. Pick one, or type or paste an id."
+            <ProductMultiPicker
+              value={productIds}
+              onChange={setProductIds}
+              label="Products"
+              hint="The products to price and book. Pick one or several, or type or paste ids. Each becomes its own deal, with the terms below."
               sx={{ width: "100%" }}
             />
             <EnumSelect
@@ -688,16 +826,45 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
         </Typography>
         <ReviewList rows={summary} />
         {method === "new-quote" ? (
-          quote ? (
+          multi ? (
+            <Box sx={{ mt: 2 }} data-block="batch">
+              <ProductRows
+                rows={prods.map((id) => {
+                  const d = deals[id];
+                  const held = quoteFor(id);
+                  const asked = quotedFor === requestSignature ? quotes[id] : undefined;
+                  if (d?.kind === "ok") {
+                    const made = createdDealId(d.data);
+                    return { id, text: `booked${made ? ` · deal ${made}` : ""}` };
+                  }
+                  if (d) return { id, text: describe(d), bad: true };
+                  if (held)
+                    return {
+                      id,
+                      text: `quoted · ${money(held.pricing?.final_cpm)} CPM · ${held.quote_id}${held.expires_at ? ` · expires ${stamp(held.expires_at)}` : ""}`,
+                    };
+                  if (asked) return { id, text: describe(asked), bad: true };
+                  return { id, text: "not asked yet" };
+                })}
+                onRemove={(id) => setProductIds(productIds.filter((x) => x.trim() !== id))}
+                removable={(id) => !done && deals[id]?.kind !== "ok"}
+              />
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                {allQuoted
+                  ? "Booking binds each quote and creates its deal, one call per product. Booking again after a failure replays the ones that landed instead of booking them twice. Quotes expire after 24 hours; going back and changing the request discards them."
+                  : "Asks the agent for a price per product. A quote is non-binding and expires after 24 hours; nothing is booked until you press Book on the next screen. A product it cannot quote can be removed here."}
+              </Typography>
+            </Box>
+          ) : firstQuoteHeld ? (
             <Box sx={{ mt: 2 }} data-block="quote-held">
               <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
                 Quoted
               </Typography>
               <ReviewList
                 rows={[
-                  ["Quote", quote.quote_id],
-                  ["Rate", `${money(quote.pricing?.final_cpm)} CPM`],
-                  ...(quote.expires_at ? [["Expires", stamp(quote.expires_at)] as const] : []),
+                  ["Quote", firstQuoteHeld.quote_id],
+                  ["Rate", `${money(firstQuoteHeld.pricing?.final_cpm)} CPM`],
+                  ...(firstQuoteHeld.expires_at ? [["Expires", stamp(firstQuoteHeld.expires_at)] as const] : []),
                 ]}
               />
               <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
@@ -713,6 +880,27 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
               request returns the same quote.
             </Typography>
           )
+        ) : method === "template" && multi ? (
+          <Box sx={{ mt: 2 }} data-block="batch">
+            <ProductRows
+              rows={prods.map((id) => {
+                const d = deals[id];
+                if (d?.kind === "ok") {
+                  const made = createdDealId(d.data);
+                  return { id, text: `created${made ? ` · deal ${made}` : ""}` };
+                }
+                if (d) return { id, text: describe(d), bad: true };
+                return { id, text: "ready" };
+              })}
+              onRemove={(id) => setProductIds(productIds.filter((x) => x.trim() !== id))}
+              removable={(id) => !done && deals[id]?.kind !== "ok"}
+            />
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+              {CONSEQUENCE.template} One deal per product, in turn. If a product fails, pressing the
+              button again runs only the ones that have not been created; a failure with no clear
+              refusal may still have created its deal, so check the Deals list before trying again.
+            </Typography>
+          </Box>
         ) : (
           <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
             {CONSEQUENCE[method]}
@@ -744,7 +932,12 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
             {describe(last)}
           </Typography>
         )}
-        {done && (
+        {done && multi && (
+          <Alert severity="success" variant="outlined" sx={{ mt: 2 }} data-state="write-ok">
+            All {prods.length} deals were created. They will appear in the list.
+          </Alert>
+        )}
+        {done && !multi && (
           <Alert severity="success" variant="outlined" sx={{ mt: 2 }} data-state="write-ok">
             The agent accepted this call.{" "}
             {dealId ? (
@@ -756,7 +949,7 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
             )}
           </Alert>
         )}
-        {done && dealId && <SendNow dealId={dealId} />}
+        {done && dealId && !multi && <SendNow dealId={dealId} />}
       </Box>
     );
   }
@@ -772,11 +965,11 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
       onStep={setStep}
       onClose={close}
       canNext={step !== 1 || ready}
-      finishLabel={method === "new-quote" ? (bookable ? "Book deal" : "Get quote") : "Create deal"}
-      pendingLabel={method === "new-quote" && !bookable ? "Asking…" : "Creating…"}
+      finishLabel={finishLabel}
+      pendingLabel={method === "new-quote" && !allQuoted ? "Asking…" : "Creating…"}
       onFinish={finish}
-      canFinish={writesEnabled && !deadQuote}
-      pending={active.pending}
+      canFinish={writesEnabled && !deadQuote && (!batchRoute || prods.length > 0)}
+      pending={busy}
       done={done}
       block="deal-wizard"
     >

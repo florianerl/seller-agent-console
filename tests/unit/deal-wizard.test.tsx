@@ -57,9 +57,9 @@ async function pick(user: ReturnType<typeof userEvent.setup>, title: string) {
   if (existing) await user.click(await screen.findByRole("button", { name: "I have a quote id" }));
 }
 
-async function createButton() {
+async function createButton(name = "Create deal") {
   return waitFor(() => {
-    const el = screen.getByRole("button", { name: "Create deal" });
+    const el = screen.getByRole("button", { name });
     expect(el).toBeEnabled();
     return el;
   });
@@ -121,15 +121,15 @@ describe("the new-deal wizard", () => {
     expect(screen.queryByRole("radio", { name: /existing quote/i })).toBeNull();
     await next(user);
 
-    expect(screen.getByRole("combobox", { name: "Product id" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Products" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Quote id")).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "I have a quote id" }));
     expect(screen.getByLabelText("Quote id")).toBeInTheDocument();
-    expect(screen.queryByRole("combobox", { name: "Product id" })).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "Products" })).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "Get a new quote" }));
-    expect(screen.getByRole("combobox", { name: "Product id" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Products" })).toBeInTheDocument();
   });
 
   it("quotes first, shows the rate, and only then books that quote", async () => {
@@ -146,7 +146,7 @@ describe("the new-deal wizard", () => {
 
     // Quote, then book is the default route.
     await user.click(await screen.findByRole("button", { name: "Next" }));
-    await user.type(screen.getByRole("combobox", { name: "Product id" }), "prod-1");
+    await user.type(screen.getByRole("combobox", { name: "Products" }), "prod-1{Enter}");
     await user.click(screen.getByLabelText("Media type"));
     await user.click(await screen.findByRole("option", { name: "ctv" }));
     await next(user);
@@ -175,7 +175,7 @@ describe("the new-deal wizard", () => {
     mount();
 
     await next(user);
-    await user.type(screen.getByRole("combobox", { name: "Product id" }), "prod-1");
+    await user.type(screen.getByRole("combobox", { name: "Products" }), "prod-1{Enter}");
     await user.click(screen.getByLabelText("Deal type"));
     await user.click(await screen.findByRole("option", { name: "PG — programmatic guaranteed" }));
     expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
@@ -193,13 +193,13 @@ describe("the new-deal wizard", () => {
     mount();
 
     await next(user);
-    await user.type(screen.getByRole("combobox", { name: "Product id" }), "prod-1");
+    await user.type(screen.getByRole("combobox", { name: "Products" }), "prod-1{Enter}");
     await next(user);
     await user.click(await screen.findByRole("button", { name: "Get quote" }));
     expect(await screen.findByRole("button", { name: "Book deal" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Back" }));
-    await user.type(screen.getByRole("combobox", { name: "Product id" }), "2");
+    await user.type(screen.getByLabelText("Target CPM (optional)"), "5");
     await next(user);
 
     expect(await screen.findByRole("button", { name: "Get quote" })).toBeInTheDocument();
@@ -269,6 +269,140 @@ describe("the new-deal wizard", () => {
       await createButton();
     });
   }
+
+  describe("with several products", () => {
+    /** Answers each POST from a function of its body, recording every body. */
+    function respond(
+      path: string,
+      answer: (body: Record<string, unknown>) => { status?: number; json: unknown },
+    ) {
+      const bodies: Record<string, unknown>[] = [];
+      server.use(
+        http.post(`${API}${path}`, async ({ request }) => {
+          const body = (await request.json()) as Record<string, unknown>;
+          bodies.push(body);
+          const { status = 200, json } = answer(body);
+          return HttpResponse.json(json as Record<string, unknown>, { status });
+        }),
+      );
+      return bodies;
+    }
+
+    async function addProducts(user: ReturnType<typeof userEvent.setup>, ids: string[]) {
+      for (const id of ids) {
+        await user.type(screen.getByRole("combobox", { name: "Products" }), `${id}{Enter}`);
+      }
+    }
+
+    it("quotes every product, then books each quote once, with a key per quote", async () => {
+      const quotes = respond("/api/v1/quotes", (b) => ({
+        json: { quote: { quote_id: `qt-${String(b["product_id"])}`, pricing: { final_cpm: { amount_micros: 5_000_000, currency: "USD" } } } },
+      }));
+      const deals = respond("/api/v1/deals", (b) => ({ json: { deal: { deal_id: `D-${String(b["quote_id"])}` } } }));
+      const user = userEvent.setup();
+      mount();
+
+      await next(user);
+      await addProducts(user, ["a", "b"]);
+      await next(user);
+      await user.click(await screen.findByRole("button", { name: "Get quotes" }));
+
+      await waitFor(() => expect(quotes.map((q) => q["product_id"])).toEqual(["a", "b"]));
+      // A quote per product, each with a key of its own.
+      expect(new Set(quotes.map((q) => q["idempotency_key"])).size).toBe(2);
+      await user.click(await screen.findByRole("button", { name: "Book 2 deals" }));
+
+      await waitFor(() => expect(deals.map((d) => d["quote_id"])).toEqual(["qt-a", "qt-b"]));
+      expect(new Set(deals.map((d) => d["idempotency_key"])).size).toBe(2);
+      expect(await screen.findByText(/All 2 deals were created/)).toBeInTheDocument();
+    });
+
+    it("shows which product could not be quoted, and lets it be removed", async () => {
+      respond("/api/v1/quotes", (b) =>
+        b["product_id"] === "bad"
+          ? { status: 422, json: { detail: "no such product" } }
+          : { json: { quote: { quote_id: "qt-ok" } } },
+      );
+      const deals = respond("/api/v1/deals", () => ({ json: { deal: { deal_id: "D-1" } } }));
+      const user = userEvent.setup();
+      mount();
+
+      await next(user);
+      await addProducts(user, ["ok", "bad"]);
+      await next(user);
+      await user.click(await screen.findByRole("button", { name: "Get quotes" }));
+
+      const failed = await waitFor(() => {
+        const el = document.querySelector('[data-product="bad"] [data-state="product-failed"]');
+        expect(el).toBeTruthy();
+        return el!;
+      });
+      expect(failed.textContent).toMatch(/422/);
+      // Booking waits until every product has a quote; the one that cannot be dropped.
+      expect(screen.queryByRole("button", { name: /Book/ })).toBeNull();
+
+      await user.click(screen.getByRole("button", { name: "Remove bad" }));
+      expect(document.querySelector('[data-product="bad"]')).toBeNull();
+      await user.click(await screen.findByRole("button", { name: "Book deal" }));
+      await waitFor(() => expect(deals).toHaveLength(1));
+    });
+
+    it("books again after a failure with the same key, and skips what already landed", async () => {
+      respond("/api/v1/quotes", (b) => ({ json: { quote: { quote_id: `qt-${String(b["product_id"])}` } } }));
+      let failNext = true;
+      const deals = respond("/api/v1/deals", (b) => {
+        if (b["quote_id"] === "qt-b" && failNext) {
+          failNext = false;
+          return { status: 503, json: { detail: "try later" } };
+        }
+        return { json: { deal: { deal_id: `D-${String(b["quote_id"])}` } } };
+      });
+      const user = userEvent.setup();
+      mount();
+
+      await next(user);
+      await addProducts(user, ["a", "b"]);
+      await next(user);
+      await user.click(await screen.findByRole("button", { name: "Get quotes" }));
+      await user.click(await screen.findByRole("button", { name: "Book 2 deals" }));
+
+      // a landed, b did not: one left to book.
+      await user.click(await screen.findByRole("button", { name: "Book deal" }));
+      await waitFor(() => expect(deals).toHaveLength(3));
+
+      const b = deals.filter((d) => d["quote_id"] === "qt-b");
+      expect(b).toHaveLength(2);
+      expect(b[0]!["idempotency_key"]).toBe(b[1]!["idempotency_key"]);
+      expect(deals.filter((d) => d["quote_id"] === "qt-a")).toHaveLength(1);
+      expect(await screen.findByText(/All 2 deals were created/)).toBeInTheDocument();
+    });
+
+    it("creates a template deal per product, and retries only the one that failed", async () => {
+      let failNext = true;
+      const sent = respond("/api/v1/deals/from-template", (b) => {
+        if (b["product_id"] === "b" && failNext) {
+          failNext = false;
+          return { status: 422, json: { detail: "max_cpm below floor" } };
+        }
+        return { json: { deal: { deal_id: `D-${String(b["product_id"])}` } } };
+      });
+      const user = userEvent.setup();
+      mount();
+
+      await pick(user, "From a template");
+      await addProducts(user, ["a", "b", "c"]);
+      await next(user);
+      await user.click(await createButton("Create 3 deals"));
+
+      // Every product is tried once and nothing is retried on its own.
+      await waitFor(() => expect(sent.map((x) => x["product_id"])).toEqual(["a", "b", "c"]));
+      expect(document.querySelector('[data-product="b"] [data-state="product-failed"]')).toBeTruthy();
+
+      await user.click(await createButton("Create deal"));
+      await waitFor(() => expect(sent.map((x) => x["product_id"])).toEqual(["a", "b", "c", "b"]));
+      expect(await screen.findByText(/All 3 deals were created/)).toBeInTheDocument();
+    });
+  });
 
   it("offers to send a new deal to a buyer once it exists", async () => {
     capture("/api/v1/deals", { deal: { deal_id: "D-7" } });
@@ -346,7 +480,7 @@ describe("the new-deal wizard", () => {
     mount();
 
     await pick(user, "From a template");
-    await user.type(screen.getByRole("combobox", { name: "Product id" }), "homepage");
+    await user.type(screen.getByRole("combobox", { name: "Products" }), "homepage");
     await user.click(await screen.findByRole("option", { name: /prod-91/ }));
     await user.click(screen.getByLabelText("Deal type"));
     await user.click(await screen.findByRole("option", { name: "PG — programmatic guaranteed" }));
@@ -367,7 +501,7 @@ describe("the new-deal wizard", () => {
     mount();
 
     await pick(user, "From a template");
-    await user.type(screen.getByRole("combobox", { name: "Product id" }), "prod-1");
+    await user.type(screen.getByRole("combobox", { name: "Products" }), "prod-1{Enter}");
     await user.type(screen.getByLabelText("Flight start (optional)"), "2026-11-01");
     // One date without the other is half a flight.
     expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
@@ -399,7 +533,7 @@ describe("the new-deal wizard", () => {
     mount();
 
     await pick(user, "From a template");
-    await user.type(screen.getByRole("combobox", { name: "Product id" }), "prod-1");
+    await user.type(screen.getByRole("combobox", { name: "Products" }), "prod-1{Enter}");
     await user.type(screen.getByLabelText("Flight start (optional)"), "2026-11-30");
     await user.type(screen.getByLabelText("Flight end (optional)"), "2026-11-01");
 
@@ -413,7 +547,7 @@ describe("the new-deal wizard", () => {
     mount();
 
     await next(user);
-    await user.type(screen.getByRole("combobox", { name: "Product id" }), "prod-1");
+    await user.type(screen.getByRole("combobox", { name: "Products" }), "prod-1{Enter}");
     await user.type(screen.getByLabelText("Target CPM (optional)"), "7.25");
     await user.type(screen.getByLabelText("Notes (optional)"), "hold for Q4");
     await user.click(screen.getByText("Buyer details (optional)"));
