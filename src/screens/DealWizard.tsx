@@ -1,23 +1,13 @@
 import { useMemo, useState, type ReactNode } from "react";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
-import Button from "@mui/material/Button";
-import Dialog from "@mui/material/Dialog";
-import DialogActions from "@mui/material/DialogActions";
-import DialogContent from "@mui/material/DialogContent";
-import DialogTitle from "@mui/material/DialogTitle";
-import FormControlLabel from "@mui/material/FormControlLabel";
-import Radio from "@mui/material/Radio";
-import RadioGroup from "@mui/material/RadioGroup";
-import Step from "@mui/material/Step";
-import StepLabel from "@mui/material/StepLabel";
-import Stepper from "@mui/material/Stepper";
 import Typography from "@mui/material/Typography";
 import { bookDeal, createCuratedDeal, dealFromTemplate, generateDeal } from "../api/endpoints";
 import { describe } from "../api/errors";
 import { DEAL_TYPES, type DealTypeCode } from "../api/vocabulary";
 import { EnumSelect } from "../components/EnumSelect";
 import { TipField } from "../components/TipField";
+import { ChoiceCards, ReviewList, WizardDialog } from "../components/Wizard";
 import { useCredential } from "../credentials/context";
 import { useMutation } from "../query/useMutation";
 import { palette } from "../theme/palette";
@@ -163,40 +153,7 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
   let body: ReactNode;
   if (step === 0) {
     body = (
-      <RadioGroup
-        value={method}
-        onChange={(e) => setMethod(e.target.value as Method)}
-        aria-label="How to create the deal"
-        sx={{ gap: 1 }}
-      >
-        {METHODS.map((m) => (
-          <Box
-            key={m.value}
-            sx={{
-              border: `1px solid ${method === m.value ? palette.brandRedText : palette.line}`,
-              borderRadius: 1,
-              px: 1.5,
-              py: 0.5,
-            }}
-          >
-            <FormControlLabel
-              value={m.value}
-              control={<Radio size="small" />}
-              sx={{ alignItems: "flex-start", m: 0, width: "100%" }}
-              label={
-                <Box sx={{ pt: 0.75 }}>
-                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                    {m.title}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary" component="p">
-                    {m.description}
-                  </Typography>
-                </Box>
-              }
-            />
-          </Box>
-        ))}
-      </RadioGroup>
+      <ChoiceCards value={method} onChange={setMethod} options={METHODS} label="How to create the deal" />
     );
   } else if (step === 1) {
     body = (
@@ -252,21 +209,7 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
         <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
           {METHODS.find((m) => m.value === method)?.title}
         </Typography>
-        <Box
-          component="dl"
-          sx={{ m: 0, display: "grid", gridTemplateColumns: "auto 1fr", columnGap: 2, rowGap: 0.5 }}
-        >
-          {summary.map(([k, v]) => (
-            <Box key={k} sx={{ display: "contents" }}>
-              <Typography component="dt" variant="body2" color="text.secondary">
-                {k}
-              </Typography>
-              <Typography component="dd" variant="body2" sx={{ m: 0, fontFamily: "monospace" }}>
-                {v}
-              </Typography>
-            </Box>
-          ))}
-        </Box>
+        <ReviewList rows={summary} />
         <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
           {CONSEQUENCE[method]}
         </Typography>
@@ -291,56 +234,23 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
   }
 
   return (
-    <Dialog open={open} onClose={close} fullWidth maxWidth="sm" data-block="deal-wizard">
-      <DialogTitle>New deal</DialogTitle>
-      <DialogContent>
-        <Stepper activeStep={step} sx={{ mb: 3, mt: 0.5 }}>
-          {STEPS.map((label) => (
-            <Step key={label} completed={done || STEPS.indexOf(label) < step}>
-              <StepLabel>{label}</StepLabel>
-            </Step>
-          ))}
-        </Stepper>
-        {body}
-      </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2 }}>
-        {done ? (
-          <Button variant="contained" onClick={close} data-action="wizard-done">
-            Done
-          </Button>
-        ) : (
-          <>
-            <Button onClick={close} disabled={active.pending}>
-              Cancel
-            </Button>
-            <Box sx={{ flex: 1 }} />
-            {step > 0 && (
-              <Button onClick={() => setStep(step - 1)} disabled={active.pending}>
-                Back
-              </Button>
-            )}
-            {step < 2 ? (
-              <Button
-                variant="contained"
-                onClick={() => setStep(step + 1)}
-                disabled={step === 1 && !ready}
-                data-action="wizard-next"
-              >
-                Next
-              </Button>
-            ) : (
-              <Button
-                variant="contained"
-                onClick={create}
-                disabled={!writesEnabled || active.pending}
-                data-action="wizard-create"
-              >
-                {active.pending ? "Creating…" : "Create deal"}
-              </Button>
-            )}
-          </>
-        )}
-      </DialogActions>
-    </Dialog>
+    <WizardDialog
+      open={open}
+      title="New deal"
+      steps={STEPS}
+      step={step}
+      onStep={setStep}
+      onClose={close}
+      canNext={step !== 1 || ready}
+      finishLabel="Create deal"
+      pendingLabel="Creating…"
+      onFinish={create}
+      canFinish={writesEnabled}
+      pending={active.pending}
+      done={done}
+      block="deal-wizard"
+    >
+      {body}
+    </WizardDialog>
   );
 }

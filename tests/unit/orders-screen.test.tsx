@@ -589,13 +589,20 @@ describe("the orders screen", () => {
     await waitFor(() => expect(screen.getByText("ORD-ABC123")).toBeInTheDocument());
 
     await user.click(screen.getByRole("button", { name: "New order" }));
-    await user.type(screen.getByLabelText("Deal id (optional)"), "deal-9");
-    await user.click(document.querySelector('[data-action="create-order"]') as HTMLElement);
-    await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Create order" }));
+    const wizard = await screen.findByRole("dialog");
+    await user.click(within(wizard).getByRole("radio", { name: /From a quote/ }));
+    await user.click(within(wizard).getByRole("button", { name: "Next" }));
+    await user.type(within(wizard).getByLabelText("Quote id"), "qt-1");
+    await user.type(within(wizard).getByLabelText("Deal id (optional)"), "deal-9");
+    await user.click(within(wizard).getByRole("button", { name: "Next" }));
+    await user.click(within(wizard).getByRole("button", { name: "Create order" }));
 
-    await waitFor(() => expect(sent).toEqual([{ deal_id: "deal-9", metadata: { source: "seller-console" } }]));
+    await waitFor(() =>
+      expect(sent).toEqual([{ deal_id: "deal-9", quote_id: "qt-1", metadata: { source: "seller-console" } }]),
+    );
+    await user.click(await within(wizard).findByRole("button", { name: "Open the order" }));
     await waitFor(() => expect(transitionButtons()).toEqual(["submitted", "cancelled"]));
-    // By role, so it has to wait out the confirmation's exit, which hides the page meanwhile.
+    // By role, so it has to wait out the wizard's exit, which hides the page meanwhile.
     expect(await screen.findByRole("button", { name: "Hide ORD-NEW1" })).toHaveAttribute(
       "aria-expanded",
       "true",
@@ -1161,7 +1168,24 @@ describe("searching the orders", () => {
   });
 });
 
-describe("creating an order from a stored deal", () => {
+describe("the new-order wizard", () => {
+  const DEALS = {
+    deals: [
+      {
+        deal: {
+          deal_id: "DEMO-111",
+          deal_type: "PD",
+          status: "active",
+          quote_id: "qt-from-deal",
+          product: { product_id: "p1", name: "Homepage takeover" },
+        },
+      },
+      { deal: { deal_id: "DEMO-222", deal_type: "PG", status: "active", quote_id: null, product: { product_id: "p2", name: "CTV prime" } } },
+    ],
+    count: 2,
+    skipped: [],
+  };
+
   beforeEach(async () => {
     resetReachability();
     await connect({ writesEnabled: true });
@@ -1171,41 +1195,98 @@ describe("creating an order from a stored deal", () => {
     );
   });
 
-  it("loads the deals only when asked, offers them by product, and sends the one picked", async () => {
+  async function openWizard(user: ReturnType<typeof userEvent.setup>) {
+    renderScreen();
+    await user.click(await screen.findByRole("button", { name: "New order" }));
+    return screen.findByRole("dialog");
+  }
+
+  it("reads the deals only on the deal route's details step, and fills in the deal's quote", async () => {
     let dealReads = 0;
     const sent: unknown[] = [];
     server.use(
       http.get(`${API}/api/v1/deals`, () => {
         dealReads += 1;
-        return HttpResponse.json({
-          deals: [
-            { deal: { deal_id: "DEMO-111", deal_type: "PD", status: "active", product: { product_id: "p1", name: "Homepage takeover" } } },
-            { deal: { deal_id: "DEMO-222", deal_type: "PG", status: "active", product: { product_id: "p2", name: "CTV prime" } } },
-          ],
-          count: 2,
-          skipped: [],
-        });
+        return HttpResponse.json(DEALS);
       }),
       http.post(`${API}/api/v1/orders`, async ({ request }) => {
         sent.push(await request.json());
-        return HttpResponse.json({ order_id: "ORD-NEW2", status: "draft", deal_id: "DEMO-222", created_at: null });
+        return HttpResponse.json({ order_id: "ORD-NEW2", status: "draft", deal_id: "DEMO-111", created_at: null });
       }),
     );
     const user = userEvent.setup();
-    renderScreen();
-    await user.click(await screen.findByRole("button", { name: "New order" }));
-    // The deals list is a full scan: opening the form must not start one.
+    const wizard = await openWizard(user);
+    // The deals list is a full scan: opening the wizard must not start one.
     expect(dealReads).toBe(0);
+    expect(within(wizard).getByRole("radio", { name: /For a stored deal/ })).toBeChecked();
 
-    await user.click(document.querySelector('[data-action="choose-deal"]') as HTMLElement);
-    await user.click(await screen.findByLabelText("Deal"));
-    await user.click(await screen.findByText("DEMO-222"));
+    await user.click(within(wizard).getByRole("button", { name: "Next" }));
+    expect(within(wizard).getByRole("button", { name: "Next" })).toBeDisabled();
+    await user.click(await within(wizard).findByLabelText("Deal"));
+    await user.click(await screen.findByText("DEMO-111"));
     expect(dealReads).toBe(1);
-    // No helper line under the picker: it is what pushed the row out of line.
-    expect(document.querySelector('[data-block="new-order"] .MuiFormHelperText-root')).toBeNull();
+    await waitFor(() => expect(within(wizard).getByLabelText("Quote id (optional)")).toHaveValue("qt-from-deal"));
+    await user.type(within(wizard).getByLabelText("Note (optional)"), "phone booking");
 
-    await user.click(document.querySelector('[data-action="create-order"]') as HTMLElement);
-    await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Create order" }));
-    await waitFor(() => expect(sent).toEqual([{ deal_id: "DEMO-222", metadata: { source: "seller-console" } }]));
+    await user.click(within(wizard).getByRole("button", { name: "Next" }));
+    expect(wizard.textContent).toMatch(/qt-from-deal \(from the deal\)/);
+    expect(wizard.textContent).toMatch(/Not idempotent/);
+    await user.click(within(wizard).getByRole("button", { name: "Create order" }));
+
+    await waitFor(() =>
+      expect(sent).toEqual([
+        {
+          deal_id: "DEMO-111",
+          quote_id: "qt-from-deal",
+          metadata: { source: "seller-console", note: "phone booking" },
+        },
+      ]),
+    );
+    expect(await within(wizard).findByText(/Created ORD-NEW2, in draft/)).toBeInTheDocument();
+  });
+
+  it("never overwrites a quote the operator typed with the deal's", async () => {
+    server.use(http.get(`${API}/api/v1/deals`, () => HttpResponse.json(DEALS)));
+    const user = userEvent.setup();
+    const wizard = await openWizard(user);
+    await user.click(within(wizard).getByRole("button", { name: "Next" }));
+
+    await user.type(within(wizard).getByLabelText("Quote id (optional)"), "qt-mine");
+    await user.click(within(wizard).getByLabelText("Deal"));
+    await user.click(await screen.findByText("DEMO-111"));
+
+    expect(within(wizard).getByLabelText("Quote id (optional)")).toHaveValue("qt-mine");
+  });
+
+  it("warns what an order with no deal cannot do, and sends no deal", async () => {
+    const sent: unknown[] = [];
+    server.use(
+      http.post(`${API}/api/v1/orders`, async ({ request }) => {
+        sent.push(await request.json());
+        return HttpResponse.json({ order_id: "ORD-BARE", status: "draft", deal_id: "", created_at: null });
+      }),
+    );
+    const user = userEvent.setup();
+    const wizard = await openWizard(user);
+    await user.click(within(wizard).getByRole("radio", { name: /With no deal yet/ }));
+    await user.click(within(wizard).getByRole("button", { name: "Next" }));
+    expect(wizard.textContent).toMatch(/refuses every change request/);
+
+    await user.click(within(wizard).getByRole("button", { name: "Next" }));
+    expect(wizard.textContent).toMatch(/will refuse change requests/);
+    await user.click(within(wizard).getByRole("button", { name: "Create order" }));
+    await waitFor(() => expect(sent).toEqual([{ metadata: { source: "seller-console" } }]));
+  });
+
+  it("will not create while writes are off, and says where the switch is", async () => {
+    await connect({ writesEnabled: false });
+    const user = userEvent.setup();
+    const wizard = await openWizard(user);
+    await user.click(within(wizard).getByRole("radio", { name: /With no deal yet/ }));
+    await user.click(within(wizard).getByRole("button", { name: "Next" }));
+    await user.click(within(wizard).getByRole("button", { name: "Next" }));
+
+    expect(within(wizard).getByRole("button", { name: "Create order" })).toBeDisabled();
+    expect(wizard.textContent).toMatch(/Writes are switched off/);
   });
 });

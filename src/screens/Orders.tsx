@@ -6,7 +6,6 @@ import Collapse from "@mui/material/Collapse";
 import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
 import Link from "@mui/material/Link";
-import Paper from "@mui/material/Paper";
 import Skeleton from "@mui/material/Skeleton";
 import Stack from "@mui/material/Stack";
 import Step from "@mui/material/Step";
@@ -54,12 +53,12 @@ import { GatedNotice } from "../components/GatedNotice";
 import { InfoTip } from "../components/InfoTip";
 import { PageHeader } from "../components/PageHeader";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
+import { OrderWizard } from "./OrderWizard";
 import { StatusChip } from "../components/StatusChip";
 import { useCredential } from "../credentials/context";
 import {
   ChangeRequestCreate,
   ChangeRequestReviewWrites,
-  OrderCreateWrite,
   OrderTransitionWrites,
 } from "./mutations";
 import { elapsed, plural, stamp, timeOfDay } from "../lib/time";
@@ -1057,42 +1056,31 @@ export default function OrdersScreen() {
         subtitle="Every order the agent has stored. Buyer agents create them; nothing in the agent moves one on its own, so each step below waits on someone here or in Claude Code."
         actions={
           <Button
-            variant={creating ? "outlined" : "contained"}
+            variant="contained"
             size="small"
-            onClick={() => setCreating((v) => !v)}
-            aria-expanded={creating}
+            onClick={() => setCreating(true)}
+            aria-haspopup="dialog"
             data-action="new-order"
           >
-            {creating ? "Close" : "New order"}
+            New order
           </Button>
         }
       >
 
       {!writesEnabled && <ReadOnlyNotice what="Creating or moving an order" />}
 
-      {/* Inline rather than a dialog: the create button opens its own
-          confirmation, and a dialog over a dialog loses the operator. */}
-      <Collapse in={creating} unmountOnExit>
-        <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }} data-block="new-order">
-          <Typography variant="h3" sx={{ mb: 0.5 }}>
-            New order
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-            Orders start in draft. Usually a buyer agent creates them; create one here when the
-            order came in some other way. Attach the deal it executes: without one, the agent
-            refuses change requests against it.
-          </Typography>
-          <OrderCreateWrite
-            onCreated={(orderId) => {
-              // Land the operator on the new order's next step, whatever the
-              // filter or search was hiding.
-              clearAll();
-              setOpenOrder(orderId);
-              setCreating(false);
-            }}
-          />
-        </Paper>
-      </Collapse>
+      {/* A wizard, like New deal: the review step is the confirmation, so no
+          second dialog asks the same question. */}
+      <OrderWizard
+        open={creating}
+        onClose={() => setCreating(false)}
+        onOpenOrder={(orderId) => {
+          // Land the operator on the new order's next step, whatever the
+          // filter or search was hiding.
+          clearAll();
+          setOpenOrder(orderId);
+        }}
+      />
 
       {list.data && <StageSummary rows={all} waiting={waiting} filter={filter} onFilter={setFilter} />}
 

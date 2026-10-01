@@ -18,7 +18,6 @@ import {
   createBuyerApiKey,
   createChangeRequest,
   createOperatorApiKey,
-  createOrder,
   createPackage,
   createQuote,
   createSession,
@@ -58,7 +57,6 @@ import {
   type ChangeRequestAck,
   type ChangeRequestReviewInput,
   type LineItem,
-  type Order,
   type Proposal,
 } from "../api/endpoints";
 import { describe, type Result } from "../api/errors";
@@ -90,7 +88,7 @@ import { ConfirmAction } from "../components/ConfirmAction";
 import { EnumSelect } from "../components/EnumSelect";
 import { Hint } from "../components/Hint";
 import { TipField } from "../components/TipField";
-import { AgentPicker, DealPicker, OrderPicker, PackagePicker, ProductPicker } from "./pickers";
+import { AgentPicker, OrderPicker, PackagePicker, ProductPicker } from "./pickers";
 import { JsonView } from "../components/JsonView";
 import { FormFields, FormRow, ReadForm, WriteForm } from "../components/WriteForm";
 import { WritesNotice } from "../components/WritesNotice";
@@ -694,95 +692,6 @@ function PackageBody({ packageId }: { packageId: string }) {
     <Typography variant="body2" sx={{ mt: 1 }}>
       {pkg.data?.name ?? (pkg.result ? describe(pkg.result) : "")}
     </Typography>
-  );
-}
-
-export function OrderCreateWrite({ onCreated }: { onCreated?: (orderId: string) => void }) {
-  const { writesEnabled } = useCredential();
-  const [dealId, setDealId] = useState("");
-  const [quoteId, setQuoteId] = useState("");
-  const [pickDeal, setPickDeal] = useState(false);
-
-  const create = useMutation<
-    { deal_id?: string; quote_id?: string; metadata: Record<string, unknown> },
-    Order
-  >(
-    (c, args) => createOrder(c, args),
-    { invalidates: ["orders:*", "orders-report"] },
-  );
-
-  return (
-    <WriteForm
-      title="Create a draft order?"
-      confirmLabel="Create order"
-      action="create-order"
-      blocked={!writesEnabled}
-      pending={create.pending}
-      last={create.last}
-      onConfirm={() =>
-        void create
-          .run({
-            ...(dealId.trim() ? { deal_id: dealId.trim() } : {}),
-            ...(quoteId.trim() ? { quote_id: quoteId.trim() } : {}),
-            // Buyer agents tag their orders with a source; so does the
-            // console, or its orders would read as "source not recorded".
-            metadata: { source: "seller-console" },
-          })
-          .then((result) => {
-            if (result.kind === "ok") onCreated?.(result.data.order_id);
-          })
-      }
-      consequence={
-        <>
-          Creates an order in <strong>draft</strong>
-          {dealId.trim() ? <> for deal {dealId.trim()}</> : <> with no deal attached</>}. Not
-          idempotent: each call mints a new order id, so a retry after a timeout may leave two
-          drafts.
-        </>
-      }
-    >
-      <FormFields>
-        {pickDeal ? (
-          <DealPicker
-            value={dealId}
-            onChange={setDealId}
-            disabled={!writesEnabled}
-            hint="Optional deal to attach. Pick one of the stored deals, or type or paste a deal id."
-            sx={{ minWidth: 320 }}
-          />
-        ) : (
-          <TipField
-            hint="Optional id of the deal the order is for. Leave empty for an order with no deal attached."
-            size="small"
-            label="Deal id (optional)"
-            value={dealId}
-            onChange={(e) => setDealId(e.target.value)}
-            disabled={!writesEnabled}
-          />
-        )}
-        <TipField
-          hint="Optional id of the quote the order was priced from. It links to the Quotes screen."
-          size="small"
-          label="Quote id (optional)"
-          value={quoteId}
-          onChange={(e) => setQuoteId(e.target.value)}
-          disabled={!writesEnabled}
-        />
-        {!pickDeal && (
-          <Hint hint="Switches the deal box to a list of stored deals. This loads every stored deal, so it only runs when you click.">
-            <Button
-              size="small"
-              onClick={() => setPickDeal(true)}
-              disabled={!writesEnabled}
-              data-action="choose-deal"
-              sx={{ flexShrink: 0 }}
-            >
-              Choose from deals
-            </Button>
-          </Hint>
-        )}
-      </FormFields>
-    </WriteForm>
   );
 }
 
