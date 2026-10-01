@@ -13,7 +13,6 @@ import Typography from "@mui/material/Typography";
 import {
   agentById,
   applyChangeRequest,
-  assemblePackage,
   audienceMatch,
   bulkDealOperations,
   closeSession,
@@ -21,34 +20,26 @@ import {
   createBuyerApiKey,
   createChangeRequest,
   createOperatorApiKey,
-  createPackage,
   createSession,
   dealBuyerStatus,
   dealById,
   dealSspTroubleshoot,
-  deleteInventoryTypeOverride,
-  deletePackage,
   deprecateDeal,
   discoverAgent,
   distributeDeal,
   eventById,
   migrateDeal,
   negotiationStatus,
-  packageById,
   postNegotiationMessage,
   pushDeal,
-  putRateCard,
   registerCurator,
   removeRegisteredAgent,
   reviewChangeRequest,
   sendSessionMessage,
-  setInventoryTypeOverride,
   submitProposal,
-  syncPackages,
   transitionOrder,
   triggerInventorySync,
   updateAgentTrust,
-  updatePackage,
   assentProposal,
   holdLineItem,
   publishProposal,
@@ -75,7 +66,6 @@ import {
   ACTOR_KINDS,
   BULK_DEAL_ACTIONS,
   CHANGE_TYPES,
-  INVENTORY_TYPES,
   LEGACY_DEAL_TYPES,
   SSP_NAMES,
   words,
@@ -85,7 +75,7 @@ import { ConfirmAction } from "../components/ConfirmAction";
 import { EnumSelect } from "../components/EnumSelect";
 import { Hint } from "../components/Hint";
 import { TipField } from "../components/TipField";
-import { AgentPicker, PackagePicker, ProductMultiPicker, ProductPicker, ProposalPicker } from "./pickers";
+import { AgentPicker, ProductPicker, ProposalPicker } from "./pickers";
 import { ApiKeyTable } from "./ApiKeyTable";
 import { JsonView } from "../components/JsonView";
 import { FormFields, FormRow, ReadForm, WriteForm } from "../components/WriteForm";
@@ -384,265 +374,6 @@ export function ApiKeyWrites() {
       ) : null}
       <ApiKeyTable />
     </Stack>
-  );
-}
-
-export function CatalogWrites() {
-  const { writesEnabled } = useCredential();
-  const [productId, setProductId] = useState("");
-  // Unvalidated upstream, so a typo would be stored and then match no
-  // product. The documented set is offered instead of a text box.
-  const [inventoryType, setInventoryType] = useState<string>("display");
-  const [reason, setReason] = useState("");
-  const [pkgName, setPkgName] = useState("");
-  const [pkgPrice, setPkgPrice] = useState("10");
-  const [pkgFloor, setPkgFloor] = useState("5");
-  const [pkgId, setPkgId] = useState("");
-  const [productIds, setProductIds] = useState<string[]>([]);
-  const [cpm, setCpm] = useState("12");
-  const [rateType, setRateType] = useState<string>("display");
-
-  // The name must be the one ProductDetail (Catalog.tsx) reads, built from
-  // the id the call acted on — the trimmed one — not the raw field.
-  const setOverride = useMutation<
-    { productId: string; inventory_type: string; reason?: string },
-    unknown
-  >(
-    (c, args) =>
-      setInventoryTypeOverride(c, args.productId, {
-        product_id: args.productId,
-        inventory_type: args.inventory_type,
-        ...(args.reason ? { reason: args.reason } : {}),
-      }),
-    { invalidates: (args) => [`inventory-type:${args.productId}`] },
-  );
-  const clearOverride = useMutation<{ productId: string }, unknown>(
-    (c, args) => deleteInventoryTypeOverride(c, args.productId),
-    { invalidates: (args) => [`inventory-type:${args.productId}`] },
-  );
-  const rate = useMutation<
-    { inventory_type: string; base_cpm: number },
-    unknown
-  >(
-    (c, args) => putRateCard(c, [args]),
-    { invalidates: ["rate-card"] },
-  );
-  const createPkg = useMutation<
-    { name: string; base_price: number; floor_price: number },
-    unknown
-  >((c, args) => createPackage(c, args), { invalidates: ["packages"] });
-  const updatePkg = useMutation<{ id: string; name: string }, unknown>(
-    (c, args) => updatePackage(c, args.id, { name: args.name }),
-    { invalidates: (args) => ["packages", `package:${args.id}`] },
-  );
-  const deletePkg = useMutation<{ id: string }, unknown>(
-    (c, args) => deletePackage(c, args.id),
-    { invalidates: ["packages"] },
-  );
-  const assemble = useMutation<{ name: string; product_ids: string[] }, unknown>(
-    (c, args) => assemblePackage(c, args),
-    { invalidates: ["packages"] },
-  );
-  const sync = useMutation<Record<string, never>, unknown>((c) => syncPackages(c), {
-    invalidates: ["packages"],
-  });
-
-  const blocked = !writesEnabled;
-
-  return (
-    <Stack spacing={2}>
-      <WriteForm
-        title="Replace the stored rate card?"
-        confirmLabel="Put rate card"
-        action="put-rate-card"
-        blocked={blocked}
-        pending={rate.pending}
-        last={rate.last}
-        onConfirm={() =>
-          void rate.run({ inventory_type: rateType, base_cpm: Number(cpm) })
-        }
-        consequence={
-          <>
-            This is a replace, not a merge. The previous card is gone if the
-            call succeeds, and still there if it fails. A retry after an
-            unclear failure may or may not have already replaced it.
-          </>
-        }
-      >
-        <FormFields>
-          <EnumSelect
-            hint="Which inventory type this rate applies to. Choose from the types the agent documents."
-            label="Inventory type"
-            value={rateType}
-            options={INVENTORY_TYPES}
-            onChange={(v) => v && setRateType(v)}
-            disabled={blocked}
-            sx={{ minWidth: 160 }}
-          />
-          <TipField
-            hint="Base CPM for the chosen inventory type, as a plain number in dollars per thousand impressions, for example 12."
-            size="small"
-            label="Base CPM"
-            value={cpm}
-            onChange={(e) => setCpm(e.target.value)}
-            disabled={blocked}
-          />
-        </FormFields>
-      </WriteForm>
-      <WriteForm
-        title="Set an inventory type override?"
-        confirmLabel="Set override"
-        action="set-override"
-        blocked={blocked || !productId.trim()}
-        pending={setOverride.pending}
-        last={setOverride.last}
-        onConfirm={() =>
-          void setOverride.run({
-            productId: productId.trim(),
-            inventory_type: inventoryType,
-            ...(reason ? { reason } : {}),
-          })
-        }
-        consequence="The override persists across inventory syncs. A second set replaces the first."
-      >
-        <FormFields>
-          <ProductPicker value={productId} onChange={setProductId} disabled={blocked} />
-          <EnumSelect
-            hint="Inventory type to force on the product. It replaces the auto-detected type and survives inventory syncs."
-            label="Inventory type"
-            value={inventoryType}
-            options={INVENTORY_TYPES}
-            onChange={(v) => v && setInventoryType(v)}
-            disabled={blocked}
-            sx={{ minWidth: 160 }}
-          />
-          <TipField
-            hint="Optional note on why the type is being overridden. Sent only when filled in."
-            size="small"
-            label="Reason"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            disabled={blocked}
-          />
-        </FormFields>
-      </WriteForm>
-      <WriteForm
-        title="Delete this inventory type override?"
-        confirmLabel="Delete override"
-        action="delete-override"
-        blocked={blocked || !productId.trim()}
-        pending={clearOverride.pending}
-        last={clearOverride.last}
-        onConfirm={() => void clearOverride.run({ productId: productId.trim() })}
-        consequence="The product reverts to the auto-detected type. A second delete 404s."
-      />
-      <WriteForm
-        title="Create a curated package?"
-        confirmLabel="Create package"
-        action="create-package"
-        blocked={blocked || !pkgName.trim()}
-        pending={createPkg.pending}
-        last={createPkg.last}
-        onConfirm={() =>
-          void createPkg.run({
-            name: pkgName.trim(),
-            base_price: Number(pkgPrice),
-            floor_price: Number(pkgFloor),
-          })
-        }
-        consequence="Not idempotent: each call mints a new package id."
-      >
-        <FormFields>
-          <TipField hint="Name of the new package. Also used as the name when assembling a dynamic package or renaming one." size="small" label="Name" value={pkgName} onChange={(e) => setPkgName(e.target.value)} disabled={blocked} />
-          <TipField hint="Base (list) price for the package as a plain number, for example 10. Sent as base_price." size="small" label="Base price" value={pkgPrice} onChange={(e) => setPkgPrice(e.target.value)} disabled={blocked} />
-          <TipField hint="Lowest price the package may be sold at, as a plain number, for example 5. Sent as floor_price." size="small" label="Floor" value={pkgFloor} onChange={(e) => setPkgFloor(e.target.value)} disabled={blocked} />
-        </FormFields>
-      </WriteForm>
-      <WriteForm
-        title="Rename this package?"
-        confirmLabel="Update package"
-        action="update-package"
-        blocked={blocked || !pkgId.trim() || !pkgName.trim()}
-        pending={updatePkg.pending}
-        last={updatePkg.last}
-        onConfirm={() => void updatePkg.run({ id: pkgId.trim(), name: pkgName.trim() })}
-        consequence="The named fields are overwritten. A missing id 404s."
-      >
-        <PackagePicker value={pkgId} onChange={setPkgId} disabled={blocked} />
-      </WriteForm>
-      <WriteForm
-        title="Archive this package?"
-        confirmLabel="Delete package"
-        action="delete-package"
-        blocked={blocked || !pkgId.trim()}
-        pending={deletePkg.pending}
-        last={deletePkg.last}
-        onConfirm={() => void deletePkg.run({ id: pkgId.trim() })}
-        consequence="Soft-delete: the package is archived. A second delete 404s."
-      />
-      <WriteForm
-        title="Assemble a dynamic package?"
-        confirmLabel="Assemble"
-        action="assemble-package"
-        blocked={blocked || !pkgName.trim() || productIds.length === 0}
-        pending={assemble.pending}
-        last={assemble.last}
-        onConfirm={() =>
-          void assemble.run({
-            name: pkgName.trim(),
-            product_ids: productIds,
-          })
-        }
-        consequence="Not idempotent. Unresolvable product ids 422."
-      >
-        <ProductMultiPicker
-          label="Products"
-          hint="The products to combine into the package. Pick as many as you need, or type or paste ids. Ids that do not resolve to a product are rejected with a 422."
-          value={productIds}
-          onChange={setProductIds}
-          disabled={blocked}
-          sx={{ minWidth: 360 }}
-        />
-      </WriteForm>
-      <WriteForm
-        title="Sync packages from the ad server?"
-        confirmLabel="Sync packages"
-        action="sync-packages"
-        blocked={blocked}
-        pending={sync.pending}
-        last={sync.last}
-        onConfirm={() => void sync.run({})}
-        consequence="Not idempotent: each trigger kicks ProductSetupFlow again."
-      />
-    </Stack>
-  );
-}
-
-export function PackageLookup() {
-  const [id, setId] = useState("");
-  const [submitted, setSubmitted] = useState<string | undefined>();
-  return (
-    <Box sx={{ mt: 1 }} data-block="package-lookup">
-      <FormRow>
-        <PackagePicker value={id} onChange={setId} />
-        <ReadForm
-          label="Load package"
-          action="fetch-package"
-          disabled={!id.trim()}
-          onRun={() => setSubmitted(id.trim())}
-        />
-      </FormRow>
-      {submitted && <PackageBody packageId={submitted} />}
-    </Box>
-  );
-}
-
-function PackageBody({ packageId }: { packageId: string }) {
-  const pkg = useResource(`package:${packageId}`, (c, signal) => packageById(c, packageId, signal));
-  return (
-    <Typography variant="body2" sx={{ mt: 1 }}>
-      {pkg.data?.name ?? (pkg.result ? describe(pkg.result) : "")}
-    </Typography>
   );
 }
 

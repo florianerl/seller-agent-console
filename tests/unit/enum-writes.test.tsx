@@ -13,7 +13,6 @@ import { sameResult } from "../../src/query/freshness";
 import { resetWritePolicy } from "../../src/api/policy";
 import { resetReachability } from "../../src/query/reachability";
 import {
-  CatalogWrites,
   DealLookups,
   DealWrites,
   ProposalWrites,
@@ -135,37 +134,6 @@ describe("forms that send an enum", () => {
     );
   });
 
-  it("assembles a package from several products picked by name, and from pasted ids", async () => {
-    server.use(
-      http.get(`${API}/products`, () =>
-        HttpResponse.json({
-          products: [
-            { product_id: "prod-1", name: "Premium Display - Homepage" },
-            { product_id: "prod-2", name: "Video Preroll" },
-          ],
-        }),
-      ),
-    );
-    const sent = capture("post", "/packages/assemble");
-    const user = userEvent.setup();
-    mount(<CatalogWrites />);
-
-    await user.type(await enabled("Name"), "Q4 bundle");
-    const products = await enabled("Products");
-    expect(screen.getByRole("button", { name: "Assemble" })).toBeDisabled();
-
-    // By name; a picked product leaves the list, so it cannot be added twice.
-    await user.type(products, "video");
-    await user.click(await screen.findByRole("option", { name: /prod-2/ }));
-    // A pasted list is several ids, not one.
-    await user.type(products, "prod-1, prod-9{Enter}");
-    await confirm(user, "assemble-package", "Assemble");
-
-    await waitFor(() =>
-      expect(sent).toEqual([{ name: "Q4 bundle", product_ids: ["prod-2", "prod-1", "prod-9"] }]),
-    );
-  });
-
   it("migrates with the old deal id the request model requires", async () => {
     const sent = capture("post", "/api/v1/deals/D-1/migrate");
     const user = userEvent.setup();
@@ -186,21 +154,6 @@ describe("forms that send an enum", () => {
     });
     expect(button).toBeDisabled();
     expect(screen.getByLabelText("SSP")).toHaveValue("");
-  });
-
-  it("sets an inventory type override from the documented set", async () => {
-    const sent = capture("post", "/api/v1/products/prod-1/inventory-type");
-    const user = userEvent.setup();
-    mount(<CatalogWrites />);
-
-    await user.type(await enabled("Product id"), "prod-1");
-    const typeFields = screen.getAllByLabelText("Inventory type");
-    await user.click(typeFields[typeFields.length - 1]!);
-    await user.click(await screen.findByRole("option", { name: "mobile app" }));
-    await confirm(user, "set-override", "Set override");
-
-    await waitFor(() => expect(sent).toHaveLength(1));
-    expect(sent[0]).toMatchObject({ inventory_type: "mobile_app" });
   });
 
   it("submits a legacy proposal with a deal type the flow compares against", async () => {

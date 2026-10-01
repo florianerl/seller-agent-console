@@ -1,8 +1,6 @@
 import { Fragment, useState, type FormEvent } from "react";
-import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import Chip from "@mui/material/Chip";
 import Paper from "@mui/material/Paper";
 import Skeleton from "@mui/material/Skeleton";
 import Stack from "@mui/material/Stack";
@@ -14,13 +12,13 @@ import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import {
   checkAvails,
+  deleteInventoryTypeOverride,
   discovery,
   inventoryTypeOverride,
-  packages,
   pricingQuote,
   productById,
   products,
-  rateCard,
+  setInventoryTypeOverride,
   type Avails,
   type AvailsCheckResult,
   type AvailsCollection,
@@ -40,8 +38,15 @@ import { palette } from "../theme/palette";
 import { FormRow } from "../components/WriteForm";
 import { TipField } from "../components/TipField";
 import { ProductPicker } from "./pickers";
-import { CatalogWrites, PackageLookup } from "./mutations";
 import { useCredential } from "../credentials/context";
+import { INVENTORY_TYPES } from "../api/vocabulary";
+import { ConfirmButton, WRITES_OFF_HINT } from "../components/ConfirmButton";
+import { EnumSelect } from "../components/EnumSelect";
+import { Hint } from "../components/Hint";
+import { plain } from "../lib/money";
+import { useMutation } from "../query/useMutation";
+import { PackageTable } from "./PackageTable";
+import { RateCardTable } from "./RateCardTable";
 
 function money(amount: Money | null | undefined): string {
   if (!amount) return "on request";
@@ -49,14 +54,6 @@ function money(amount: Money | null | undefined): string {
     style: "currency",
     currency: amount.currency || "USD",
   }).format(amount.amount_micros / 1_000_000);
-}
-
-function plain(amount: number | null | undefined, currency: string | null | undefined): string {
-  if (amount == null) return "—";
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency: currency || "USD",
-  }).format(amount);
 }
 
 /** `asOf` is epoch ms; `stamp` takes ISO. Same round-trip as MediaKit. */
@@ -70,6 +67,119 @@ function isAvailsCollection(result: AvailsCheckResult): result is AvailsCollecti
 
 function availsList(result: AvailsCheckResult): Avails[] {
   return isAvailsCollection(result) ? result.avails : [result];
+}
+
+/**
+ * Set or clear the product's inventory type override, in place under the one
+ * it shows. The resource names are the ones ProductDetail reads, so the detail
+ * re-reads as soon as a write lands rather than at its next poll.
+ */
+function OverrideEditor({
+  productId,
+  current,
+}: {
+  productId: string;
+  current: { inventory_type: string; reason?: string | null } | undefined;
+}) {
+  const { writesEnabled } = useCredential();
+  const blocked = !writesEnabled;
+  const [editing, setEditing] = useState(false);
+  // Unvalidated upstream, so a typo would be stored and then match no
+  // product. The documented set is offered instead of a text box.
+  const [inventoryType, setInventoryType] = useState<string>("display");
+  const [reason, setReason] = useState("");
+
+  const set = useMutation<{ inventory_type: string; reason?: string }, unknown>(
+    (c, args) =>
+      setInventoryTypeOverride(c, productId, {
+        product_id: productId,
+        inventory_type: args.inventory_type,
+        ...(args.reason ? { reason: args.reason } : {}),
+      }),
+    { invalidates: [`inventory-type:${productId}`] },
+  );
+  const clear = useMutation<Record<string, never>, unknown>(
+    (c) => deleteInventoryTypeOverride(c, productId),
+    { invalidates: [`inventory-type:${productId}`] },
+  );
+  const failed = [set.last, clear.last].find((r) => r && r.kind !== "ok");
+
+  function open() {
+    set.reset();
+    clear.reset();
+    setInventoryType(current?.inventory_type ?? "display");
+    setReason(current?.reason ?? "");
+    setEditing(true);
+  }
+
+  return (
+    <Box sx={{ mt: 1 }} data-block="override-editor">
+      {editing ? (
+        <FormRow>
+          <EnumSelect<string>
+            hint="Inventory type to force on the product. It replaces the auto-detected type and survives inventory syncs."
+            label="Inventory type"
+            value={inventoryType}
+            options={INVENTORY_TYPES}
+            onChange={(v) => v && setInventoryType(v)}
+            sx={{ minWidth: 160 }}
+          />
+          <TipField
+            hint="Optional note on why the type is being overridden. Sent only when filled in."
+            size="small"
+            label="Reason"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+          />
+          <ConfirmButton
+            label="Save"
+            title="Set an inventory type override?"
+            confirmLabel="Set override"
+            action="set-override"
+            variant="contained"
+            blocked={blocked}
+            pending={set.pending}
+            onConfirm={() =>
+              void set
+                .run({ inventory_type: inventoryType, ...(reason.trim() ? { reason: reason.trim() } : {}) })
+                .then((r) => r.kind === "ok" && setEditing(false))
+            }
+            consequence="The override persists across inventory syncs. Setting it again replaces it, so a retry is harmless."
+          />
+          <Button size="small" onClick={() => setEditing(false)} disabled={set.pending}>
+            Cancel
+          </Button>
+        </FormRow>
+      ) : (
+        <Stack direction="row" spacing={1}>
+          <Hint hint={blocked ? WRITES_OFF_HINT : undefined}>
+            <Button size="small" data-action="edit-override" disabled={blocked} onClick={open}>
+              {current ? "Change override" : "Set override"}
+            </Button>
+          </Hint>
+          {current && (
+            <ConfirmButton
+              label="Clear override"
+              title="Delete this inventory type override?"
+              confirmLabel="Delete override"
+              action="delete-override"
+              variant="text"
+              color="error"
+              blocked={blocked}
+              pending={clear.pending}
+              onConfirm={() => void clear.run({})}
+              consequence="The product reverts to the auto-detected type. A second delete 404s."
+            />
+          )}
+        </Stack>
+      )}
+      {failed && failed.kind !== "ok" && (
+        <Typography variant="body2" sx={{ mt: 1, color: palette.error }} data-state="write-failed">
+          {describe(failed)}
+        </Typography>
+      )}
+    </Box>
+  );
 }
 
 function ProductDetail({ productId }: { productId: string }) {
@@ -151,6 +261,9 @@ function ProductDetail({ productId }: { productId: string }) {
           {override.freshness === "stale" &&
             "couldn't refresh — showing the last override received"}
         </Typography>
+        {override.freshness !== "blocked" && (
+          <OverrideEditor productId={productId} current={noOverride ? undefined : override.data} />
+        )}
       </Box>
 
       <Typography
@@ -237,132 +350,6 @@ function Products() {
                 </TableRow>
               )}
             </Fragment>
-          ))}
-        </TableBody>
-      </Table>
-    </DataPanel>
-  );
-}
-
-function Rates() {
-  const card = useResource("rate-card", rateCard, { refreshInterval: CADENCE.rateCard });
-
-  if (card.loading && !card.data) return <Skeleton height={60} />;
-  if (!card.data) {
-    return (
-      <Paper variant="outlined" sx={{ p: 3 }} data-state="no-rate-card">
-        <Typography variant="body2" color="text.secondary">
-          {card.result ? describe(card.result) : "No rate card."}
-        </Typography>
-      </Paper>
-    );
-  }
-
-  const configured = card.data.source === "stored";
-
-  return (
-    <>
-      {/* The agent invents a fallback card when none has been configured and
-          reports it in the same shape as a real one. Showing those numbers as
-          this publisher's pricing would be a fabrication with a plausible
-          face, so the distinction is the first thing on the section. */}
-      {!configured && (
-        <Alert severity="warning" variant="outlined" sx={{ mb: 1 }} data-note="rate-card-defaults">
-          No rate card has been configured. These are the agent's built-in
-          fallback values, not this publisher's pricing.
-        </Alert>
-      )}
-      <DataPanel>
-        <Table size="small" data-block="rate-card" data-source={card.data.source}>
-          <TableHead>
-            <TableRow>
-              <TableCell sx={{ fontWeight: 600 }}>Inventory type</TableCell>
-              <TableCell sx={{ fontWeight: 600 }}>Base CPM</TableCell>
-              <TableCell sx={{ fontWeight: 600 }}>Effective</TableCell>
-              <TableCell sx={{ fontWeight: 600 }}>Notes</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {card.data.entries.map((entry) => (
-              <TableRow key={entry.inventory_type} hover data-row="rate">
-                <TableCell sx={{ fontSize: 13 }}>{entry.inventory_type}</TableCell>
-                <TableCell sx={{ fontSize: 12 }}>
-                  {plain(entry.base_cpm, entry.currency)}
-                </TableCell>
-                <TableCell sx={{ fontSize: 12, color: palette.textSecondary }}>
-                  {stamp(entry.effective_date)}
-                </TableCell>
-                <TableCell sx={{ fontSize: 12, color: palette.textSecondary }}>
-                  {entry.notes ?? "—"}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </DataPanel>
-      <Typography variant="body2" sx={{ mt: 0.5, fontSize: 12, color: palette.textSecondary }}>
-        {configured ? "Set by an operator" : "Agent defaults"} · updated{" "}
-        {stamp(card.data.updated_at)}
-      </Typography>
-    </>
-  );
-}
-
-function Packages() {
-  const list = useResource("packages", packages, { refreshInterval: CADENCE.rateCard });
-  const rows = list.data?.packages ?? [];
-
-  if (list.loading && rows.length === 0) return <Skeleton height={60} />;
-  if (rows.length === 0) {
-    return (
-      <Paper variant="outlined" sx={{ p: 3 }} data-state="no-packages">
-        <Typography variant="body2" color="text.secondary">
-          {list.result && list.result.kind !== "ok" ? describe(list.result) : "No packages."}
-        </Typography>
-      </Paper>
-    );
-  }
-
-  return (
-    <DataPanel>
-      <Table size="small" data-block="packages">
-        <TableHead>
-          <TableRow>
-            <TableCell sx={{ fontWeight: 600 }}>Package</TableCell>
-            <TableCell sx={{ fontWeight: 600 }}>Rate</TableCell>
-            <TableCell sx={{ fontWeight: 600 }}>Price</TableCell>
-            <TableCell sx={{ fontWeight: 600 }}>Floor</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {rows.map((pkg) => (
-            <TableRow key={pkg.package_id} hover data-row="package">
-              <TableCell sx={{ fontSize: 13 }}>
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <span>{pkg.name || pkg.package_id}</span>
-                  {pkg.is_featured && (
-                    <Chip
-                      label="featured"
-                      size="small"
-                      variant="outlined"
-                      sx={{ height: 18, fontSize: 10, color: palette.textSecondary }}
-                    />
-                  )}
-                </Stack>
-              </TableCell>
-              <TableCell sx={{ fontSize: 12 }}>{pkg.rate_type ?? "—"}</TableCell>
-              {/* Exact prices appear only for an authenticated caller; without
-                  a key the agent returns a band instead. Showing whichever
-                  arrived, and the section header says whose view this is. */}
-              <TableCell sx={{ fontSize: 12 }}>
-                {pkg.exact_price != null
-                  ? plain(pkg.exact_price, pkg.currency)
-                  : (pkg.price_range ?? "—")}
-              </TableCell>
-              <TableCell sx={{ fontSize: 12, color: palette.textSecondary }}>
-                {plain(pkg.floor_price, pkg.currency)}
-              </TableCell>
-            </TableRow>
           ))}
         </TableBody>
       </Table>
@@ -696,6 +683,9 @@ export default function CatalogScreen() {
   return (
     <section data-screen="catalog">
       <PageHeader title="Catalog" subtitle="What this agent offers buyers.">
+      {!writesEnabled && (
+        <ReadOnlyNotice what="Editing the rate card, packages, or inventory type overrides" />
+      )}
 
       <ScreenSection
         title="Products"
@@ -704,8 +694,11 @@ export default function CatalogScreen() {
         <Products />
       </ScreenSection>
 
-      <ScreenSection title="Rate card" caption="Operator-set base pricing by inventory type.">
-        <Rates />
+      <ScreenSection
+        title="Rate card"
+        caption="Operator-set base pricing by inventory type. Edit a row in place; every save replaces the whole card."
+      >
+        <RateCardTable />
       </ScreenSection>
 
       <ScreenSection
@@ -716,7 +709,7 @@ export default function CatalogScreen() {
         // what is on screen.
         caption="As seen by this key. Unauthenticated callers get price bands instead of exact prices, and a buyer key may be priced differently again."
       >
-        <Packages />
+        <PackageTable />
       </ScreenSection>
 
       <ScreenSection
@@ -738,15 +731,6 @@ export default function CatalogScreen() {
         caption="Applies tier and volume discounts to the rate card without booking. An unknown product is a typo, not an outage."
       >
         <Pricing />
-      </ScreenSection>
-
-      <ScreenSection
-        title="Writes"
-        caption="Rate card, packages, and inventory-type overrides. Visible while the switch is off, disabled."
-      >
-        {!writesEnabled && <ReadOnlyNotice what="Changing the catalog" />}
-        <CatalogWrites />
-        <PackageLookup />
       </ScreenSection>
       </PageHeader>
     </section>

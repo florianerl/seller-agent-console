@@ -74,12 +74,6 @@ function overrideRoute(initial: { inventory_type: string } | undefined) {
   return state;
 }
 
-function form(action: string) {
-  const el = document.querySelector(`[data-block="write:${action}"]`);
-  expect(el).toBeTruthy();
-  return within(el as HTMLElement);
-}
-
 async function confirm(user: ReturnType<typeof userEvent.setup>, action: string, label: string) {
   const button = await waitFor(() => {
     const el = document.querySelector(`[data-action="${action}"]`);
@@ -95,14 +89,11 @@ async function openDetail(user: ReturnType<typeof userEvent.setup>) {
   await user.click(within(row).getByRole("button", { name: "Details" }));
 }
 
-/** The set and delete forms share one Product id field. */
-async function typeProductId(user: ReturnType<typeof userEvent.setup>, value: string) {
-  const field = await waitFor(() => {
-    const el = form("set-override").getByLabelText("Product id");
-    expect(el).toBeEnabled();
-    return el;
-  });
-  await user.type(field, value);
+/** The editor lives in the open product's detail, under the override it shows. */
+function editor() {
+  const el = document.querySelector('[data-block="override-editor"]');
+  expect(el).toBeTruthy();
+  return within(el as HTMLElement);
 }
 
 describe("inventory type override writes", () => {
@@ -138,10 +129,14 @@ describe("inventory type override writes", () => {
     await waitFor(() => expect(document.querySelector('[data-state="no-override"]')).toBeTruthy());
     const before = route.reads;
 
-    // Padded on purpose: the call trims, and the invalidation has to use the
-    // id the call acted on rather than the raw field.
-    await typeProductId(user, " prod-1 ");
-    await user.click(form("set-override").getByLabelText("Inventory type"));
+    await user.click(
+      await waitFor(() => {
+        const el = editor().getByRole("button", { name: "Set override" });
+        expect(el).toBeEnabled();
+        return el;
+      }),
+    );
+    await user.click(editor().getByLabelText("Inventory type"));
     await user.click(await screen.findByRole("option", { name: "mobile app" }));
     await confirm(user, "set-override", "Set override");
 
@@ -163,7 +158,6 @@ describe("inventory type override writes", () => {
     );
     const before = route.reads;
 
-    await typeProductId(user, "prod-1");
     await confirm(user, "delete-override", "Delete override");
 
     await waitFor(() => expect(route.reads).toBeGreaterThan(before));
