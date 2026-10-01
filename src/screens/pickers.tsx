@@ -329,7 +329,8 @@ export function GatePicker({ label = "Gate id", hint, ...rest }: PickerProps) {
  * list already loaded there costs nothing here.
  */
 export function DealPicker({ label = "Deal", hint, ...rest }: PickerProps) {
-  const list = useResource("deals:", (c, signal) => deals(c, {}, signal));
+  // `manual`, like every other reader of this key: a full scan must not rerun on focus.
+  const list = useResource("deals:", (c, signal) => deals(c, {}, signal), { manual: true });
   return (
     <EntityPicker
       {...rest}

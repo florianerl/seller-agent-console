@@ -23,7 +23,8 @@ function money(amount: Money | null | undefined): string {
   }).format(amount.amount_micros / 1_000_000);
 }
 
-function DealFields({ deal }: { deal: Deal }) {
+/** A deal's price and terms. Shared by an open order's terms card and the New order wizard. */
+export function DealFields({ deal }: { deal: Deal }) {
   const { pricing, terms } = deal;
   return (
     <Stack spacing={1.5} data-block="deal-terms">

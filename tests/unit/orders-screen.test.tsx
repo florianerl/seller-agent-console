@@ -1399,6 +1399,14 @@ describe("the new-order wizard", () => {
           status: "active",
           quote_id: "qt-from-deal",
           product: { product_id: "p1", name: "Homepage takeover" },
+          pricing: {
+            final_cpm: { amount_micros: 12_500_000, currency: "USD" },
+            base_cpm: { amount_micros: 14_000_000, currency: "USD" },
+            pricing_model: "cpm",
+          },
+          terms: { impressions: 250_000, flight_start: "2026-11-01", flight_end: "2026-11-30", guaranteed: false },
+          buyer_tier: "agency",
+          expires_at: "2026-10-15T00:00:00Z",
         },
       },
       { deal: { deal_id: "DEMO-222", deal_type: "PG", status: "active", quote_id: null, product: { product_id: "p2", name: "CTV prime" } } },
@@ -1464,6 +1472,62 @@ describe("the new-order wizard", () => {
       ]),
     );
     expect(await within(wizard).findByText(/Created ORD-NEW2, in draft/)).toBeInTheDocument();
+  });
+
+  it("shows the picked deal's terms before the order is made, and again on review", async () => {
+    server.use(http.get(`${API}/api/v1/deals`, () => HttpResponse.json(DEALS)));
+    const user = userEvent.setup();
+    const wizard = await openWizard(user);
+    await user.click(within(wizard).getByRole("button", { name: "Next" }));
+    await user.click(await within(wizard).findByLabelText("Deal"));
+    await user.click(await screen.findByText("DEMO-111"));
+
+    const terms = await waitFor(() => {
+      const el = wizard.querySelector('[data-block="wizard-deal-terms"]');
+      expect(el?.textContent).toMatch(/Homepage takeover/);
+      return el!;
+    });
+    expect(terms.textContent).toMatch(/\$12\.50/);
+    expect(terms.textContent).toMatch(/250,000/);
+    expect(terms.textContent).toMatch(/agency tier/);
+
+    await user.click(within(wizard).getByRole("button", { name: "Next" }));
+    expect(wizard.querySelector('[data-block="wizard-deal-terms"]')?.textContent).toMatch(/\$12\.50/);
+  });
+
+  it("says why there are no terms for a deal id that is not stored", async () => {
+    server.use(http.get(`${API}/api/v1/deals`, () => HttpResponse.json(DEALS)));
+    const user = userEvent.setup();
+    const wizard = await openWizard(user);
+    await user.click(within(wizard).getByRole("button", { name: "Next" }));
+    await user.type(await within(wizard).findByLabelText("Deal"), "DEMO-NOPE");
+
+    await waitFor(() =>
+      expect(wizard.querySelector('[data-state="deal-terms-missing"]')?.textContent).toMatch(
+        /not among the stored deals/,
+      ),
+    );
+  });
+
+  // GET /quotes/{id} persists an expired quote, so reaching the review step
+  // must not read it; the quote's terms are one click away instead.
+  it("offers the quote's terms on review without fetching the quote by itself", async () => {
+    const quoteReads: string[] = [];
+    server.use(
+      http.get(`${API}/api/v1/quotes/:id`, ({ params }) => {
+        quoteReads.push(String(params.id));
+        return HttpResponse.json({ quote: { quote_id: String(params.id) } });
+      }),
+    );
+    const user = userEvent.setup();
+    const wizard = await openWizard(user);
+    await user.click(within(wizard).getByRole("radio", { name: /From a quote/ }));
+    await user.click(within(wizard).getByRole("button", { name: "Next" }));
+    await user.type(within(wizard).getByLabelText("Quote id"), "qt-1");
+    await user.click(within(wizard).getByRole("button", { name: "Next" }));
+
+    expect(wizard.querySelector('[data-block="wizard-quote-terms"]')).toBeTruthy();
+    expect(quoteReads).toEqual([]);
   });
 
   it("never overwrites a quote the operator typed with the deal's", async () => {

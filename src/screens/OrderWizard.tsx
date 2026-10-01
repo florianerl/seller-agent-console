@@ -3,7 +3,7 @@ import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
-import { createOrder, deals, type Order } from "../api/endpoints";
+import { createOrder, deals, type Deal, type Order } from "../api/endpoints";
 import { describe } from "../api/errors";
 import { TipField } from "../components/TipField";
 import { ChoiceCards, ReviewList, WizardDialog } from "../components/Wizard";
@@ -11,7 +11,9 @@ import { useCredential } from "../credentials/context";
 import { useMutation } from "../query/useMutation";
 import { useResource } from "../query/useResource";
 import { palette } from "../theme/palette";
+import { DealFields } from "./OrderTerms";
 import { DealPicker } from "./pickers";
+import { QuoteView } from "./QuoteView";
 
 type Start = "deal" | "quote" | "none";
 
@@ -56,18 +58,20 @@ function DealDetails({
 }: {
   dealId: string;
   quoteId: string;
-  onDeal: (id: string) => void;
+  /** The id, and the stored deal it names when the list has one. */
+  onDeal: (id: string, deal: Deal | undefined) => void;
   onQuote: (id: string, auto: boolean) => void;
 }) {
-  const list = useResource("deals:", (c, signal) => deals(c, {}, signal));
+  const list = useResource("deals:", (c, signal) => deals(c, {}, signal), { manual: true });
+  const chosen = list.data?.deals.find((e) => e.deal.deal_id === dealId.trim())?.deal;
   return (
     <>
       <DealPicker
         value={dealId}
         onChange={(id) => {
-          onDeal(id);
-          const quote = list.data?.deals.find((e) => e.deal.deal_id === id.trim())?.deal.quote_id;
-          if (quote) onQuote(quote, true);
+          const deal = list.data?.deals.find((e) => e.deal.deal_id === id.trim())?.deal;
+          onDeal(id, deal);
+          if (deal?.quote_id) onQuote(deal.quote_id, true);
         }}
         hint="The deal this order executes. Pick a stored deal, or type or paste its id."
         sx={{ width: "100%" }}
@@ -80,7 +84,35 @@ function DealDetails({
         onChange={(e) => onQuote(e.target.value, false)}
         fullWidth
       />
+      {/* The order inherits these terms, so they are shown before it is
+          made rather than discovered on its row afterwards. */}
+      {dealId.trim() && (
+        <DealTermsPanel deal={chosen} dealId={dealId.trim()} loading={list.loading && !list.data} />
+      )}
     </>
+  );
+}
+
+/** The chosen deal's terms, or why there are none to show. */
+function DealTermsPanel({ deal, dealId, loading }: { deal: Deal | undefined; dealId: string; loading: boolean }) {
+  return (
+    <Box
+      sx={{ border: `1px solid ${palette.line}`, borderRadius: 1, p: 1.5 }}
+      data-block="wizard-deal-terms"
+    >
+      <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+        Deal terms
+      </Typography>
+      {deal ? (
+        <DealFields deal={deal} />
+      ) : (
+        <Typography variant="body2" color="text.secondary" data-state="deal-terms-missing">
+          {loading
+            ? "Reading the stored deals…"
+            : `Deal ${dealId} is not among the stored deals, so its terms cannot be shown. The agent stores the order with this id unchecked.`}
+        </Typography>
+      )}
+    </Box>
   );
 }
 
@@ -100,6 +132,7 @@ export function OrderWizard({
   const [dealId, setDealId] = useState("");
   const [quoteId, setQuoteId] = useState("");
   const [quoteFromDeal, setQuoteFromDeal] = useState(false);
+  const [chosenDeal, setChosenDeal] = useState<Deal | undefined>();
   const [note, setNote] = useState("");
 
   const create = useMutation<
@@ -123,6 +156,7 @@ export function OrderWizard({
       setDealId("");
       setQuoteId("");
       setQuoteFromDeal(false);
+      setChosenDeal(undefined);
       setNote("");
       create.reset();
     }, 200);
@@ -159,7 +193,10 @@ export function OrderWizard({
           <DealDetails
             dealId={dealId}
             quoteId={quoteId}
-            onDeal={setDealId}
+            onDeal={(id, d) => {
+              setDealId(id);
+              setChosenDeal(d);
+            }}
             onQuote={(id, auto) => {
               // Picking a deal fills its quote in, but never over one the
               // operator typed.
@@ -214,6 +251,19 @@ export function OrderWizard({
             ...(note.trim() ? ([["Note", note.trim()]] as const) : []),
           ]}
         />
+        {start === "deal" && deal && (
+          <Box sx={{ mt: 2 }}>
+            <DealTermsPanel deal={chosenDeal?.deal_id === deal ? chosenDeal : undefined} dealId={deal} loading={false} />
+          </Box>
+        )}
+        {start === "quote" && quote && (
+          <Box sx={{ mt: 2, border: `1px solid ${palette.line}`, borderRadius: 1, p: 1.5 }} data-block="wizard-quote-terms">
+            <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+              Quote terms
+            </Typography>
+            <QuoteView quoteId={quote} showId={false} />
+          </Box>
+        )}
         <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
           Creates the order in draft and nothing else: it waits there until someone submits it.
           Not idempotent: each call mints a new order id, so a retry after a timeout may leave two
