@@ -31,7 +31,8 @@ import { palette } from "../theme/palette";
 import { useCredential } from "../credentials/context";
 import { FormRow } from "../components/WriteForm";
 import { TipField } from "../components/TipField";
-import { DealLookups, DealWrites, Panel } from "./mutations";
+import { DealLookups, DealWrites } from "./mutations";
+import { DealWizard } from "./DealWizard";
 
 /**
  * The shared wire vocabulary, taken from the agent's DealStatus enum. The list
@@ -283,6 +284,7 @@ function Detail({ dealId }: { dealId: string }) {
 export default function DealsScreen() {
   const [status, setStatus] = useState("");
   const [query, setQuery] = useState("");
+  const [wizard, setWizard] = useState(false);
   const [openDeal, setOpenDeal] = useState<string | undefined>();
   const { writesEnabled } = useCredential();
 
@@ -302,9 +304,7 @@ export default function DealsScreen() {
       <PageHeader title="Deals" subtitle="Every buyer's deals, as the agent has them stored.">
 
       {!writesEnabled && <ReadOnlyNotice what="Booking, pushing, or migrating a deal" />}
-      <Panel title="Create a deal">
-        <DealWrites />
-      </Panel>
+      <DealWizard open={wizard} onClose={() => setWizard(false)} />
 
       {list.freshness === "blocked" ? (
         <GatedNotice what="The deal ledger" result={list.result} />
@@ -346,6 +346,14 @@ export default function DealsScreen() {
                 This list does not poll — it reads every deal in one unpaginated pass.
               </Typography>
               <Box sx={{ flex: 1 }} />
+              <Button
+                variant="contained"
+                size="small"
+                onClick={() => setWizard(true)}
+                data-action="new-deal"
+              >
+                New deal
+              </Button>
               <ExportMenu />
             </FormRow>
           </Paper>

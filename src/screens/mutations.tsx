@@ -12,13 +12,11 @@ import {
   apiKeyById,
   assemblePackage,
   audienceMatch,
-  bookDeal,
   bulkDealOperations,
   closeSession,
   counterProposal,
   createBuyerApiKey,
   createChangeRequest,
-  createCuratedDeal,
   createOperatorApiKey,
   createOrder,
   createPackage,
@@ -26,7 +24,6 @@ import {
   createSession,
   dealBuyerStatus,
   dealById,
-  dealFromTemplate,
   dealSspTroubleshoot,
   deleteInventoryTypeOverride,
   deletePackage,
@@ -34,7 +31,6 @@ import {
   discoverAgent,
   distributeDeal,
   eventById,
-  generateDeal,
   migrateDeal,
   negotiationStatus,
   packageById,
@@ -94,7 +90,7 @@ import { ConfirmAction } from "../components/ConfirmAction";
 import { EnumSelect } from "../components/EnumSelect";
 import { Hint } from "../components/Hint";
 import { TipField } from "../components/TipField";
-import { AgentPicker, CuratorPicker, DealPicker, OrderPicker, PackagePicker, ProductPicker } from "./pickers";
+import { AgentPicker, DealPicker, OrderPicker, PackagePicker, ProductPicker } from "./pickers";
 import { JsonView } from "../components/JsonView";
 import { FormFields, FormRow, ReadForm, WriteForm } from "../components/WriteForm";
 import { WritesNotice } from "../components/WritesNotice";
@@ -1003,38 +999,20 @@ export function DealWrites({
   dealId,
   group,
 }: {
-  dealId?: string;
+  dealId: string;
   /** Show one group of a deal's actions, for a tabbed panel. Omitted: all of them. */
   group?: "distribute" | "manage" | "danger";
 }) {
   const show = (g: "distribute" | "manage" | "danger") => !group || group === g;
   const { writesEnabled } = useCredential();
-  const [proposalId, setProposalId] = useState("");
-  const [quoteId, setQuoteId] = useState("");
   const [buyerUrl, setBuyerUrl] = useState("https://buyer.example");
   const [ssp, setSsp] = useState("");
-  const [curatorId, setCuratorId] = useState("");
   const [reason, setReason] = useState("");
   const [deprecateReason, setDeprecateReason] = useState("");
-  const id = dealId ?? "";
-  const [productId, setProductId] = useState("");
-  // Short code: the template route maps PG/PD/PA and 400s on anything else,
-  // which is what the old "preferred_deal" default got every time.
-  const [dealType, setDealType] = useState<DealTypeCode>("PD");
+  const id = dealId;
   const [bulkAction, setBulkAction] = useState<BulkDealAction>("cancel");
   const [bulkNotes, setBulkNotes] = useState("");
 
-  const gen = useMutation<{ proposal_id: string }, unknown>((c, a) => generateDeal(c, a), {
-    invalidates: ["deals:*"],
-  });
-  const book = useMutation<{ quote_id: string; idempotency_key: string }, unknown>(
-    (c, a) => bookDeal(c, a),
-    { invalidates: ["deals:*"] },
-  );
-  const fromTpl = useMutation<{ deal_type: DealTypeCode; product_id: string }, unknown>(
-    (c, a) => dealFromTemplate(c, a),
-    { invalidates: ["deals:*"] },
-  );
   const bulk = useMutation<
     { operations: { action: BulkDealAction; deal_id?: string; quote_id?: string; notes?: string }[] },
     BulkDealResponse
@@ -1050,10 +1028,6 @@ export function DealWrites({
     (c, a) => distributeDeal(c, a),
     { invalidates: ["deals:*"] },
   );
-  const curated = useMutation<{ curator_id: string }, unknown>(
-    (c, a) => createCuratedDeal(c, a),
-    { invalidates: ["deals:*"] },
-  );
   const migrate = useMutation<{ id: string; reason?: string }, unknown>(
     (c, a) =>
       migrateDeal(c, a.id, { old_deal_id: a.id, ...(a.reason ? { reason: a.reason } : {}) }),
@@ -1065,97 +1039,6 @@ export function DealWrites({
   );
 
   const blocked = !writesEnabled;
-
-  if (!dealId) {
-    // Nothing here acts on an existing deal: these forms make one. Acting on a
-    // deal lives in that deal's own panel, where the id is already known, so
-    // there is no free-text "Deal id" box to fill in or get wrong.
-    return (
-      <Box>
-        <ActionBlock
-          title="Generate from a proposal"
-          description="Turns an accepted proposal into a deal."
-        >
-          <WriteForm
-            title="Generate a deal from a proposal?"
-            confirmLabel="Generate deal"
-            action="generate-deal"
-            blocked={blocked || !proposalId.trim()}
-            pending={gen.pending}
-            last={gen.last}
-            onConfirm={() => void gen.run({ proposal_id: proposalId.trim() })}
-            consequence="POST /deals from an accepted proposal. Not the same route as booking a quote. Not idempotent."
-          >
-            <TipField hint="Id of an accepted proposal. Copy it from the Proposals screen." size="small" label="Proposal id" value={proposalId} onChange={(e) => setProposalId(e.target.value)} disabled={blocked} />
-          </WriteForm>
-        </ActionBlock>
-        <ActionBlock
-          title="Book from a quote"
-          description="Binds a quote you already have into a deal. This is the commit point."
-        >
-          <WriteForm
-            title="Book a deal from a quote?"
-            confirmLabel="Book deal"
-            action="book-deal"
-            blocked={blocked || !quoteId.trim()}
-            pending={book.pending}
-            last={book.last}
-            onConfirm={() =>
-              void book.run({ quote_id: quoteId.trim(), idempotency_key: newKey() })
-            }
-            consequence="The commit point: the quote becomes bound. Same idempotency key + body returns the same deal; a different body 409s."
-          >
-            <TipField hint="Id of the quote to book, from the Quotes screen. Quotes expire after 24 hours." size="small" label="Quote id" value={quoteId} onChange={(e) => setQuoteId(e.target.value)} disabled={blocked} />
-          </WriteForm>
-        </ActionBlock>
-        <ActionBlock
-          title="Create from a template"
-          description="Prices a product and books a deal for it in one step."
-        >
-          <WriteForm
-            title="Create a deal from a template?"
-            confirmLabel="From template"
-            action="deal-from-template"
-            blocked={blocked || !productId.trim()}
-            pending={fromTpl.pending}
-            last={fromTpl.last}
-            onConfirm={() => void fromTpl.run({ deal_type: dealType, product_id: productId.trim() })}
-            consequence="Prices and auto-books. 422 if max CPM is below floor. Not a replay-safe mint without an idempotency story on this route."
-          >
-            <FormFields>
-              <ProductPicker value={productId} onChange={setProductId} disabled={blocked} />
-              <EnumSelect
-                hint="Deal type for the template: PG, PD or PA. The route rejects anything else with a 400."
-                label="Deal type"
-                value={dealType}
-                options={DEAL_TYPES}
-                onChange={(v) => v && setDealType(v)}
-                disabled={blocked}
-                sx={{ minWidth: 220 }}
-              />
-            </FormFields>
-          </WriteForm>
-        </ActionBlock>
-        <ActionBlock
-          title="Create a curated deal"
-          description="Makes a deal on behalf of a registered curator."
-        >
-          <WriteForm
-            title="Create a curated deal?"
-            confirmLabel="Curated deal"
-            action="curated-deal"
-            blocked={blocked || !curatorId.trim()}
-            pending={curated.pending}
-            last={curated.last}
-            onConfirm={() => void curated.run({ curator_id: curatorId.trim() })}
-            consequence="Not idempotent: each call mints another curated deal."
-          >
-            <CuratorPicker value={curatorId} onChange={setCuratorId} disabled={blocked} />
-          </WriteForm>
-        </ActionBlock>
-      </Box>
-    );
-  }
 
   return (
     <Box>
