@@ -644,6 +644,7 @@ describe("the orders screen", () => {
         listed = [...ORDERS, created];
         return HttpResponse.json(created);
       }),
+      http.get(`${API}/api/v1/deals`, () => HttpResponse.json({ deals: [], count: 0, skipped: [] })),
       http.get(`${API}/api/v1/orders/ORD-NEW1/audit`, () =>
         HttpResponse.json({
           order_id: "ORD-NEW1",
@@ -662,10 +663,10 @@ describe("the orders screen", () => {
 
     await user.click(screen.getByRole("button", { name: "New order" }));
     const wizard = await screen.findByRole("dialog");
-    await user.click(within(wizard).getByRole("radio", { name: /From a quote/ }));
     await user.click(within(wizard).getByRole("button", { name: "Next" }));
-    await user.type(within(wizard).getByLabelText("Quote id"), "qt-1");
-    await user.type(within(wizard).getByLabelText("Deal id (optional)"), "deal-9");
+    // A typed id is taken as it is, stored deal or not.
+    await user.type(await within(wizard).findByLabelText("Deal"), "deal-9");
+    await user.type(within(wizard).getByLabelText("Quote id (optional)"), "qt-1");
     await user.click(within(wizard).getByRole("button", { name: "Next" }));
     await user.click(within(wizard).getByRole("button", { name: "Create order" }));
 
@@ -1509,25 +1510,15 @@ describe("the new-order wizard", () => {
     );
   });
 
-  // GET /quotes/{id} persists an expired quote, so reaching the review step
-  // must not read it; the quote's terms are one click away instead.
-  it("offers the quote's terms on review without fetching the quote by itself", async () => {
-    const quoteReads: string[] = [];
-    server.use(
-      http.get(`${API}/api/v1/quotes/:id`, ({ params }) => {
-        quoteReads.push(String(params.id));
-        return HttpResponse.json({ quote: { quote_id: String(params.id) } });
-      }),
-    );
+  // The agent cannot list quotes, so a route that starts from one could only
+  // ever ask for a pasted id; quotes arrive through the deal instead.
+  it("offers no route that starts from a quote", async () => {
     const user = userEvent.setup();
     const wizard = await openWizard(user);
-    await user.click(within(wizard).getByRole("radio", { name: /From a quote/ }));
-    await user.click(within(wizard).getByRole("button", { name: "Next" }));
-    await user.type(within(wizard).getByLabelText("Quote id"), "qt-1");
-    await user.click(within(wizard).getByRole("button", { name: "Next" }));
-
-    expect(wizard.querySelector('[data-block="wizard-quote-terms"]')).toBeTruthy();
-    expect(quoteReads).toEqual([]);
+    expect(within(wizard).getAllByRole("radio").map((r) => r.closest("label")?.textContent)).toEqual([
+      expect.stringMatching(/For a stored deal/),
+      expect.stringMatching(/With no deal yet/),
+    ]);
   });
 
   it("never overwrites a quote the operator typed with the deal's", async () => {

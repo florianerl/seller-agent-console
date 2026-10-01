@@ -13,15 +13,19 @@ import { useResource } from "../query/useResource";
 import { palette } from "../theme/palette";
 import { DealFields } from "./OrderTerms";
 import { DealPicker } from "./pickers";
-import { QuoteView } from "./QuoteView";
 
-type Start = "deal" | "quote" | "none";
+type Start = "deal" | "none";
 
 /**
  * Where a new order comes from, as a choice. `POST /api/v1/orders` takes a
  * deal id and a quote id, both optional and neither checked, so the question
- * that matters is which of them the operator holds — and what an order
- * without a deal costs later (the agent refuses change requests against it).
+ * that matters is whether the order gets a deal — and what one without a deal
+ * costs later (the agent refuses change requests against it).
+ *
+ * There is no "from a quote" route. It was offered once, but the agent has
+ * no route that lists quotes, so there was never one to pick: the operator
+ * had to paste an id from somewhere else. The quotes the console can see are
+ * the ones booked into stored deals, and picking the deal fills its quote in.
  */
 const STARTS: readonly { value: Start; title: string; description: string }[] = [
   {
@@ -29,11 +33,6 @@ const STARTS: readonly { value: Start; title: string; description: string }[] = 
     title: "For a stored deal",
     description:
       "The usual case: the order executes a deal the agent holds. Lists the stored deals, which reads every one of them.",
-  },
-  {
-    value: "quote",
-    title: "From a quote",
-    description: "You have the id of the quote it was priced from. Attach the deal too if you know it.",
   },
   {
     value: "none",
@@ -142,7 +141,7 @@ export function OrderWizard({
 
   const deal = start === "none" ? "" : dealId.trim();
   const quote = start === "none" ? "" : quoteId.trim();
-  const ready = { deal: deal !== "", quote: quote !== "", none: true }[start];
+  const ready = { deal: deal !== "", none: true }[start];
   const created = create.last?.kind === "ok" ? create.last.data : undefined;
 
   function close() {
@@ -206,27 +205,6 @@ export function OrderWizard({
             }}
           />
         )}
-        {start === "quote" && (
-          <>
-            <TipField
-              hint="Id of the quote the order was priced from, from New deal on the Deals screen. The agent cannot list quotes, so paste it exactly."
-              size="small"
-              label="Quote id"
-              value={quoteId}
-              onChange={(e) => setQuoteId(e.target.value)}
-              autoFocus
-              fullWidth
-            />
-            <TipField
-              hint="The deal the order executes, if you know it. Without one the agent refuses change requests against the order."
-              size="small"
-              label="Deal id (optional)"
-              value={dealId}
-              onChange={(e) => setDealId(e.target.value)}
-              fullWidth
-            />
-          </>
-        )}
         {start === "none" && (
           <Alert severity="warning" variant="outlined">
             Without a deal the agent refuses every change request against this order. You cannot
@@ -254,14 +232,6 @@ export function OrderWizard({
         {start === "deal" && deal && (
           <Box sx={{ mt: 2 }}>
             <DealTermsPanel deal={chosenDeal?.deal_id === deal ? chosenDeal : undefined} dealId={deal} loading={false} />
-          </Box>
-        )}
-        {start === "quote" && quote && (
-          <Box sx={{ mt: 2, border: `1px solid ${palette.line}`, borderRadius: 1, p: 1.5 }} data-block="wizard-quote-terms">
-            <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
-              Quote terms
-            </Typography>
-            <QuoteView quoteId={quote} showId={false} />
           </Box>
         )}
         <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
