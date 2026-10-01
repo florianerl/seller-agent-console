@@ -1,21 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import Paper from "@mui/material/Paper";
 import Skeleton from "@mui/material/Skeleton";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import { useSearchParams } from "react-router";
 import { quoteById, type Money, type Quote } from "../api/endpoints";
 import { describe } from "../api/errors";
 import { Field, FieldGrid } from "../components/Field";
 import { GatedNotice } from "../components/GatedNotice";
-import { PageHeader } from "../components/PageHeader";
 import { StatusChip } from "../components/StatusChip";
-import { Hint } from "../components/Hint";
-import { TipField } from "../components/TipField";
-import { FormRow } from "../components/WriteForm";
-import { WritesNotice } from "../components/WritesNotice";
 import { stamp } from "../lib/time";
 import { useResource } from "../query/useResource";
 import { palette } from "../theme/palette";
@@ -124,21 +117,40 @@ function QuoteCard({ quote }: { quote: Quote }) {
   );
 }
 
-function QuoteResult({ quoteId }: { quoteId: string }) {
+/**
+ * What the agent said about a quote, for a caller that acts on it. Only the
+ * two answers that make booking pointless are named; a failed read says
+ * nothing about the quote, so it is `undefined` like no read at all.
+ */
+export type QuoteAnswer = "found" | "unknown" | "expired";
+
+function QuoteResult({ quoteId, onAnswer }: { quoteId: string; onAnswer?: (answer: QuoteAnswer | undefined) => void }) {
   // `manual`: the operator confirmed this one fetch. The provider's default
   // refetch on focus would re-run a GET that writes, unconfirmed.
   const quote = useResource(`quote:${quoteId}`, (c, signal) => quoteById(c, quoteId, signal), {
     manual: true,
   });
 
+  // 404 and 410 are answers about the quote, not outages. A 404 is the usual
+  // answer for anything a day old: upstream stores quotes with a 24-hour
+  // storage TTL (renewed for 24 hours on booking), and once that lapses the row
+  // is gone, so the 410 for an expired quote is rarely seen. An order also
+  // stores whatever quote id it was created with, unchecked.
+  const status = quote.result?.kind === "unavailable" ? quote.result.status : undefined;
+  // A stored status of `expired` is the same answer as a 410, arrived earlier.
+  const answer: QuoteAnswer | undefined =
+    status === 404
+      ? "unknown"
+      : status === 410 || quote.data?.quote.status === "expired"
+        ? "expired"
+        : quote.data
+          ? "found"
+          : undefined;
+  useEffect(() => onAnswer?.(answer), [answer, onAnswer]);
+
   if (quote.freshness === "blocked") {
     return <GatedNotice what="This quote" result={quote.result} />;
   }
-
-  // 404 and 410 are answers about the quote, not outages. A 404 is not
-  // necessarily a typo: an order stores whatever quote id it was created with,
-  // and the agent may never have held it or may have dropped it since.
-  const status = quote.result?.kind === "unavailable" ? quote.result.status : undefined;
 
   return (
     <Box sx={{ mt: 2 }} data-block="quote-result">
@@ -151,7 +163,7 @@ function QuoteResult({ quoteId }: { quoteId: string }) {
           data-state={status === 404 ? "unknown-quote" : status === 410 ? "expired-quote" : "failed"}
         >
           {status === 404
-            ? "The agent has no quote with this id. It may never have existed or may have been removed; this is not an outage."
+            ? "The agent has no quote with this id. It deletes a quote 24 hours after issuing it, or 24 hours after it was booked, so a quote behind an older order is usually gone. It also never checked that an order's quote id existed. This is not an outage."
             : status === 410
               ? "This quote has expired. The agent enforces a TTL and refuses an expired quote."
               : quote.result
@@ -181,67 +193,43 @@ function QuoteResult({ quoteId }: { quoteId: string }) {
   );
 }
 
-export default function QuotesScreen() {
-  // `?id=` comes from the Orders link and is fetched straight away: the
-  // operator followed a link to this quote. The lazy expiry that GET performs
-  // is disclosed above, and `manual` stops it re-running on focus.
-  const [params, setParams] = useSearchParams();
-  const initial = params.get("id")?.trim() ?? "";
-  const [id, setId] = useState(initial);
-  const [submitted, setSubmitted] = useState<string | undefined>(initial || undefined);
-
-  const submit = () => {
-    const next = id.trim();
-    if (!next) return;
-    setSubmitted(next);
-    setParams({ id: next }, { replace: true });
-  };
+/**
+ * One quote, by id, behind a button. The New deal wizard (a quote about to be
+ * booked) and an order with no deal to read its terms from both use it. This used to be a screen of its own; the agent cannot list quotes, so
+ * an id in hand was the only way anyone arrived there anyway.
+ *
+ * Fetched on a click, never on mount: `GET /quotes/{id}` enforces the quote's
+ * TTL and persists `expired`, so opening a row or reaching a wizard step must
+ * not write. The disclosure sits beside the button rather than in a tooltip
+ * because it is the reason the button exists.
+ */
+export function QuoteView({
+  quoteId,
+  showId = true,
+  onAnswer,
+}: {
+  quoteId: string;
+  /** Off where the id is already on screen beside it. */
+  showId?: boolean;
+  onAnswer?: (answer: QuoteAnswer | undefined) => void;
+}) {
+  const [open, setOpen] = useState(false);
 
   return (
-    <section data-screen="quotes">
-      <PageHeader
-        title="Quotes"
-        subtitle="Look up a quote by id. The agent offers no way to list them."
-      >
-        <WritesNotice what="Fetching a quote enforces its TTL and may persist status=expired." />
-
-        <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }}>
-          <Box
-            component="form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              submit();
-            }}
-          >
-            <FormRow>
-              <TipField
-                hint="The id of a quote, from New deal on the Deals screen or shown on an order. The agent cannot list quotes, so paste it exactly."
-                size="small"
-                label="Quote id"
-                value={id}
-                onChange={(e) => setId(e.target.value)}
-              />
-              <Hint hint="Fetches this quote from the agent. That read enforces its TTL and may mark it expired.">
-              <Button
-                type="submit"
-                variant="outlined"
-                size="small"
-                data-action="fetch-quote"
-                disabled={!id.trim()}
-              >
-                Fetch quote
-              </Button>
-              </Hint>
-            </FormRow>
-          </Box>
-          {submitted && <QuoteResult key={submitted} quoteId={submitted} />}
-        </Paper>
-
-        <Typography variant="body2" color="text.secondary">
-          Quotes are requested from <a href="#/deals">New deal</a> on Deals. An order carries the id of the
-          quote it came from.
-        </Typography>
-      </PageHeader>
-    </section>
+    <Box data-block="quote-view">
+      <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap>
+        {showId && <Mono>{quoteId}</Mono>}
+        {!open && (
+          <Button size="small" variant="outlined" onClick={() => setOpen(true)} data-action="fetch-quote">
+            Show quote
+          </Button>
+        )}
+      </Stack>
+      <Typography variant="caption" component="p" color="text.secondary" sx={{ mt: 0.5 }} data-note="writes">
+        Reading a quote makes the agent write: it checks the quote&apos;s expiry and stores{" "}
+        <code>expired</code> if it has passed, even when this console&apos;s write switch is off.
+      </Typography>
+      {open && <QuoteResult quoteId={quoteId} {...(onAnswer ? { onAnswer } : {})} />}
+    </Box>
   );
 }

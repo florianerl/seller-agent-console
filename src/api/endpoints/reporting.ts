@@ -28,7 +28,7 @@ export type GamOrdersResponse = z.infer<typeof GamOrdersResponse>;
  * order, if any, names a given deal. Upstream derives `external_order_id`
  * from the GAM order's `externalOrderId` or a `[deal_id:…]` tag in its notes
  * (clients/gam_soap_client.py), so a hand-trafficked order tagged with the
- * deal is found too. Parsed separately from the verbatim Reporting view, and
+ * deal is found too. Parsed separately from the verbatim ad-server card, and
  * loosely: a row that lacks the field simply matches no deal.
  */
 export const GamOrderRows = z

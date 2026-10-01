@@ -36,11 +36,11 @@ test("a deep link survives a reload", async ({ page }) => {
   await connect(page, server, unhandled);
 
   await page.goto(`${server.appUrl}#/orders`);
-  await expect(page.getByRole("heading", { name: "Orders" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Orders", exact: true })).toBeVisible();
   await expect(page.getByText("ORD-8ECAA495B7EF")).toBeVisible();
 
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Orders" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Orders", exact: true })).toBeVisible();
   await expect(page.getByText("ORD-8ECAA495B7EF")).toBeVisible();
 });
 
@@ -89,7 +89,6 @@ const ROUTES = [
   { hash: "#/inbox", heading: "Inbox" },
   { hash: "#/events", heading: "Events" },
   { hash: "#/orders", heading: "Orders" },
-  { hash: "#/quotes", heading: "Quotes" },
   { hash: "#/deals", heading: "Deals" },
   // Against the fixture agent, which advertises only opendirect21: this is the
   // not-advertised notice, the state every 2.x agent will show.
@@ -103,7 +102,7 @@ for (const route of ROUTES) {
   test(`${route.heading} is free of axe violations`, async ({ page }) => {
     await connect(page, server, unhandled);
     await page.goto(`${server.appUrl}${route.hash}`);
-    await expect(page.getByRole("heading", { name: route.heading })).toBeVisible();
+    await expect(page.getByRole("heading", { name: route.heading, exact: true })).toBeVisible();
 
     // The pointer is still where Connect was clicked. On a screen with a hinted
     // field under that spot (Agents), a tooltip opens and axe measures it half

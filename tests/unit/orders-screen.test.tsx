@@ -118,24 +118,96 @@ describe("the orders screen", () => {
     );
   });
 
-  it("links an order's quote id to the Quotes screen without fetching it", async () => {
-    const user = userEvent.setup();
-    const { seen } = recordRequests();
-    server.use(
-      http.get(`${API}/api/v1/orders`, () =>
-        HttpResponse.json({ orders: [{ ...ORDERS[0], quote_id: "qt-abc123" }], count: 1 }),
-      ),
-      http.get(`${API}/api/v1/orders/ORD-ABC123/audit`, () => HttpResponse.json(AUDIT)),
-      http.get(`${API}/api/v1/change-requests`, () =>
-        HttpResponse.json({ change_requests: [], count: 0 }),
-      ),
-    );
-    renderScreen();
-    await expand(user, "ORD-ABC123");
+  describe("price and terms", () => {
+    const DEAL = {
+      deal_id: "deal-1",
+      deal_type: "PD",
+      status: "booked",
+      product: { product_id: "p", name: "Homepage takeover" },
+      pricing: { final_cpm: { amount_micros: 10_800_000, currency: "USD" }, pricing_model: "cpm" },
+      terms: { impressions: 500000, flight_start: "2026-10-01", flight_end: "2026-10-31", guaranteed: false },
+      buyer_tier: "agency",
+    };
 
-    const link = document.querySelector('[data-link="quote"]');
-    expect(link).toHaveAttribute("href", "#/quotes?id=qt-abc123");
-    expect(seen.some((r) => r.includes("/quotes/"))).toBe(false);
+    // Counted on their own handlers: a catch-all recorder never sees a
+    // request a more specific handler answered first.
+    function agent(order: Record<string, unknown>, listed: unknown[] = [{ deal: DEAL }]) {
+      const calls = { list: 0, single: 0, quote: 0 };
+      server.use(
+        http.get(`${API}/api/v1/orders`, () =>
+          HttpResponse.json({ orders: [{ ...ORDERS[0], ...order }], count: 1 }),
+        ),
+        http.get(`${API}/api/v1/deals`, () => {
+          calls.list += 1;
+          return HttpResponse.json({ deals: listed, count: listed.length, skipped: [] });
+        }),
+        http.get(`${API}/api/v1/deals/:id`, () => {
+          calls.single += 1;
+          return HttpResponse.json({ deal: DEAL });
+        }),
+        http.get(`${API}/api/v1/quotes/:id`, () => {
+          calls.quote += 1;
+          return HttpResponse.json({ detail: "x" }, { status: 404 });
+        }),
+      );
+      return calls;
+    }
+
+    async function card(user: ReturnType<typeof userEvent.setup>) {
+      renderScreen();
+      await expand(user, "ORD-ABC123");
+      return waitFor(() => {
+        const el = document.querySelector<HTMLElement>('[data-block="terms"]');
+        expect(el).toBeTruthy();
+        return el!;
+      });
+    }
+
+    it("reads them from the deal list when the row opens, never from the single-deal route", async () => {
+      const calls = agent({ quote_id: "qt-abc123" });
+      const user = userEvent.setup();
+      const el = await card(user);
+
+      expect(await within(el).findByText("Homepage takeover")).toBeInTheDocument();
+      expect(within(el).getByText("$10.80")).toBeInTheDocument();
+      expect(within(el).getByText("500,000")).toBeInTheDocument();
+      expect(el.querySelector('[data-freshness="live"]')?.textContent).toMatch(/as of/);
+      expect(calls).toEqual({ list: 1, single: 0, quote: 0 });
+
+      // The list is a full scan: read again only from the card's reload.
+      await user.click(within(el).getByRole("button", { name: "Reload price and terms" }));
+      await waitFor(() => expect(calls.list).toBe(2));
+      expect(calls.single).toBe(0);
+    });
+
+    it("offers the quote when the deal is not in the list", async () => {
+      const calls = agent({ quote_id: "qt-abc123" }, []);
+      const user = userEvent.setup();
+      const el = await card(user);
+
+      await waitFor(() => expect(el.querySelector('[data-state="deal-missing"]')).toBeTruthy());
+      expect(el.querySelector('[data-block="quote-fallback"]')).toBeTruthy();
+      expect(calls.quote).toBe(0);
+    });
+
+    it("goes straight to the quote for an order with no deal", async () => {
+      const calls = agent({ deal_id: null, quote_id: "qt-abc123" });
+      const user = userEvent.setup();
+      const el = await card(user);
+
+      expect(within(el).queryByRole("button", { name: "Show price and terms" })).toBeNull();
+      expect(within(el).getByRole("button", { name: "Show quote" })).toBeInTheDocument();
+      expect(calls).toEqual({ list: 0, single: 0, quote: 0 });
+    });
+
+    it("has no card for an order with neither", async () => {
+      agent({ deal_id: null, quote_id: null });
+      const user = userEvent.setup();
+      renderScreen();
+      await expand(user, "ORD-ABC123");
+      await waitFor(() => expect(document.querySelector('[data-block="record"]')).toBeTruthy());
+      expect(document.querySelector('[data-block="terms"]')).toBeNull();
+    });
   });
 
   it("lists orders with their status", async () => {
@@ -999,39 +1071,44 @@ describe("ad-server steps", () => {
     await user.click(document.querySelector('[data-action="transition-order:completed"]') as HTMLElement);
     const dialog = await screen.findByRole("dialog");
     expect(dialog.textContent).toMatch(/Nothing is sent to the ad server/);
-    expect(dialog.textContent).toMatch(/has not been checked/);
     expect(within(dialog).getByRole("button", { name: "Record completed" })).toBeInTheDocument();
   });
 
-  it("asks GAM only when told to, and quotes what it found in the confirmation", async () => {
-    const seen: URL[] = [];
+  function gam(orders: unknown[]) {
+    const seen = { scan: [] as URL[], report: [] as URL[] };
     server.use(
       http.get(`${API}/gam/orders`, ({ request }) => {
-        seen.push(new URL(request.url));
-        return HttpResponse.json({
-          network_code: "123",
-          orders: [
-            { id: "9001", name: "Autumn takeover", status: "APPROVED", external_order_id: "deal-1" },
-            { id: "9002", name: "Other", status: "DRAFT", external_order_id: "deal-7" },
-          ],
-          count: 2,
-        });
+        seen.scan.push(new URL(request.url));
+        return HttpResponse.json({ network_code: "123", orders, count: orders.length });
+      }),
+      http.get(`${API}/gam/report`, ({ request }) => {
+        seen.report.push(new URL(request.url));
+        return HttpResponse.json({ rows: [{ order: "9001", impressions: 10 }] });
       }),
     );
+    return seen;
+  }
+
+  const delivery = () => document.querySelector('[data-block="delivery"]') as HTMLElement;
+
+  it("asks GAM when the row opens, and quotes what it found in the confirmation", async () => {
+    const seen = gam([
+      { id: "9001", name: "Autumn takeover", status: "APPROVED", external_order_id: "deal-1" },
+      { id: "9002", name: "Other", status: "DRAFT", external_order_id: "deal-7" },
+    ]);
     const user = userEvent.setup();
     renderScreen();
-    await expand(user, "ORD-ABC123");
-    await waitFor(() => expect(transitionButtons().length).toBeGreaterThan(0));
-    // Each call spends the network's GAM quota: nothing until asked.
-    expect(seen).toEqual([]);
+    await screen.findByText("ORD-ABC123");
+    // Each read spends the network's GAM quota: nothing until a row opens.
+    expect(seen.scan).toEqual([]);
 
-    await user.click(document.querySelector('[data-action="gam-check"]') as HTMLElement);
+    await expand(user, "ORD-ABC123");
     await waitFor(() =>
       expect(document.querySelector('[data-state="gam-checked"]')?.textContent).toMatch(
         /order 9001 “Autumn takeover” is APPROVED/,
       ),
     );
-    expect(seen[0]!.searchParams.get("limit")).toBe("500");
+    expect(seen.scan[0]!.searchParams.get("limit")).toBe("500");
 
     await user.click(screen.getByLabelText("Acting as"));
     await user.click(await screen.findByRole("option", { name: "system" }));
@@ -1039,22 +1116,85 @@ describe("ad-server steps", () => {
     expect((await screen.findByRole("dialog")).textContent).toMatch(/GAM, when checked: order 9001/);
   });
 
-  it("says when GAM has no order for the deal", async () => {
-    server.use(
-      http.get(`${API}/gam/orders`, () =>
-        HttpResponse.json({ orders: [{ id: "1", name: "x", status: "DRAFT", external_order_id: null }], count: 1 }),
-      ),
-    );
+  it("reports delivery for the deal's GAM orders by their GAM ids, with one GAM lookup for the row", async () => {
+    const seen = gam([
+      { id: "9001", name: "A", status: "APPROVED", external_order_id: "deal-1" },
+      { id: "9003", name: "B", status: "APPROVED", external_order_id: "deal-1" },
+      { id: "9002", name: "C", status: "DRAFT", external_order_id: "deal-7" },
+    ]);
     const user = userEvent.setup();
     renderScreen();
     await expand(user, "ORD-ABC123");
-    await user.click(await screen.findByRole("button", { name: "Check the ad server" }));
+
+    await waitFor(() => expect(delivery().querySelector('[data-payload="gam-report"]')?.textContent).toContain("impressions"));
+    expect(delivery().querySelector('[data-state="gam-ids"]')?.textContent).toBe("GAM orders 9001, 9003");
+    expect(seen.report).toHaveLength(1);
+    expect(seen.report[0]!.searchParams.get("order_ids")).toBe("9001,9003");
+    expect(seen.report[0]!.searchParams.get("days")).toBe("30");
+    // The Next step finding and the delivery card share one read.
+    expect(seen.scan).toHaveLength(1);
+  });
+
+  it("reloads the lookup and the report from the card's reload button", async () => {
+    const seen = gam([{ id: "9001", name: "A", status: "APPROVED", external_order_id: "deal-1" }]);
+    const user = userEvent.setup();
+    renderScreen();
+    await expand(user, "ORD-ABC123");
+    await waitFor(() => expect(seen.report).toHaveLength(1));
+
+    await user.click(within(delivery()).getByRole("button", { name: "Reload delivery" }));
+    await waitFor(() => expect(seen.report).toHaveLength(2));
+    expect(seen.scan).toHaveLength(2);
+  });
+
+  it("sends no report when GAM has no order for the deal", async () => {
+    const seen = gam([{ id: "1", name: "x", status: "DRAFT", external_order_id: null }]);
+    const user = userEvent.setup();
+    renderScreen();
+    await expand(user, "ORD-ABC123");
 
     await waitFor(() =>
       expect(document.querySelector('[data-state="gam-checked"]')?.textContent).toMatch(
         /no order for deal deal-1 among the 1 GAM orders read/,
       ),
     );
+    expect(delivery().querySelector('[data-state="no-gam-order"]')?.textContent).toMatch(/no order for deal deal-1/);
+    expect(seen.report).toEqual([]);
+  });
+
+  // Completed is past the statuses where Next step shows the check, and is
+  // exactly when delivery matters, so the delivery card still reads.
+  it("reports delivery for a completed order, where Next step shows no check", async () => {
+    server.use(
+      http.get(`${API}/api/v1/orders`, () =>
+        HttpResponse.json({ orders: [{ ...ORDERS[0], status: "completed" }], count: 1 }),
+      ),
+      http.get(`${API}/api/v1/orders/ORD-ABC123/audit`, () =>
+        HttpResponse.json({ ...AUDIT, current_status: "completed" }),
+      ),
+    );
+    const seen = gam([{ id: "9001", name: "A", status: "COMPLETED", external_order_id: "deal-1" }]);
+    const user = userEvent.setup();
+    renderScreen();
+    await expand(user, "ORD-ABC123");
+
+    await waitFor(() => expect(seen.report).toHaveLength(1));
+    expect(document.querySelector('[data-block="gam-check"]')).toBeNull();
+  });
+
+  it("shows no delivery card for an order with no deal", async () => {
+    server.use(
+      http.get(`${API}/api/v1/orders`, () =>
+        HttpResponse.json({ orders: [{ ...ORDERS[0], status: "booked", deal_id: null }], count: 1 }),
+      ),
+    );
+    const seen = gam([]);
+    const user = userEvent.setup();
+    renderScreen();
+    await expand(user, "ORD-ABC123");
+
+    expect(delivery()).toBeNull();
+    expect(seen.scan).toEqual([]);
   });
 
   it("reports why the check failed when GAM is not configured", async () => {
@@ -1069,11 +1209,92 @@ describe("ad-server steps", () => {
     const user = userEvent.setup();
     renderScreen();
     await expand(user, "ORD-ABC123");
-    await user.click(await screen.findByRole("button", { name: "Check the ad server" }));
 
     await waitFor(() =>
       expect(document.querySelector('[data-state="gam-failed"]')?.textContent).toMatch(/GAM not configured/),
     );
+    expect(delivery().querySelector('[data-state="no-gam-order"]')?.textContent).toMatch(/GAM not configured/);
+  });
+});
+
+describe("the reporting section", () => {
+  const REPORT = {
+    total_orders: 3,
+    status_counts: { approved: 2, draft: 1 },
+    total_transitions: 7,
+    avg_transitions_per_order: 2.3333,
+    actor_type_counts: { agent: 4, operator: 3 },
+    change_requests: { total: 1, by_status: { pending: 1 } },
+  };
+
+  beforeEach(async () => {
+    resetReachability();
+    await connect();
+    server.use(
+      http.get(`${API}/api/v1/orders`, () => HttpResponse.json({ orders: ORDERS, count: ORDERS.length })),
+      http.get(`${API}/api/v1/change-requests`, () => HttpResponse.json({ change_requests: [], count: 0 })),
+      http.get(`${API}/api/v1/orders/report`, () => HttpResponse.json(REPORT)),
+      http.get(`${API}/api/v1/orders/ORD-ABC123/audit`, () => HttpResponse.json(AUDIT)),
+      http.get(`${API}/gam/orders`, () => HttpResponse.json({ orders: [{ id: "gam-1" }] })),
+      http.get(`${API}/gam/report`, ({ request }) =>
+        HttpResponse.json({ asked_for: new URL(request.url).searchParams.get("order_ids") }),
+      ),
+    );
+  });
+
+  function card(name: string): HTMLElement {
+    return document.querySelector(`[data-card="${name}"]`) as HTMLElement;
+  }
+
+  /**
+   * The GAM routes proxy an external ad server: opening the screen spends none
+   * of its quota. The agent's own totals are read on arrival, once.
+   */
+  it("reads the agent's totals on arrival, but nothing from the ad server until asked", async () => {
+    const recorder = recordRequests();
+    // Added after the recorder so they win; it still sees everything else.
+    server.use(
+      http.get(`${API}/api/v1/orders`, () => HttpResponse.json({ orders: ORDERS, count: ORDERS.length })),
+      http.get(`${API}/api/v1/change-requests`, () => HttpResponse.json({ change_requests: [], count: 0 })),
+    );
+    renderScreen();
+    await screen.findByText("ORD-ABC123");
+
+    await waitFor(() =>
+      expect(recorder.seen.filter((line) => line.includes("/orders/report"))).toHaveLength(1),
+    );
+    expect(recorder.seen.filter((line) => line.includes("/gam/"))).toEqual([]);
+  });
+
+  it("shows the agent's own totals, and says when its count differs from the list", async () => {
+    renderScreen();
+    await screen.findByText("ORD-ABC123");
+
+    await waitFor(() => expect(within(card("orders-report")).getByText("3 orders")).toBeInTheDocument());
+    expect(within(card("orders-report")).getByText("1 request")).toBeInTheDocument();
+    expect(within(card("orders-report")).getByText("2.3")).toBeInTheDocument();
+    // The list has two; the agent counted three. Neither is quietly preferred.
+    expect(card("orders-report").querySelector('[data-state="totals-differ"]')?.textContent).toMatch(
+      /list below has 2 orders/,
+    );
+  });
+
+  /** Delivery is per order; the screen itself lists nothing from GAM. */
+  it("has no screen-level ad server section; delivery runs from an order's row", async () => {
+    renderScreen();
+    await screen.findByText("ORD-ABC123");
+    expect(document.querySelector('[data-block="orders-reporting"]')).toBeNull();
+    expect(document.querySelector('[data-card="gam-orders"]')).toBeNull();
+    expect(document.querySelector('[data-card="gam-report"]')).toBeNull();
+    expect(document.querySelector('[data-block="delivery"]')).toBeNull();
+  });
+
+  /** A 403 here is a role problem, and must not read as an outage. */
+  it("says an operator key is needed when the agent refuses the aggregate", async () => {
+    server.use(http.get(`${API}/api/v1/orders/report`, () => new HttpResponse(null, { status: 403 })));
+    renderScreen();
+
+    await waitFor(() => expect(card("orders-report").querySelector('[data-state="operator-required"]')).toBeTruthy());
   });
 });
 

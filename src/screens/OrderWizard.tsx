@@ -172,7 +172,7 @@ export function OrderWizard({
         {start === "quote" && (
           <>
             <TipField
-              hint="Id of the quote the order was priced from, from the Quotes screen."
+              hint="Id of the quote the order was priced from, from New deal on the Deals screen. The agent cannot list quotes, so paste it exactly."
               size="small"
               label="Quote id"
               value={quoteId}

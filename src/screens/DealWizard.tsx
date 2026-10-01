@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import Accordion from "@mui/material/Accordion";
 import AccordionDetails from "@mui/material/AccordionDetails";
 import AccordionSummary from "@mui/material/AccordionSummary";
@@ -34,6 +34,7 @@ import { useMutation } from "../query/useMutation";
 import { palette } from "../theme/palette";
 import { SspNameField } from "./mutations";
 import { CuratorPicker, ProductPicker } from "./pickers";
+import { QuoteView, type QuoteAnswer } from "./QuoteView";
 
 type Method = "new-quote" | "quote" | "proposal" | "template" | "curated";
 
@@ -208,6 +209,9 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
   const [step, setStep] = useState(0);
   const [method, setMethod] = useState<Method>("new-quote");
   const [quoteId, setQuoteId] = useState("");
+  // What a look at the quote found, keyed by the id it was for, so editing the
+  // id on the previous step drops an answer about a different quote.
+  const [looked, setLooked] = useState<{ id: string; answer: QuoteAnswer } | undefined>();
   const [proposalId, setProposalId] = useState("");
   const [productId, setProductId] = useState("");
   // Short code: the template and quote routes map PG/PD/PA and 400 on anything else.
@@ -328,6 +332,14 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
   const last = active.last;
   const dealId = done ? createdDealId(dealResult.data) : undefined;
 
+  const onQuoteAnswer = useCallback(
+    (answer: QuoteAnswer | undefined) => setLooked(answer ? { id: q, answer } : undefined),
+    [q],
+  );
+  // Booking a quote the agent just said it lacks, or refuses as expired, can
+  // only fail; the button stays off rather than send it.
+  const deadQuote = method === "quote" && looked?.id === q && looked.answer !== "found";
+
   const p = proposalId.trim();
   const cur = curatorId.trim();
   const ready = {
@@ -406,6 +418,7 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
     setTimeout(() => {
       setStep(0);
       setQuoteId("");
+      setLooked(undefined);
       setProposalId("");
       setProductId("");
       setImpressions("");
@@ -648,6 +661,21 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
             {CONSEQUENCE[method]}
           </Typography>
         )}
+        {method === "quote" && !done && (
+          <Box sx={{ mt: 2 }} data-block="quote-check">
+            <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+              Check the quote first (optional)
+            </Typography>
+            <QuoteView key={q} quoteId={q} showId={false} onAnswer={onQuoteAnswer} />
+            {deadQuote && (
+              <Typography variant="body2" sx={{ mt: 1, color: palette.error }} data-state="quote-unbookable">
+                {looked?.answer === "expired"
+                  ? "This quote has expired, so booking it would be refused. Start a new quote instead."
+                  : "The agent has no quote with this id, so booking it would fail. Check the id on the previous step."}
+              </Typography>
+            )}
+          </Box>
+        )}
         {!writesEnabled && (
           <Alert severity="info" variant="outlined" sx={{ mt: 2 }}>
             Writes are switched off for this key. Turn them on from the connection menu to create
@@ -688,7 +716,7 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
       finishLabel={method === "new-quote" ? (bookable ? "Book deal" : "Get quote") : "Create deal"}
       pendingLabel={method === "new-quote" && !bookable ? "Asking…" : "Creating…"}
       onFinish={finish}
-      canFinish={writesEnabled}
+      canFinish={writesEnabled && !deadQuote}
       pending={active.pending}
       done={done}
       block="deal-wizard"

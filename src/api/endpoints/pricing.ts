@@ -79,10 +79,20 @@ export const pricingQuote = (
 ): Promise<Result<PricingQuote>> =>
   request(c, PATHS.pricing, { schema: PricingQuote, method: "POST", body, signal });
 
-/** Replaces the stored rate card. Not a merge. A failure leaves the previous card. */
+/**
+ * Replaces the stored rate card. Not a merge: an entry left out of `entries`
+ * is gone, so editing one rate means sending every other one unchanged. A
+ * failure leaves the previous card. `base_cpm` must be above zero (422).
+ */
 export const putRateCard = (
   c: Connection,
-  entries: readonly { inventory_type: string; base_cpm: number; currency?: string; notes?: string }[],
+  entries: readonly {
+    inventory_type: string;
+    base_cpm: number;
+    currency?: string;
+    effective_date?: string;
+    notes?: string;
+  }[],
   signal?: AbortSignal,
 ): Promise<Result<RateCard>> =>
   request(c, PATHS.rateCard, { schema: RateCard, method: "PUT", body: entries, signal });

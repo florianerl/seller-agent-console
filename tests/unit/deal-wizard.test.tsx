@@ -181,6 +181,70 @@ describe("the new-deal wizard", () => {
     expect(screen.queryByRole("button", { name: "Book deal" })).toBeNull();
   });
 
+  it("can show the quote before booking it, and only fetches it when asked", async () => {
+    const reads: string[] = [];
+    server.use(
+      http.get(`${API}/api/v1/quotes/:id`, ({ params }) => {
+        reads.push(String(params["id"]));
+        return HttpResponse.json({
+          quote: {
+            quote_id: "qt-1",
+            status: "available",
+            product: { product_id: "p", name: "Homepage takeover" },
+            pricing: { final_cpm: { amount_micros: 10_800_000, currency: "USD" } },
+          },
+        });
+      }),
+    );
+    const user = userEvent.setup();
+    mount();
+
+    await pick(user, "Book an existing quote");
+    await user.type(screen.getByLabelText("Quote id"), "qt-1");
+    await next(user);
+
+    expect(document.querySelector('[data-block="quote-check"] [data-note="writes"]')).toBeTruthy();
+    expect(reads).toEqual([]);
+
+    await user.click(screen.getByRole("button", { name: "Show quote" }));
+    expect(await screen.findByText("Homepage takeover")).toBeInTheDocument();
+    expect(screen.getByText("$10.80")).toBeInTheDocument();
+    expect(reads).toEqual(["qt-1"]);
+    await createButton();
+  });
+
+  for (const [label, status, said] of [
+    ["unknown", 404, /no quote with this id/],
+    ["expired", 410, /has expired/],
+  ] as const) {
+    it(`will not book a quote the agent reports as ${label}`, async () => {
+      server.use(
+        http.get(`${API}/api/v1/quotes/:id`, () => HttpResponse.json({ detail: "x" }, { status })),
+      );
+      const sent = capture("/api/v1/deals", { deal: { deal_id: "D-1" } });
+      const user = userEvent.setup();
+      mount();
+
+      await pick(user, "Book an existing quote");
+      await user.type(screen.getByLabelText("Quote id"), "qt-1");
+      await next(user);
+      await user.click(screen.getByRole("button", { name: "Show quote" }));
+
+      await waitFor(() =>
+        expect(document.querySelector('[data-state="quote-unbookable"]')?.textContent).toMatch(said),
+      );
+      expect(screen.getByRole("button", { name: "Create deal" })).toBeDisabled();
+      expect(sent).toHaveLength(0);
+
+      // A different id is a different quote: the verdict does not carry over.
+      await user.click(screen.getByRole("button", { name: "Back" }));
+      await user.type(screen.getByLabelText("Quote id"), "-2");
+      await next(user);
+      expect(document.querySelector('[data-state="quote-unbookable"]')).toBeNull();
+      await createButton();
+    });
+  }
+
   it("offers to send a new deal to a buyer once it exists", async () => {
     capture("/api/v1/deals", { deal: { deal_id: "D-7" } });
     const pushed = capture("/api/v1/deals/push");
