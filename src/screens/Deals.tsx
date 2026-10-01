@@ -12,8 +12,9 @@ import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
-import { dealLineage, dealPerformance, deals, type Money } from "../api/endpoints";
+import { dealLineage, dealPerformance, deals, type Deal as DealRow, type Money } from "../api/endpoints";
 import { describe } from "../api/errors";
+import { SearchField } from "../components/SearchField";
 import { DetailCard } from "../components/DetailCard";
 import { DataPanel, FreshnessNote } from "../components/DataPanel";
 import { Field, FieldGrid } from "../components/Field";
@@ -48,6 +49,29 @@ const STATUSES = [
   "cancelled",
   "expired",
 ];
+
+/**
+ * Free-text search over what an operator would paste: a deal or quote id, a
+ * product, or a word from the status or type. Case-insensitive and partial, so
+ * the tail of an id read off a log line is enough. Client-side on purpose: the
+ * list is already every deal the agent returned, and its route filters on
+ * status alone.
+ */
+function searchMatches(deal: DealRow, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return [
+    deal.deal_id,
+    deal.quote_id,
+    deal.product?.name,
+    deal.product?.product_id,
+    deal.status.replace(/_/g, " "),
+    deal.deal_type,
+    deal.buyer_tier,
+  ]
+    .filter((v): v is string => typeof v === "string" && v !== "")
+    .some((v) => v.toLowerCase().includes(q));
+}
 
 /** Prices cross the wire as an integer count of millionths, never as a float. */
 function money(amount: Money | null | undefined): string {
@@ -186,6 +210,7 @@ function Detail({ dealId }: { dealId: string }) {
 
 export default function DealsScreen() {
   const [status, setStatus] = useState("");
+  const [query, setQuery] = useState("");
   const [openDeal, setOpenDeal] = useState<string | undefined>();
   const { writesEnabled } = useCredential();
 
@@ -195,7 +220,9 @@ export default function DealsScreen() {
     deals(c, status ? { status } : {}, signal),
   );
 
-  const rows = list.data?.deals ?? [];
+  const all = list.data?.deals ?? [];
+  const rows = all.filter(({ deal }) => searchMatches(deal, query));
+  const searching = query.trim() !== "";
   const skipped = list.data?.skipped ?? [];
 
   return (
@@ -216,6 +243,12 @@ export default function DealsScreen() {
         <>
           <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }}>
             <FormRow>
+              <SearchField
+                value={query}
+                onChange={setQuery}
+                placeholder="Deal or quote id, product or status"
+                field="deal-search"
+              />
               <TipField
                 hint="Shows only deals in this status and reloads the list. Any status shows every deal."
                 select
@@ -269,7 +302,9 @@ export default function DealsScreen() {
             )}
             {!list.validating &&
               list.freshness === "live" &&
-              plural(list.data?.count ?? rows.length, "deal")}
+              (searching
+                ? `${plural(rows.length, "deal")} matching "${query.trim()}" of ${all.length}`
+                : plural(list.data?.count ?? rows.length, "deal"))}
             {!list.validating &&
               list.freshness === "stale" &&
               "couldn't refresh — showing the last list received"}
@@ -279,7 +314,7 @@ export default function DealsScreen() {
           </FreshnessNote>
 
           <DataPanel>
-            {list.loading && rows.length === 0 ? (
+            {list.loading && all.length === 0 ? (
               <Box sx={{ p: 2 }}>
                 <Skeleton height={28} />
                 <Skeleton height={28} />
@@ -290,6 +325,8 @@ export default function DealsScreen() {
                   {/* An agent with no deals is a normal agent, not a broken one. */}
                   {list.freshness === "empty" && list.result?.kind === "unavailable"
                     ? describe(list.result)
+                    : searching
+                      ? `No deals matching "${query.trim()}"${status ? ` with status "${status.replace(/_/g, " ")}"` : ""}.`
                     : status
                       ? `No deals with status "${status.replace(/_/g, " ")}".`
                       : "No deals yet."}

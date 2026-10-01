@@ -352,6 +352,35 @@ describe("the deals screen", () => {
     expect(asked).toBe("?format=dv360&status=proposed");
   });
 
+  it("searches the loaded deals by id, product or status, without asking the agent again", async () => {
+    let calls = 0;
+    server.use(
+      http.get(`${API}/api/v1/deals`, () => {
+        calls += 1;
+        return HttpResponse.json(list());
+      }),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+    await waitFor(() => expect(screen.getByText("deal-console-demo-1")).toBeInTheDocument());
+    const before = calls;
+
+    await user.type(screen.getByRole("searchbox", { name: "Search" }), "video");
+    expect(screen.queryByText("deal-console-demo-1")).toBeNull();
+    expect(screen.getByText("deal-console-demo-2")).toBeInTheDocument();
+    expect(document.body.textContent).toContain('1 deal matching "video" of 2');
+
+    await user.clear(screen.getByRole("searchbox", { name: "Search" }));
+    await user.type(screen.getByRole("searchbox", { name: "Search" }), "nothing-like-this");
+    expect(document.querySelector('[data-state="empty"]')?.textContent).toContain(
+      'No deals matching "nothing-like-this"',
+    );
+    // Escape empties the box and brings the list back.
+    await user.keyboard("{Escape}");
+    expect(screen.getByText("deal-console-demo-1")).toBeInTheDocument();
+    expect(calls).toBe(before);
+  });
+
   it("falls back to the export feed when the agent has no list route", async () => {
     server.use(
       http.get(

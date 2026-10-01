@@ -4,7 +4,6 @@ import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import Collapse from "@mui/material/Collapse";
 import IconButton from "@mui/material/IconButton";
-import InputAdornment from "@mui/material/InputAdornment";
 import Tooltip from "@mui/material/Tooltip";
 import Link from "@mui/material/Link";
 import Paper from "@mui/material/Paper";
@@ -19,7 +18,6 @@ import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
-import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import {
   changeRequests,
@@ -70,6 +68,7 @@ import type { ResourceHandle } from "../query/useResource";
 import { useResource } from "../query/useResource";
 import { palette } from "../theme/palette";
 import { DetailCard } from "../components/DetailCard";
+import { SearchField } from "../components/SearchField";
 
 function Freshness({ resource, what }: { resource: ResourceHandle<unknown>; what: string }) {
   return (
@@ -173,25 +172,6 @@ function searchMatches(order: Order, query: string): boolean {
   return [order.order_id, order.deal_id, order.quote_id, origin(order), words(order.status)]
     .filter((v): v is string => typeof v === "string" && v !== "")
     .some((v) => v.toLowerCase().includes(q));
-}
-
-function SearchIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <circle cx="11" cy="11" r="7" />
-      <line x1="16.5" y1="16.5" x2="21" y2="21" />
-    </svg>
-  );
 }
 
 type Filter =
@@ -1117,27 +1097,11 @@ export default function OrdersScreen() {
       {list.data && <StageSummary rows={all} waiting={waiting} filter={filter} onFilter={setFilter} />}
 
       <Box sx={{ mb: 2, display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
-        <TextField
-          type="search"
-          size="small"
-          label="Search"
-          placeholder="Order, deal or quote id, or source"
+        <SearchField
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") setQuery("");
-          }}
-          sx={{ flex: "1 1 260px", maxWidth: 420 }}
-          slotProps={{
-            input: {
-              startAdornment: (
-                <InputAdornment position="start" sx={{ color: palette.textSecondary }}>
-                  <SearchIcon />
-                </InputAdornment>
-              ),
-            },
-            htmlInput: { "data-field": "order-search" },
-          }}
+          onChange={setQuery}
+          placeholder="Order, deal or quote id, or source"
+          field="order-search"
         />
         <EnumSelect
           label="Status"
