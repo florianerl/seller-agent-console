@@ -115,6 +115,14 @@ const OK = {
     actor_type_counts: { operator: 1, agent: 1, system: 1 },
     change_requests: { total: 0, by_status: {} },
   },
+  // An open order row reads both: GAM's orders to find the deal, then delivery
+  // for what it found. A match, so the axe sweep sees the report rendered.
+  "/gam/orders": {
+    network_code: "123",
+    orders: [{ id: "9001", name: "Console demo", status: "APPROVED", external_order_id: "deal-console-demo-1" }],
+    count: 1,
+  },
+  "/gam/report": { orders: [{ id: "9001", impressions: 1200, clicks: 3 }], summary: { impressions: 1200 } },
 } as const;
 
 /**

@@ -2,12 +2,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
-import { MemoryRouter } from "react-router";
 import { ThemeProvider } from "@mui/material/styles";
 import { SWRConfig } from "swr";
 import { API, server } from "../setup/msw";
 import { theme } from "../../src/theme/theme";
-import QuotesScreen from "../../src/screens/Quotes";
+import { QuoteView } from "../../src/screens/QuoteView";
 import { CredentialProvider } from "../../src/credentials/context";
 import { clearCredential, saveCredential } from "../../src/credentials/store";
 import { sameResult } from "../../src/query/freshness";
@@ -37,23 +36,25 @@ const QUOTE = {
   },
 };
 
-function renderScreen(entry = "/quotes") {
+function renderQuote(quoteId = "qt-abc123") {
   return render(
     <SWRConfig
       value={{ provider: () => new Map(), dedupingInterval: 0, shouldRetryOnError: false, compare: sameResult }}
     >
       <ThemeProvider theme={theme}>
         <CredentialProvider>
-          <MemoryRouter initialEntries={[entry]}>
-            <QuotesScreen />
-          </MemoryRouter>
+          <QuoteView quoteId={quoteId} />
         </CredentialProvider>
       </ThemeProvider>
     </SWRConfig>,
   );
 }
 
-describe("the quotes screen", () => {
+async function show(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole("button", { name: "Show quote" }));
+}
+
+describe("a quote by id", () => {
   let calls: string[];
 
   beforeEach(async () => {
@@ -80,33 +81,32 @@ describe("the quotes screen", () => {
     );
   });
 
-  it("discloses that fetching a quote writes, and sends nothing without an id", async () => {
-    renderScreen();
-    expect(await screen.findByText(/makes the agent write/)).toBeInTheDocument();
+  it("discloses that reading the quote writes, and sends nothing until asked", async () => {
+    renderQuote();
+    expect(await screen.findByText("qt-abc123")).toBeInTheDocument();
+    expect(document.querySelector('[data-note="writes"]')?.textContent).toMatch(/makes the agent write/);
+    await new Promise((r) => setTimeout(r, 50));
     expect(calls).toEqual([]);
   });
 
-  it("fetches straight away when arriving from a link, with no extra click", async () => {
-    renderScreen("/quotes?id=qt-abc123");
-    expect(await screen.findByLabelText("Quote id")).toHaveValue("qt-abc123");
+  it("shows pricing, terms and availability once asked", async () => {
+    const user = userEvent.setup();
+    renderQuote();
+    await show(user);
     await waitFor(() => expect(document.querySelector('[data-block="quote-card"]')).toBeTruthy());
     expect(screen.getByText("Homepage takeover")).toBeInTheDocument();
     expect(screen.getByText("$10.80")).toBeInTheDocument();
     expect(document.querySelector('[data-block="quote-terms"]')).toBeTruthy();
     expect(document.querySelector('[data-block="quote-availability"]')).toBeTruthy();
     expect(document.querySelector('[data-freshness="live"]')?.textContent).toMatch(/as of/);
+    expect(screen.queryByRole("button", { name: "Show quote" })).toBeNull();
     expect(calls).toEqual(["qt-abc123"]);
   });
 
-  it("fetches a typed id on submit, and Enter submits", async () => {
-    const user = userEvent.setup();
-    renderScreen();
-    await user.type(await screen.findByLabelText("Quote id"), "qt-abc123{Enter}");
-    await waitFor(() => expect(calls).toEqual(["qt-abc123"]));
-  });
-
   it("says plainly that the agent has no such quote, without calling it a typo", async () => {
-    renderScreen("/quotes?id=nope");
+    const user = userEvent.setup();
+    renderQuote("nope");
+    await show(user);
     await waitFor(() => expect(document.querySelector('[data-state="unknown-quote"]')).toBeTruthy());
     expect(document.querySelector('[data-state="unknown-quote"]')?.textContent).toMatch(
       /no quote with this id/,
@@ -114,12 +114,16 @@ describe("the quotes screen", () => {
   });
 
   it("says an expired quote expired", async () => {
-    renderScreen("/quotes?id=qt-old");
+    const user = userEvent.setup();
+    renderQuote("qt-old");
+    await show(user);
     await waitFor(() => expect(document.querySelector('[data-state="expired-quote"]')).toBeTruthy());
   });
 
   it("does not refetch when the window regains focus", async () => {
-    renderScreen("/quotes?id=qt-abc123");
+    const user = userEvent.setup();
+    renderQuote();
+    await show(user);
     await waitFor(() => expect(calls).toHaveLength(1));
     window.dispatchEvent(new Event("focus"));
     await new Promise((r) => setTimeout(r, 50));

@@ -5,7 +5,6 @@ import Chip from "@mui/material/Chip";
 import Collapse from "@mui/material/Collapse";
 import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
-import Link from "@mui/material/Link";
 import Skeleton from "@mui/material/Skeleton";
 import Stack from "@mui/material/Stack";
 import Step from "@mui/material/Step";
@@ -20,7 +19,6 @@ import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import {
   changeRequests,
-  gamOrders,
   GamOrderRows,
   orderAudit,
   orders,
@@ -54,6 +52,9 @@ import { InfoTip } from "../components/InfoTip";
 import { PageHeader } from "../components/PageHeader";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { OrderWizard } from "./OrderWizard";
+import { AgentTotals, OrderDeliveryCard } from "./OrdersReporting";
+import { gamMatches, useGamScan } from "../query/gam-scan";
+import { OrderTermsCard } from "./OrderTerms";
 import { StatusChip } from "../components/StatusChip";
 import { useCredential } from "../credentials/context";
 import {
@@ -604,19 +605,9 @@ function RecordedOnOrder({ order, applied }: { order: Order; applied: readonly C
           </Box>
         </Field>
         <Field label="Quote">
-          {order.quote_id ? (
-            <Link
-              href={`#/quotes?id=${encodeURIComponent(order.quote_id)}`}
-              sx={{ fontFamily: "monospace", fontSize: 12 }}
-              data-link="quote"
-            >
-              {order.quote_id}
-            </Link>
-          ) : (
-            <Box component="span" sx={{ fontFamily: "monospace", fontSize: 12 }}>
-              —
-            </Box>
-          )}
+          <Box component="span" sx={{ fontFamily: "monospace", fontSize: 12 }}>
+            {order.quote_id || "—"}
+          </Box>
         </Field>
         {fromCreator.map(([k, v]) => (
           <Field key={k} label={words(k)}>
@@ -792,15 +783,12 @@ function OrderChangeRequests({
   );
 }
 
-/** How many GAM orders one check reads. Each check spends the network's API quota. */
-const GAM_SCAN = 500;
-
 function gamFinding(dealId: string, result: Result<unknown> | undefined): string | undefined {
   if (!result) return undefined;
   if (result.kind !== "ok") return `the check failed (${describe(result)}).`;
   const parsed = GamOrderRows.safeParse(result.data);
   const rows = parsed.success ? parsed.data.orders : [];
-  const matches = rows.filter((o) => o.external_order_id === dealId);
+  const matches = gamMatches(dealId, result);
   if (matches.length === 0) {
     return `no order for deal ${dealId} among the ${rows.length} GAM orders read.`;
   }
@@ -808,13 +796,13 @@ function gamFinding(dealId: string, result: Result<unknown> | undefined): string
 }
 
 /**
- * The only evidence the console can get for an ad-server status. Mounted on
- * request, never polled: `/gam/orders` calls Google Ad Manager with the
- * agent's credentials and spends its quota, which is why the Reporting
- * screen does not poll it either.
+ * The only evidence the console can get for an ad-server status. Read when
+ * the row opens, never polled: `/gam/orders` calls Google Ad Manager with the
+ * agent's credentials and spends its quota. It shares its cache entry with
+ * the row's delivery card, so the two make one request between them.
  */
 function GamCheck({ dealId, onFinding }: { dealId: string; onFinding: (finding: string | undefined) => void }) {
-  const scan = useResource("gam-orders:scan", (c, signal) => gamOrders(c, { limit: GAM_SCAN }, signal));
+  const scan = useGamScan();
   const finding = gamFinding(dealId, scan.result);
   // Lifted so the Record … confirmations can quote it.
   useEffect(() => onFinding(finding), [finding, onFinding]);
@@ -876,7 +864,6 @@ function OrderDetail({
   const applied = (changes.data?.change_requests ?? []).filter(
     (cr) => cr.order_id === order.order_id && cr.status === "applied",
   );
-  const [checkGam, setCheckGam] = useState(false);
   const [gam, setGam] = useState<string | undefined>();
 
   if (audit.freshness === "blocked") {
@@ -929,20 +916,12 @@ function OrderDetail({
               infoNote="mcp"
             >
               {CHECKABLE.has(status) && order.deal_id && (
-                <Box sx={{ mb: 2 }}>
-                  {checkGam ? (
-                    <GamCheck dealId={order.deal_id} onFinding={setGam} />
-                  ) : (
-                    <Stack direction="row" spacing={0.5} alignItems="center">
-                      <Button size="small" onClick={() => setCheckGam(true)} data-action="gam-check">
-                        Check the ad server
-                      </Button>
-                      <InfoTip
-                        title={`Asks GAM whether it has an order for deal ${order.deal_id}. The steps below only record a status; this is how to see whether the ad server agrees. Each check spends GAM API quota.`}
-                      />
-                    </Stack>
-                  )}
-                </Box>
+                <Stack direction="row" spacing={0.5} alignItems="flex-start" sx={{ mb: 2 }}>
+                  <GamCheck dealId={order.deal_id} onFinding={setGam} />
+                  <InfoTip
+                    title={`Whether GAM has an order for deal ${order.deal_id}. The steps below only record a status; this is how to see whether the ad server agrees. Each check spends GAM API quota.`}
+                  />
+                </Stack>
               )}
               {audit.data || audit.result ? (
                 <OrderTransitionWrites
@@ -987,6 +966,10 @@ function OrderDetail({
             >
               <RecordedOnOrder order={order} applied={applied} />
             </DetailCard>
+
+            <OrderTermsCard dealId={order.deal_id} quoteId={order.quote_id} />
+
+            {order.deal_id && <OrderDeliveryCard dealId={order.deal_id} />}
 
             <OrderChangeRequests order={order} status={status} list={changes} />
           </Stack>
@@ -1077,6 +1060,8 @@ export default function OrdersScreen() {
           setOpenOrder(orderId);
         }}
       />
+
+      <AgentTotals listed={list.data ? all.length : undefined} />
 
       {list.data && <StageSummary rows={all} waiting={waiting} filter={filter} onFilter={setFilter} />}
 

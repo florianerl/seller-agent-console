@@ -32,7 +32,7 @@ test("an offline reload serves the shell from the precache", async ({ page, cont
   await page.reload();
 
   // The document itself came from the worker, not the network.
-  await expect(page.getByRole("heading", { name: "Orders" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Orders", exact: true })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Console sections" })).toBeVisible();
 });
 
@@ -80,7 +80,7 @@ test("a reload with the agent gone restores the last values, visibly aged", asyn
 
   await page.reload();
 
-  await expect(page.getByRole("heading", { name: "Orders" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Orders", exact: true })).toBeVisible();
   await expect(page.getByText("ORD-8ECAA495B7EF")).toBeVisible();
   await expect(page.locator("[data-freshness]").first()).toHaveAttribute(
     "data-freshness",

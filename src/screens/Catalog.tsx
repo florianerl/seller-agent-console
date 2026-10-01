@@ -11,7 +11,6 @@ import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
-import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
 import {
   checkAvails,
@@ -748,9 +747,6 @@ export default function CatalogScreen() {
         {!writesEnabled && <ReadOnlyNotice what="Changing the catalog" />}
         <CatalogWrites />
         <PackageLookup />
-        <Typography variant="body2" color="text.secondary" data-note="quote-lookup-moved">
-          Look up an existing quote on <Link href="#/quotes">Quotes</Link>.
-        </Typography>
       </ScreenSection>
       </PageHeader>
     </section>
