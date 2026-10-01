@@ -340,51 +340,52 @@ export function ApiKeyWrites() {
         Creating a key returns the secret once. It is shown here and never
         stored in this console.
       </Typography>
-      <WriteForm
-        title="Mint a buyer API key?"
-        confirmLabel="Create buyer key"
-        action="create-buyer-key"
-        blocked={!writesEnabled}
-        pending={buyer.pending}
-        last={buyer.last}
-        onConfirm={() =>
-          void buyer.run({ ...(label ? { label } : {}) }).then(showSecret)
-        }
-        consequence={
-          <>
-            Not idempotent: each call mints a new key. The secret is in this
-            response only. A failure leaves a key that exists or does not —
-            re-read the list before minting again.
-          </>
-        }
-      >
+      <FormRow>
         <TipField
-          hint="Optional name for the new buyer key, so you can tell keys apart in the list. Leave empty for an unlabelled key."
+          hint="Optional name for the new key (buyer or operator), so you can tell keys apart in the list. Leave empty for an unlabelled key."
           size="small"
           label="Label"
           value={label}
           onChange={(e) => setLabel(e.target.value)}
           disabled={!writesEnabled}
-          sx={{ minWidth: 220 }}
+          sx={{ minWidth: 180 }}
         />
-      </WriteForm>
-      <WriteForm
-        title="Mint an operator API key?"
-        confirmLabel="Create operator key"
-        action="create-operator-key"
-        blocked={!writesEnabled}
-        pending={operator.pending}
-        last={operator.last}
-        onConfirm={() =>
-          void operator.run({ ...(label ? { label } : {}) }).then(showSecret)
-        }
-        consequence={
-          <>
-            Not idempotent. Some agents 409 if an extra operator key already
-            exists. The secret is in this response only.
-          </>
-        }
-      />
+        <WriteForm
+          title="Mint a buyer API key?"
+          confirmLabel="Create buyer key"
+          action="create-buyer-key"
+          blocked={!writesEnabled}
+          pending={buyer.pending}
+          last={buyer.last}
+          onConfirm={() =>
+            void buyer.run({ ...(label ? { label } : {}) }).then(showSecret)
+          }
+          consequence={
+            <>
+              Not idempotent: each call mints a new key. The secret is in this
+              response only. A failure leaves a key that exists or does not —
+              re-read the list before minting again.
+            </>
+          }
+        />
+        <WriteForm
+          title="Mint an operator API key?"
+          confirmLabel="Create operator key"
+          action="create-operator-key"
+          blocked={!writesEnabled}
+          pending={operator.pending}
+          last={operator.last}
+          onConfirm={() =>
+            void operator.run({ ...(label ? { label } : {}) }).then(showSecret)
+          }
+          consequence={
+            <>
+              Not idempotent. Some agents 409 if an extra operator key already
+              exists. The secret is in this response only.
+            </>
+          }
+        />
+      </FormRow>
       <WriteForm
         title="Revoke this API key?"
         confirmLabel="Revoke key"
