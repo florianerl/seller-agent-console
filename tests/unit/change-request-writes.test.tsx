@@ -6,7 +6,9 @@ import { ThemeProvider } from "@mui/material/styles";
 import { SWRConfig } from "swr";
 import { API, recordRequests, server } from "../setup/msw";
 import { theme } from "../../src/theme/theme";
-import ChangeRequestsScreen from "../../src/screens/ChangeRequests";
+import { changeRequests } from "../../src/api/endpoints";
+import { ChangeRequestReviewWrites } from "../../src/screens/mutations";
+import { useResource } from "../../src/query/useResource";
 import { CredentialProvider } from "../../src/credentials/context";
 import { clearCredential, saveCredential } from "../../src/credentials/store";
 import { sameResult } from "../../src/query/freshness";
@@ -26,6 +28,27 @@ const PENDING = {
   requested_at: "2026-09-15T09:00:00Z",
 };
 
+/**
+ * The order row's arrangement, minus the order: one read of the list, and the
+ * review controls for each request on it, refreshing that read when they write.
+ */
+function Requests() {
+  const list = useResource("change-requests:", (c, signal) => changeRequests(c, {}, signal));
+  return (
+    <>
+      {(list.data?.change_requests ?? []).map((cr) => (
+        <ChangeRequestReviewWrites
+          key={cr.id}
+          crId={cr.id}
+          status={cr.status}
+          changeType={cr.change_type}
+          onChanged={list.refresh}
+        />
+      ))}
+    </>
+  );
+}
+
 function renderScreen() {
   return render(
     <SWRConfig
@@ -38,7 +61,7 @@ function renderScreen() {
     >
       <ThemeProvider theme={theme}>
         <CredentialProvider>
-          <ChangeRequestsScreen />
+          <Requests />
         </CredentialProvider>
       </ThemeProvider>
     </SWRConfig>,
@@ -58,9 +81,12 @@ async function connect(writesEnabled: boolean) {
   });
 }
 
-async function openRequest(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(await screen.findByRole("button", { name: "Details" }));
+async function openRequest() {
   await screen.findByText("Review this request");
+}
+
+async function openApproved() {
+  await waitFor(() => expect(document.querySelector('[data-action="apply"]')).toBeTruthy());
 }
 
 describe("reviewing a change request", () => {
@@ -70,27 +96,25 @@ describe("reviewing a change request", () => {
       http.get(`${API}/api/v1/change-requests`, () =>
         HttpResponse.json({ change_requests: [PENDING], count: 1 }),
       ),
-      http.get(`${API}/api/v1/change-requests/CR-ABC123`, () => HttpResponse.json(PENDING)),
     );
   });
 
-  it("shows the controls disabled, and says where the switch is, while writes are off", async () => {
+  it("shows the review controls disabled while writes are off, and sends nothing", async () => {
     await connect(false);
-    const user = userEvent.setup();
     const recorder = recordRequests();
+    // The recorder answers everything with `{}`; the list has to win over it.
     server.use(
       http.get(`${API}/api/v1/change-requests`, () =>
         HttpResponse.json({ change_requests: [PENDING], count: 1 }),
       ),
-      http.get(`${API}/api/v1/change-requests/CR-ABC123`, () => HttpResponse.json(PENDING)),
     );
     renderScreen();
-    await openRequest(user);
+    await openRequest();
 
-    expect(document.querySelector('[data-note="read-only"]')).toBeTruthy();
     expect(document.querySelector('[data-action="approve"]')).toBeDisabled();
     expect(document.querySelector('[data-action="reject"]')).toBeDisabled();
-    expect(document.querySelector('[data-action="apply"]')).toBeDisabled();
+    // Pending, so apply is not on offer at all — only the live action shows.
+    expect(document.querySelector('[data-action="apply"]')).toBeNull();
     expect(recorder.seen.filter((line) => !line.startsWith("GET "))).toEqual([]);
   });
 
@@ -106,7 +130,7 @@ describe("reviewing a change request", () => {
     );
 
     renderScreen();
-    await openRequest(user);
+    await openRequest();
     await user.click(document.querySelector('[data-action="approve"]') as HTMLElement);
 
     const dialog = await screen.findByRole("dialog");
@@ -134,7 +158,7 @@ describe("reviewing a change request", () => {
     );
 
     renderScreen();
-    await openRequest(user);
+    await openRequest();
     await user.type(screen.getByLabelText("Reason"), "ok to extend");
     await user.type(screen.getByLabelText("Your name"), "jane");
     await user.click(document.querySelector('[data-action="approve"]') as HTMLElement);
@@ -157,7 +181,6 @@ describe("reviewing a change request", () => {
       http.get(`${API}/api/v1/change-requests`, () =>
         HttpResponse.json({ change_requests: [approved], count: 1 }),
       ),
-      http.get(`${API}/api/v1/change-requests/CR-ABC123`, () => HttpResponse.json(approved)),
       http.post(`${API}/api/v1/change-requests/CR-ABC123/apply`, () => {
         applied.push("apply");
         return HttpResponse.json({ status: "applied" });
@@ -166,9 +189,10 @@ describe("reviewing a change request", () => {
 
     const user = userEvent.setup();
     renderScreen();
-    await openRequest(user);
+    await openApproved();
 
-    expect(document.querySelector('[data-action="approve"]')).toBeDisabled();
+    // Approved, so review is over: only apply is on offer.
+    expect(document.querySelector('[data-action="approve"]')).toBeNull();
     await user.click(document.querySelector('[data-action="apply"]') as HTMLElement);
     const dialog = await screen.findByRole("dialog");
     // Apply lands in the order's metadata only; saying "onto the order" let an
@@ -190,7 +214,7 @@ describe("reviewing a change request", () => {
     );
 
     renderScreen();
-    await openRequest(user);
+    await openRequest();
     await user.click(document.querySelector('[data-action="reject"]') as HTMLElement);
     await user.click(document.querySelector('[data-action="confirm-mutation"]') as HTMLElement);
 

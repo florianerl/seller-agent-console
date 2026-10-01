@@ -26,7 +26,6 @@ export const SCREENS: readonly Screen[] = [
   { id: "negotiation", path: "/negotiation", label: "Negotiation" },
   { id: "catalog", path: "/catalog", label: "Catalog" },
   { id: "media-kit", path: "/media-kit", label: "Media kit" },
-  { id: "change-requests", path: "/change-requests", label: "Change requests" },
   { id: "curators", path: "/curators", label: "Curators" },
   { id: "reporting", path: "/reporting", label: "Reporting", operatorOnly: true },
   { id: "agents", path: "/agents", label: "Agents" },
@@ -41,7 +40,7 @@ export const BUILT_SCREENS = SCREENS.filter((s) => !s.soon);
 export const NAV_GROUPS: ReadonlyArray<{ label: string; ids: readonly string[] }> = [
   { label: "Overview", ids: ["setup", "inbox", "events"] },
   { label: "Pipeline", ids: ["quotes", "orders", "deals", "proposals", "negotiation"] },
-  { label: "Inventory", ids: ["catalog", "media-kit", "change-requests", "curators"] },
+  { label: "Inventory", ids: ["catalog", "media-kit", "curators"] },
   { label: "Network", ids: ["reporting", "agents"] },
 ];
 

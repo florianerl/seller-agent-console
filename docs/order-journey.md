@@ -131,8 +131,8 @@ stateDiagram-v2
   - **An applied cancellation does not cancel the order.** The console says so and
     points at the Cancel order transition.
 - **A pending change request is in no queue either.** It is not an approval, and the
-  MCP server has no change-request tools. The console's order row and Change
-  requests screen are the only places it can be decided.
+  MCP server has no change-request tools. The console's order row is the only
+  place it can be decided.
 
 ## The journey, by who does it
 
@@ -144,7 +144,7 @@ stateDiagram-v2
 | Move the order | not allowed (operator key) | Next step buttons | `transition_order` (recorded as `system`) |
 | Read its history | `GET …/history`, `…/audit` | Timeline in the row | none |
 | Request a change | `POST /api/v1/change-requests` | Request a change in the row | none |
-| Review or apply a change | not allowed (operator key) | In the row, or Change requests | none |
+| Review or apply a change | not allowed (operator key) | In the row | none |
 | See what a change did | `GET /api/v1/orders/{id}` (`metadata`) | Recorded on the order, in the row | none |
 | Close | — | Record completed, or Cancel order | `transition_order` |
 

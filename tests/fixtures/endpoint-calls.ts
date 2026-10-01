@@ -137,7 +137,6 @@ export const ENDPOINT_CALLS: Record<string, CallSpec> = {
   registerCurator: { method: "POST", args: [{ curator_id: "cur-1", name: "C", domain: "c.test" }] },
   quoteById: { method: "GET", args: ["Q-1"] },
   changeRequests: { method: "GET", args: [] },
-  changeRequestById: { method: "GET", args: ["CR-1"] },
   reviewChangeRequest: { method: "POST", args: ["CR-1", { decision: "approve" as const }] },
   applyChangeRequest: { method: "POST", args: ["CR-1"] },
   createChangeRequest: {

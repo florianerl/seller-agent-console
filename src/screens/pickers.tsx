@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import Autocomplete from "@mui/material/Autocomplete";
 import Box from "@mui/material/Box";
 import type { SxProps, Theme } from "@mui/material/styles";
-import { agents, approvals, curators, deals, openProposals, orders, packages, products } from "../api/endpoints";
+import { agents, approvals, curators, deals, openProposals, packages, products } from "../api/endpoints";
 import { describe, type Result } from "../api/errors";
 import { TipField } from "../components/TipField";
 import { CADENCE } from "../query/cadence";
@@ -138,26 +138,6 @@ export function PackagePicker({ label = "Package id", hint, ...rest }: PickerPro
       loading={list.loading}
       result={list.result}
       empty="No packages yet."
-    />
-  );
-}
-
-export function OrderPicker({ label = "Order id", hint, ...rest }: PickerProps) {
-  const list = useResource("orders:", (c, signal) => orders(c, {}, signal), {
-    refreshInterval: CADENCE.orders,
-  });
-  return (
-    <EntityPicker
-      {...rest}
-      label={label}
-      hint={hint ?? "An order from the Orders list. Pick one, or type or paste an id."}
-      options={(list.data?.orders ?? []).map((o) => ({
-        id: o.order_id,
-        title: o.status,
-      }))}
-      loading={list.loading}
-      result={list.result}
-      empty="No orders yet."
     />
   );
 }

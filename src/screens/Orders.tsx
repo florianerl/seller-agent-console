@@ -697,7 +697,6 @@ function ChangeRequestEntry({ cr, onChanged }: { cr: ChangeRequest; onChanged: (
           status={cr.status}
           changeType={cr.change_type}
           onChanged={onChanged}
-          compact
         />
       )}
     </Box>
@@ -707,7 +706,7 @@ function ChangeRequestEntry({ cr, onChanged }: { cr: ChangeRequest; onChanged: (
 /**
  * The order's change requests, read from the screen's one list of them. A
  * pending request reaches no approval queue and has no MCP tool, so this row
- * — and the Change requests screen — are the only places it gets decided.
+ * is the only place it gets decided.
  */
 function OrderChangeRequests({
   order,
@@ -737,7 +736,7 @@ function OrderChangeRequests({
           <Chip size="small" label={rows.length} sx={{ height: 20, ml: 0.5, fontSize: 11 }} data-count={rows.length} />
         </>
       }
-      info="A pending request reaches no approval queue and has no MCP tool, so it is reviewed here or on the Change requests screen. The name given on a review is stored as claimed; the agent does not verify it. Applying writes the request's values into the order's metadata, never its status."
+      info="A pending request reaches no approval queue and has no MCP tool, so it is reviewed here. The name given on a review is stored as claimed; the agent does not verify it. Applying writes the request's values into the order's metadata, never its status."
       meta={list.data ? <Freshness resource={list} what="list" /> : null}
     >
 
@@ -777,7 +776,7 @@ function OrderChangeRequests({
           <ChangeRequestCreate orderId={order.order_id} order={{ status, deal_id: order.deal_id }} />
         </Box>
       </Collapse>
-      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 1.5 }} flexWrap="wrap" useFlexGap>
+      <Box sx={{ mt: 1.5 }}>
         <Button
           size="small"
           variant="outlined"
@@ -788,10 +787,7 @@ function OrderChangeRequests({
         >
           {raising ? "Close" : "Request a change"}
         </Button>
-        <Link href="#/change-requests" sx={{ fontSize: 12 }}>
-          All change requests
-        </Link>
-      </Stack>
+      </Box>
     </DetailCard>
   );
 }

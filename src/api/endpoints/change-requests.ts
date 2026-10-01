@@ -89,16 +89,6 @@ export const changeRequests = (
 ): Promise<Result<ChangeRequestList>> =>
   get(c, PATHS.changeRequests, { schema: ChangeRequestList, query, signal });
 
-export const changeRequestById = (
-  c: Connection,
-  crId: string,
-  signal?: AbortSignal,
-): Promise<Result<ChangeRequest>> =>
-  get(c, `${PATHS.changeRequests}/${encodeURIComponent(crId)}`, {
-    schema: ChangeRequest,
-    signal,
-  });
-
 // --- writes -----------------------------------------------------------------
 
 /**

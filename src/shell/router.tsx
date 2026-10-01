@@ -26,7 +26,6 @@ const Negotiation = lazy(() => import("../screens/Negotiation"));
 const Catalog = lazy(() => import("../screens/Catalog"));
 const Agents = lazy(() => import("../screens/Agents"));
 const MediaKit = lazy(() => import("../screens/MediaKit"));
-const ChangeRequests = lazy(() => import("../screens/ChangeRequests"));
 const Curators = lazy(() => import("../screens/Curators"));
 const Reporting = lazy(() => import("../screens/Reporting"));
 const NotFound = lazy(() => import("./NotFound"));
@@ -46,7 +45,6 @@ export function Router() {
           <Route path="negotiation" element={<Negotiation />} />
           <Route path="catalog" element={<Catalog />} />
           <Route path="media-kit" element={<MediaKit />} />
-          <Route path="change-requests" element={<ChangeRequests />} />
           <Route path="curators" element={<Curators />} />
           <Route path="reporting" element={<Reporting />} />
           <Route path="agents" element={<Agents />} />

@@ -85,7 +85,7 @@ import { ConfirmAction } from "../components/ConfirmAction";
 import { EnumSelect } from "../components/EnumSelect";
 import { Hint } from "../components/Hint";
 import { TipField } from "../components/TipField";
-import { AgentPicker, OrderPicker, PackagePicker, ProductPicker, ProposalPicker } from "./pickers";
+import { AgentPicker, PackagePicker, ProductPicker, ProposalPicker } from "./pickers";
 import { ApiKeyTable } from "./ApiKeyTable";
 import { JsonView } from "../components/JsonView";
 import { FormFields, FormRow, ReadForm, WriteForm } from "../components/WriteForm";
@@ -1520,24 +1520,22 @@ function problemList(result: Result<unknown> | undefined, key: string): string[]
 }
 
 /**
- * With `orderId`, the order is fixed — the form is being raised from that
- * order's row, and `order` lets it say up front what the agent would refuse.
+ * Raised from an order's row, so the order is fixed, and `order` lets the form
+ * say up front what the agent would refuse.
  */
 export function ChangeRequestCreate({
-  orderId: fixedOrder,
+  orderId,
   order,
-}: { orderId?: string; order?: { status: string; deal_id: string | null } } = {}) {
+}: { orderId: string; order: { status: string; deal_id: string | null } }) {
   const { writesEnabled, actorName } = useCredential();
-  const [typedOrder, setOrderId] = useState("");
   // `flight_extension` was the default here once; it is not a ChangeType, so
   // every request sent with it was a 400.
   const [changeType, setChangeType] = useState<string>("flight_dates");
   const [field, setField] = useState<string | undefined>();
   const [newValue, setNewValue] = useState("");
   const [reason, setReason] = useState("");
-  const orderId = fixedOrder ?? typedOrder;
   const fieldName = (field ?? CHANGE_FIELD[changeType] ?? "").trim();
-  const refusal = order ? refuseChange(order, changeType) : undefined;
+  const refusal = refuseChange(order, changeType);
   const { severity, note } = predictSeverity(changeType);
 
   const create = useMutation<
@@ -1607,9 +1605,6 @@ export function ChangeRequestCreate({
           }
         >
           <FormFields>
-            {fixedOrder === undefined && (
-              <OrderPicker value={typedOrder} onChange={setOrderId} disabled={!writesEnabled} />
-            )}
             <EnumSelect
               hint="What kind of change is being requested. It decides the usual field and how severe the agent treats the request."
               label="Change type"
@@ -1690,28 +1685,21 @@ export function ChangeRequestCreate({
 }
 
 /**
- * Review and apply for one change request. Shared by the Change requests
- * screen and the order row: a pending request reaches no approval queue and
- * has no MCP tool, so wherever an operator meets it has to be able to act.
+ * Review and apply for one change request, in the order row: a pending request
+ * reaches no approval queue and has no MCP tool, so that row has to be able to
+ * act. Only what the request's status allows is shown — beside its own status
+ * sentence, the one live action is what matters.
  */
 export function ChangeRequestReviewWrites({
   crId,
   status,
   changeType,
   onChanged,
-  compact = false,
 }: {
   crId: string;
   status: string;
   changeType?: string;
   onChanged: () => void;
-  /**
-   * Show only what this status allows. The Change requests screen keeps every
-   * control visible and disabled, so the whole flow is legible there; in an
-   * order row, beside the request's own status sentence, the one live action
-   * is what matters.
-   */
-  compact?: boolean;
 }) {
   const { writesEnabled, actorName, setActorName } = useCredential();
   const [reason, setReason] = useState("");
@@ -1724,7 +1712,7 @@ export function ChangeRequestReviewWrites({
   const invalidate = {
     // Apply writes into the order's metadata, so the orders read goes stale
     // too; review changes nothing on the order, but the same list shows it.
-    invalidates: ["change-requests:*", `change-request:${crId}`, "orders:*", "order-audit:*"] as const,
+    invalidates: ["change-requests:*", "orders:*", "order-audit:*"] as const,
   };
 
   const review = useMutation<{ id: string; body: ChangeRequestReviewInput }, unknown>(
@@ -1741,17 +1729,15 @@ export function ChangeRequestReviewWrites({
   const busy = review.pending || apply.pending;
   const blocked = !writesEnabled;
   const outcome = review.last ?? apply.last;
-  const showReview = !compact || reviewable;
-  const showApply = !compact || applicable;
 
   return (
     <Box sx={{ mt: 1 }} data-block="change-request-controls">
-      {showReview && (
+      {reviewable && (
         <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 1 }}>Review this request</Typography>
       )}
 
       <FormRow>
-        {showReview && (
+        {reviewable && (
           <>
             <TipField
               hint="Optional reason for the decision, saved with the change request."
@@ -1759,7 +1745,7 @@ export function ChangeRequestReviewWrites({
               label="Reason"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              disabled={blocked || !reviewable || busy}
+              disabled={blocked || busy}
               sx={{ minWidth: 240 }}
             />
             <TipField
@@ -1769,7 +1755,7 @@ export function ChangeRequestReviewWrites({
               value={name}
               onChange={(e) => setName(e.target.value)}
               onBlur={() => void setActorName(name)}
-              disabled={blocked || !reviewable || busy}
+              disabled={blocked || busy}
               sx={{ minWidth: 200 }}
             />
             <Hint hint="Approves this pending request so it can be applied. You are asked to confirm first.">
@@ -1777,7 +1763,7 @@ export function ChangeRequestReviewWrites({
                 size="small"
                 variant="contained"
                 data-action="approve"
-                disabled={blocked || !reviewable || busy}
+                disabled={blocked || busy}
                 onClick={() => setPendingDecision("approve")}
               >
                 Approve
@@ -1788,7 +1774,7 @@ export function ChangeRequestReviewWrites({
                 size="small"
                 variant="outlined"
                 data-action="reject"
-                disabled={blocked || !reviewable || busy}
+                disabled={blocked || busy}
                 onClick={() => setPendingDecision("reject")}
               >
                 Reject
@@ -1796,13 +1782,13 @@ export function ChangeRequestReviewWrites({
             </Hint>
           </>
         )}
-        {showApply && (
+        {applicable && (
           <Hint hint="Writes the approved values into the order's metadata. The order's status does not change. You are asked to confirm first.">
             <Button
               size="small"
-              variant={compact ? "outlined" : "text"}
+              variant="outlined"
               data-action="apply"
-              disabled={blocked || !applicable || busy}
+              disabled={blocked || busy}
               onClick={() => setPendingApply(true)}
             >
               {apply.pending ? "Applying…" : "Apply to order"}
@@ -1810,21 +1796,6 @@ export function ChangeRequestReviewWrites({
           </Hint>
         )}
       </FormRow>
-      {/* In an order row the card already says it once; repeating it under
-          every request is what made that column read as clutter. */}
-      {showReview && !compact && (
-        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75 }}>
-          Name is stored as given; the agent does not verify it
-        </Typography>
-      )}
-
-      {writesEnabled && !reviewable && !applicable && (
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }} data-state="not-actionable">
-          This request is {status.replace(/_/g, " ")} — only a pending-approval
-          request can be reviewed, and only an approved one can be applied.
-        </Typography>
-      )}
-
       {outcome && outcome.kind !== "ok" && (
         <Typography variant="body2" sx={{ mt: 1, color: palette.error }} data-state="write-failed">
           {describe(outcome)}

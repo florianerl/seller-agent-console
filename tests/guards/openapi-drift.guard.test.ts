@@ -106,6 +106,9 @@ describe("the console calls only routes the agent declares", () => {
    */
   const NOT_ADOPTED = new Set<string>([
     // "POST /api/v1/x", // reason it is deliberately not on any screen
+    // Only the Change requests screen read one request by id, and it was
+    // folded into the order row, which already has every field from the list.
+    "GET /api/v1/change-requests/{cr_id}",
   ]);
 
   it("leaves no agent operation unreached without saying so", () => {

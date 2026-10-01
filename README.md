@@ -126,7 +126,6 @@ differently, because they send you to different places.
 | Negotiation | `/sessions`, `/sessions/{id}`, `/proposals/{id}/negotiation`; writes create/message/close session, submit/counter proposal, `POST /api/v1/negotiations/messages` | Discloses that listing writes, **and** that session routes declare no authentication |
 | Catalog | `/products`, `/products/{id}`, inventory-type override GET/POST/DELETE, `/api/v1/rate-card` GET/PUT, `/packages` CRUD + assemble/sync, `/api/v1/quotes`; query POSTs `/discovery`, `/products/avails`, `/pricing` | Override values carry their own freshness stamp. Rate-card PUT replaces the whole card |
 | Media kit | `/media-kit`, `/media-kit/packages`, `/media-kit/packages/{id}`; query POSTs `/media-kit/search`, `/agentic-audience/match` | Search and audience match store nothing, so they run with writes off |
-| Change requests | `/api/v1/change-requests`, `/{id}`; writes create, `/{id}/review`, `/{id}/apply` | Create is idempotent per order and key. Review records the first decision. Apply writes into the order's metadata, never its status |
 | Curators | `/api/v1/curators`, `/api/v1/curators/{id}`; write `POST /api/v1/curators` | Register stays visible while the switch is off, disabled |
 | Reporting | `/api/v1/orders/report`, `/gam/orders`, `/gam/report` | Does not poll. Payloads are rendered verbatim |
 | Agents | `/registry/agents`, `/{id}`; writes discover, trust PUT, DELETE | Trust status and registry verification stay in separate columns |
