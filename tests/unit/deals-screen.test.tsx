@@ -331,25 +331,56 @@ describe("the deals screen", () => {
     expect(document.querySelector('[data-note="skipped"]')).toBeNull();
   });
 
-  it("shows the export exactly as the agent sent it, even when entries are not the shape we expect", async () => {
+  it("downloads the export in the chosen format, as the agent sent it", async () => {
     let asked = "";
     server.use(
       http.get(`${API}/api/v1/deals/export`, ({ request }) => {
         asked = new URL(request.url).search;
+        // Not the shape we parse: the file must carry it anyway.
         return HttpResponse.json({ items: [{ id: "x-1" }], count: 1 });
       }),
     );
+    const blobs: Blob[] = [];
+    URL.createObjectURL = (b: Blob | MediaSource) => {
+      blobs.push(b as Blob);
+      return "blob:test";
+    };
+    URL.revokeObjectURL = () => undefined;
+    const names: string[] = [];
+    const click = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
+      names.push(this.download);
+    };
     const user = userEvent.setup();
     renderScreen();
 
-    await user.click(await screen.findByRole("combobox", { name: "Export format" }));
-    await user.click(await screen.findByRole("option", { name: "dv360" }));
-    await user.click(screen.getByRole("combobox", { name: "Export status" }));
-    await user.click(await screen.findByRole("option", { name: "proposed" }));
-    await user.click(screen.getByRole("button", { name: "Export deals" }));
+    try {
+      await user.click(await screen.findByRole("button", { name: "Export" }));
+      await user.click(await screen.findByRole("menuitem", { name: "dv360" }));
 
-    await waitFor(() => expect(document.body.textContent).toContain('"x-1"'));
-    expect(asked).toBe("?format=dv360&status=proposed");
+      await waitFor(() => expect(blobs).toHaveLength(1));
+      expect(asked).toBe("?format=dv360");
+      const text = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsText(blobs[0]!);
+      });
+      expect(text).toContain('"x-1"');
+      expect(names[0]).toMatch(/^deals-dv360-\d{4}-\d{2}-\d{2}\.json$/);
+    } finally {
+      HTMLAnchorElement.prototype.click = click;
+    }
+  });
+
+  it("says so when the export fails, instead of downloading an empty file", async () => {
+    server.use(http.get(`${API}/api/v1/deals/export`, () => new HttpResponse(null, { status: 500 })));
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("button", { name: "Export" }));
+    await user.click(await screen.findByRole("menuitem", { name: "generic" }));
+
+    await waitFor(() => expect(document.querySelector('[data-state="export-failed"]')).toBeTruthy());
   });
 
   it("searches the loaded deals by id, product or status, without asking the agent again", async () => {

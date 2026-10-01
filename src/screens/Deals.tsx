@@ -2,6 +2,7 @@ import { Fragment, useState } from "react";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
 import Skeleton from "@mui/material/Skeleton";
@@ -12,23 +13,25 @@ import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
-import { dealLineage, dealPerformance, deals, type Deal as DealRow, type Money } from "../api/endpoints";
+import { dealLineage, dealPerformance, deals, dealsExport, type Deal as DealRow, type Money } from "../api/endpoints";
 import { describe } from "../api/errors";
 import { SearchField } from "../components/SearchField";
 import { DetailCard } from "../components/DetailCard";
 import { DataPanel, FreshnessNote } from "../components/DataPanel";
 import { Field, FieldGrid } from "../components/Field";
 import { GatedNotice } from "../components/GatedNotice";
+import { Hint } from "../components/Hint";
 import { PageHeader } from "../components/PageHeader";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { StatusChip } from "../components/StatusChip";
+import { DEAL_EXPORT_FORMATS } from "../api/vocabulary";
 import { day, plural, stamp } from "../lib/time";
 import { useResource } from "../query/useResource";
 import { palette } from "../theme/palette";
 import { useCredential } from "../credentials/context";
 import { FormRow } from "../components/WriteForm";
 import { TipField } from "../components/TipField";
-import { DealLookups, DealsExportLookup, DealWrites, Panel } from "./mutations";
+import { DealLookups, DealWrites, Panel } from "./mutations";
 
 /**
  * The shared wire vocabulary, taken from the agent's DealStatus enum. The list
@@ -49,6 +52,75 @@ const STATUSES = [
   "cancelled",
   "expired",
 ];
+
+/**
+ * Downloads every stored deal as a JSON file, shaped for one DSP's import.
+ * A button over the list rather than a panel of its own: it is one action with
+ * one choice (the format), and the result is a file, not something to read on
+ * the page. It is a read, so there is no confirmation; it is heavy (an
+ * unpaginated scan), so it only runs when a format is picked.
+ */
+function ExportMenu() {
+  const { connection } = useCredential();
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<string | undefined>();
+
+  async function run(format: string) {
+    setAnchor(null);
+    if (!connection) return;
+    setBusy(true);
+    setFailure(undefined);
+    const result = await dealsExport(connection, { format });
+    setBusy(false);
+    if (result.kind !== "ok") {
+      setFailure(describe(result));
+      return;
+    }
+    const url = URL.createObjectURL(
+      new Blob([JSON.stringify(result.data, null, 2)], { type: "application/json" }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `deals-${format}-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <>
+      <Hint hint="Downloads every stored deal as JSON, shaped for the DSP you pick. It reads all deals in one pass, so it can take a while.">
+        <Button
+          variant="outlined"
+          size="small"
+          disabled={busy || !connection}
+          onClick={(e) => setAnchor(e.currentTarget)}
+          aria-haspopup="menu"
+          data-action="export-deals"
+          endIcon={
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true" focusable="false">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          }
+        >
+          {busy ? "Exporting…" : "Export"}
+        </Button>
+      </Hint>
+      <Menu anchorEl={anchor} open={anchor !== null} onClose={() => setAnchor(null)}>
+        {DEAL_EXPORT_FORMATS.map((f) => (
+          <MenuItem key={f.value} onClick={() => void run(f.value)} data-format={f.value}>
+            {f.label}
+          </MenuItem>
+        ))}
+      </Menu>
+      {failure && (
+        <Typography variant="body2" sx={{ color: palette.error, flexBasis: "100%" }} data-state="export-failed">
+          Export failed: {failure}
+        </Typography>
+      )}
+    </>
+  );
+}
 
 /**
  * Free-text search over what an operator would paste: a deal or quote id, a
@@ -233,9 +305,6 @@ export default function DealsScreen() {
       <Panel title="Create a deal">
         <DealWrites />
       </Panel>
-      <Panel title="Export">
-        <DealsExportLookup />
-      </Panel>
 
       {list.freshness === "blocked" ? (
         <GatedNotice what="The deal ledger" result={list.result} />
@@ -276,6 +345,8 @@ export default function DealsScreen() {
               <Typography variant="body2" color="text.secondary" sx={{ fontSize: 12, pb: 1 }}>
                 This list does not poll — it reads every deal in one unpaginated pass.
               </Typography>
+              <Box sx={{ flex: 1 }} />
+              <ExportMenu />
             </FormRow>
           </Paper>
 
