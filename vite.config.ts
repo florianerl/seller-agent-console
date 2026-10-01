@@ -15,6 +15,15 @@ export default defineConfig({
     __BUILD_ID__: JSON.stringify(BUILD_ID),
   },
   base: BASE_PATH,
+  // Dev only. Screens are lazy routes, so the dependency scanner used to meet
+  // a screen's MUI imports (RadioGroup, Stepper, InputAdornment…) only when
+  // that screen first rendered, re-bundled them under a new hash mid-session,
+  // and the page ended up with two Reacts: a blank screen and "Invalid hook
+  // call" until a manual reload. Scanning every source file at startup finds
+  // them all before the first page loads.
+  optimizeDeps: {
+    entries: ["index.html", "src/**/*.{ts,tsx}"],
+  },
   plugins: [
     react(),
     VitePWA({
