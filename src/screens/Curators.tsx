@@ -21,7 +21,7 @@ import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { StatusChip } from "../components/StatusChip";
 import { TipField } from "../components/TipField";
 import { useCredential } from "../credentials/context";
-import { CuratorWrite } from "./mutations";
+import { CuratorWizard } from "./CuratorWizard";
 import { plural, stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
 import { useResource } from "../query/useResource";
@@ -95,6 +95,7 @@ function Detail({ curatorId }: { curatorId: string }) {
 export default function CuratorsScreen() {
   const [activeOnly, setActiveOnly] = useState("");
   const [openCurator, setOpenCurator] = useState<string | undefined>();
+  const [registering, setRegistering] = useState(false);
   const { writesEnabled } = useCredential();
 
   const list = useResource(
@@ -112,11 +113,25 @@ export default function CuratorsScreen() {
       <PageHeader
         title="Curators"
         subtitle="Third-party deal and supply-path optimizers registered with this seller."
+        actions={
+          <Button
+            variant="contained"
+            size="small"
+            onClick={() => setRegistering(true)}
+            aria-haspopup="dialog"
+            data-action="register-curator"
+          >
+            Register curator
+          </Button>
+        }
       >
 
       {!writesEnabled && <ReadOnlyNotice what="Registering a curator" />}
+      <CuratorWizard open={registering} onClose={() => setRegistering(false)} />
 
-      {list.freshness !== "blocked" && (
+      {list.freshness === "blocked" ? (
+        <GatedNotice what="The curator list" result={list.result} />
+      ) : (
         <>
           <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }}>
             <TipField
@@ -140,19 +155,8 @@ export default function CuratorsScreen() {
             {list.freshness === "empty" &&
               (list.loading ? "loading…" : list.result ? describe(list.result) : "")}
           </FreshnessNote>
-        </>
-      )}
 
-      {/* The register form sits in the table's own panel: it adds a row to this
-          list, and it stays put when the list itself is gated or empty. */}
-      <DataPanel>
-        <Box sx={{ p: 2, borderBottom: `1px solid ${palette.line}` }} data-block="curator-register">
-          <CuratorWrite />
-        </Box>
-        {list.freshness === "blocked" ? (
-          <GatedNotice what="The curator list" result={list.result} />
-        ) : (
-          <>
+          <DataPanel>
             {list.loading && rows.length === 0 ? (
               <Box sx={{ p: 2 }}>
                 <Skeleton height={28} />
@@ -235,9 +239,9 @@ export default function CuratorsScreen() {
                 </TableBody>
               </Table>
             )}
-          </>
-        )}
-      </DataPanel>
+          </DataPanel>
+        </>
+      )}
       </PageHeader>
     </section>
   );

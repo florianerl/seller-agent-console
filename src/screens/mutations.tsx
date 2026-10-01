@@ -32,7 +32,6 @@ import {
   negotiationStatus,
   postNegotiationMessage,
   pushDeal,
-  registerCurator,
   removeRegisteredAgent,
   reviewChangeRequest,
   sendSessionMessage,
@@ -1184,37 +1183,6 @@ function AgentBody({ agentId }: { agentId: string }) {
     <Typography variant="body2" sx={{ mt: 1 }}>
       {detail.data.trust_status} · {detail.data.agent_type}
     </Typography>
-  );
-}
-
-export function CuratorWrite() {
-  const { writesEnabled } = useCredential();
-  const [curatorId, setCuratorId] = useState("");
-  const [name, setName] = useState("");
-  const [domain, setDomain] = useState("");
-  const register = useMutation<{ curator_id: string; name: string; domain: string }, unknown>(
-    (c, a) => registerCurator(c, a),
-    { invalidates: ["curators"] },
-  );
-  return (
-    <WriteForm
-      title="Register this curator?"
-      confirmLabel="Register curator"
-      action="register-curator"
-      blocked={!writesEnabled || !curatorId.trim() || !name.trim() || !domain.trim()}
-      pending={register.pending}
-      last={register.last}
-      onConfirm={() =>
-        void register.run({ curator_id: curatorId.trim(), name: name.trim(), domain: domain.trim() })
-      }
-      consequence="Not idempotent if the id is new; a duplicate id may 409."
-    >
-      <FormFields>
-        <TipField hint="Your own short identifier for the curator, for example acme-curation. A duplicate id may 409." size="small" label="Curator id" value={curatorId} onChange={(e) => setCuratorId(e.target.value)} disabled={!writesEnabled} />
-        <TipField hint="Display name of the curator. Required." size="small" label="Name" value={name} onChange={(e) => setName(e.target.value)} disabled={!writesEnabled} />
-        <TipField hint="Domain the curator operates from, for example curator.example. Required." size="small" label="Domain" value={domain} onChange={(e) => setDomain(e.target.value)} disabled={!writesEnabled} />
-      </FormFields>
-    </WriteForm>
   );
 }
 
