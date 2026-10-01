@@ -914,6 +914,10 @@ export function SessionWrites({ sessionId }: { sessionId: string }) {
     (c, a) => sendSessionMessage(c, a.id, { message: a.message }),
     { invalidates: [`session:${sessionId}`, "sessions:*"] },
   );
+  const sendMessage = async () => {
+    const result = await send.run({ id: sessionId, message: message.trim() });
+    if (result.kind === "ok") setMessage("");
+  };
   const close = useMutation<{ id: string }, unknown>(
     (c, a) => closeSession(c, a.id),
     { invalidates: [`session:${sessionId}`, "sessions:*"] },
@@ -921,15 +925,14 @@ export function SessionWrites({ sessionId }: { sessionId: string }) {
 
   return (
     <Stack spacing={1}>
-      <WriteForm
-        title="Send this session message?"
-        confirmLabel="Send"
+      {/* No confirmation: sending a chat turn is the whole point of the box,
+          and a dialog per message makes a conversation unusable. The field
+          is cleared only on success so a failed send can be retried. */}
+      <ReadForm
+        label={send.pending ? "Working…" : "Send"}
         action="session-message"
-        blocked={!writesEnabled || !message.trim()}
-        pending={send.pending}
-        last={send.last}
-        onConfirm={() => void send.run({ id: sessionId, message: message.trim() })}
-        consequence="Appends a turn and gets a response. Not idempotent: a retry sends a second message."
+        disabled={!writesEnabled || !message.trim() || send.pending}
+        onRun={() => void sendMessage()}
       >
         <TipField
           hint="Text sent to the session as the next turn. Required."
@@ -937,10 +940,21 @@ export function SessionWrites({ sessionId }: { sessionId: string }) {
           label="Message"
           value={message}
           onChange={(e) => setMessage(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && writesEnabled && message.trim() && !send.pending) {
+              e.preventDefault();
+              void sendMessage();
+            }
+          }}
           disabled={!writesEnabled}
           sx={{ minWidth: 280 }}
         />
-      </WriteForm>
+      </ReadForm>
+      {send.last && send.last.kind !== "ok" && (
+        <Typography variant="body2" sx={{ color: palette.error }} data-state="write-failed">
+          {describe(send.last)}
+        </Typography>
+      )}
       <WriteForm
         title="Close this session?"
         confirmLabel="Close session"

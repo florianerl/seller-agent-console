@@ -1,4 +1,5 @@
 import { JsonView } from "../components/JsonView";
+import { MessageText } from "../components/MessageText";
 import { Fragment, useState } from "react";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
@@ -76,16 +77,27 @@ function Conversation({ sessionId }: { sessionId: string }) {
                 <Box
                   component="li"
                   key={typeof row["message_id"] === "string" ? row["message_id"] : index}
-                  sx={{ py: 0.75, borderTop: index === 0 ? "none" : `1px solid ${palette.line}` }}
+                  sx={{
+                    p: 1.25,
+                    mb: 1,
+                    borderRadius: 1,
+                    border: `1px solid ${palette.line}`,
+                    bgcolor: role === "user" ? palette.navActiveWash : palette.paper,
+                  }}
                 >
                   <Box sx={{ fontSize: 12, color: palette.textSecondary }}>
                     {role} · {stamp(at)}
                   </Box>
-                  {/* Message payloads differ per role and the schema is open,
-                      so the body is shown as it arrived rather than mapped
-                      into fields that may not exist. */}
+                  {/* Message payloads differ per role and the schema is open:
+                      plain text is rendered as text, anything else is shown
+                      as it arrived rather than mapped into fields that may
+                      not exist. */}
                   <Box sx={{ mt: 0.5 }}>
-                    <JsonView value={row["content"] ?? row} />
+                    {typeof row["content"] === "string" ? (
+                      <MessageText text={row["content"]} />
+                    ) : (
+                      <JsonView value={row["content"] ?? row} />
+                    )}
                   </Box>
                 </Box>
               );
