@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import Autocomplete from "@mui/material/Autocomplete";
 import Box from "@mui/material/Box";
 import type { SxProps, Theme } from "@mui/material/styles";
-import { agents, approvals, curators, orders, packages, products } from "../api/endpoints";
+import { agents, approvals, curators, deals, orders, packages, products } from "../api/endpoints";
 import { describe, type Result } from "../api/errors";
 import { TipField } from "../components/TipField";
 import { CADENCE } from "../query/cadence";
@@ -216,6 +216,31 @@ export function GatePicker({ label = "Gate id", hint, ...rest }: PickerProps) {
       loading={list.loading}
       result={list.result}
       empty="No gates are waiting. Paste the id of a decided one instead."
+    />
+  );
+}
+
+/**
+ * Stored deals. Mount it only when asked: the deals list is an unpaginated
+ * full scan (`CADENCE.deals` is 0), so a form that opens with this would
+ * trigger one every time. It shares the Deals screen's cache entry, so a
+ * list already loaded there costs nothing here.
+ */
+export function DealPicker({ label = "Deal", hint, ...rest }: PickerProps) {
+  const list = useResource("deals:", (c, signal) => deals(c, {}, signal));
+  return (
+    <EntityPicker
+      {...rest}
+      label={label}
+      hint={hint ?? "A stored deal. Pick one, or type or paste a deal id."}
+      options={(list.data?.deals ?? []).map(({ deal }) => ({
+        id: deal.deal_id,
+        title: deal.product?.name || undefined,
+        detail: [deal.deal_type, deal.status].filter(Boolean).join(" · "),
+      }))}
+      loading={list.loading}
+      result={list.result}
+      empty="No stored deals. Book one on the Deals screen, or type a deal id."
     />
   );
 }

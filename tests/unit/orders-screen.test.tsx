@@ -1160,3 +1160,52 @@ describe("searching the orders", () => {
     expect(box()).toHaveValue("");
   });
 });
+
+describe("creating an order from a stored deal", () => {
+  beforeEach(async () => {
+    resetReachability();
+    await connect({ writesEnabled: true });
+    server.use(
+      http.get(`${API}/api/v1/orders`, () => HttpResponse.json({ orders: ORDERS, count: ORDERS.length })),
+      http.get(`${API}/api/v1/change-requests`, () => HttpResponse.json({ change_requests: [], count: 0 })),
+    );
+  });
+
+  it("loads the deals only when asked, offers them by product, and sends the one picked", async () => {
+    let dealReads = 0;
+    const sent: unknown[] = [];
+    server.use(
+      http.get(`${API}/api/v1/deals`, () => {
+        dealReads += 1;
+        return HttpResponse.json({
+          deals: [
+            { deal: { deal_id: "DEMO-111", deal_type: "PD", status: "active", product: { product_id: "p1", name: "Homepage takeover" } } },
+            { deal: { deal_id: "DEMO-222", deal_type: "PG", status: "active", product: { product_id: "p2", name: "CTV prime" } } },
+          ],
+          count: 2,
+          skipped: [],
+        });
+      }),
+      http.post(`${API}/api/v1/orders`, async ({ request }) => {
+        sent.push(await request.json());
+        return HttpResponse.json({ order_id: "ORD-NEW2", status: "draft", deal_id: "DEMO-222", created_at: null });
+      }),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+    await user.click(await screen.findByRole("button", { name: "New order" }));
+    // The deals list is a full scan: opening the form must not start one.
+    expect(dealReads).toBe(0);
+
+    await user.click(document.querySelector('[data-action="choose-deal"]') as HTMLElement);
+    await user.click(await screen.findByLabelText("Deal"));
+    await user.click(await screen.findByText("DEMO-222"));
+    expect(dealReads).toBe(1);
+    // No helper line under the picker: it is what pushed the row out of line.
+    expect(document.querySelector('[data-block="new-order"] .MuiFormHelperText-root')).toBeNull();
+
+    await user.click(document.querySelector('[data-action="create-order"]') as HTMLElement);
+    await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Create order" }));
+    await waitFor(() => expect(sent).toEqual([{ deal_id: "DEMO-222", metadata: { source: "seller-console" } }]));
+  });
+});

@@ -27,7 +27,6 @@ import {
   dealBuyerStatus,
   dealById,
   dealFromTemplate,
-  deals,
   dealsExport,
   dealSspTroubleshoot,
   deleteInventoryTypeOverride,
@@ -100,7 +99,7 @@ import { ConfirmAction } from "../components/ConfirmAction";
 import { EnumSelect } from "../components/EnumSelect";
 import { Hint } from "../components/Hint";
 import { TipField } from "../components/TipField";
-import { AgentPicker, CuratorPicker, OrderPicker, PackagePicker, ProductPicker } from "./pickers";
+import { AgentPicker, CuratorPicker, DealPicker, OrderPicker, PackagePicker, ProductPicker } from "./pickers";
 import { JsonView } from "../components/JsonView";
 import { FormFields, FormRow, ReadForm, WriteForm } from "../components/WriteForm";
 import { WritesNotice } from "../components/WritesNotice";
@@ -707,66 +706,6 @@ function PackageBody({ packageId }: { packageId: string }) {
   );
 }
 
-/**
- * Deal ids are long and opaque, so the create form offers the stored deals —
- * but only once asked. The deals list is an unpaginated full scan
- * (`CADENCE.deals` is 0), and opening "New order" should not trigger one.
- * Mounting this component is the request; it shares the Deals screen's cache
- * entry, so a list already loaded there costs nothing here.
- */
-function StoredDealOptions({
-  value,
-  onChange,
-  disabled,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  disabled: boolean;
-}) {
-  const list = useResource("deals:", (c, signal) => deals(c, {}, signal));
-  const stored = list.data?.deals.map((e) => e.deal) ?? [];
-  const byId = new Map(stored.map((d) => [d.deal_id, d]));
-  return (
-    <Autocomplete
-      freeSolo
-      size="small"
-      options={stored.map((d) => d.deal_id)}
-      inputValue={value}
-      onInputChange={(_, next) => onChange(next)}
-      loading={list.loading}
-      disabled={disabled}
-      sx={{ minWidth: 320 }}
-      renderOption={(props, id) => {
-        const deal = byId.get(id);
-        return (
-          <li {...props} key={id}>
-            <Box>
-              <Box sx={{ fontFamily: "monospace", fontSize: 12 }}>{id}</Box>
-              <Box sx={{ fontSize: 12, color: palette.textSecondary }}>
-                {[deal?.product?.name, deal?.deal_type, deal?.status].filter(Boolean).join(" · ")}
-              </Box>
-            </Box>
-          </li>
-        );
-      }}
-      renderInput={(params) => (
-        <TipField
-          {...params}
-          hint="Optional deal to attach. Pick one of the stored deals, or type or paste a deal id."
-          label="Deal"
-          helperText={
-            list.result && list.result.kind !== "ok"
-              ? describe(list.result)
-              : list.data
-                ? `${stored.length} stored deals`
-                : "loading deals…"
-          }
-        />
-      )}
-    />
-  );
-}
-
 export function OrderCreateWrite({ onCreated }: { onCreated?: (orderId: string) => void }) {
   const { writesEnabled } = useCredential();
   const [dealId, setDealId] = useState("");
@@ -813,7 +752,13 @@ export function OrderCreateWrite({ onCreated }: { onCreated?: (orderId: string) 
     >
       <FormFields>
         {pickDeal ? (
-          <StoredDealOptions value={dealId} onChange={setDealId} disabled={!writesEnabled} />
+          <DealPicker
+            value={dealId}
+            onChange={setDealId}
+            disabled={!writesEnabled}
+            hint="Optional deal to attach. Pick one of the stored deals, or type or paste a deal id."
+            sx={{ minWidth: 320 }}
+          />
         ) : (
           <TipField
             hint="Optional id of the deal the order is for. Leave empty for an order with no deal attached."
