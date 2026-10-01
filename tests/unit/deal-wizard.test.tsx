@@ -50,8 +50,11 @@ const next = (user: ReturnType<typeof userEvent.setup>) =>
   user.click(screen.getByRole("button", { name: "Next" }));
 
 async function pick(user: ReturnType<typeof userEvent.setup>, title: string) {
-  await user.click(await screen.findByRole("radio", { name: new RegExp(title) }));
+  // "Book an existing quote" is Quote, then book with the switch on "I have a quote id".
+  const existing = title === "Book an existing quote";
+  await user.click(await screen.findByRole("radio", { name: new RegExp(existing ? "Quote, then book" : title) }));
   await next(user);
+  if (existing) await user.click(await screen.findByRole("button", { name: "I have a quote id" }));
 }
 
 async function createButton() {
@@ -107,6 +110,26 @@ describe("the new-deal wizard", () => {
     expect(sent[0]).toMatchObject({ quote_id: "qt-1" });
     expect(typeof sent[0]!["idempotency_key"]).toBe("string");
     expect(await screen.findByText(/agent accepted/i)).toBeInTheDocument();
+  });
+
+  it("is one route for quoting and booking, with a switch for a quote you already hold", async () => {
+    const user = userEvent.setup();
+    mount();
+
+    // One card, not two that read alike.
+    expect(await screen.findByRole("radio", { name: /Quote, then book/ })).toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: /existing quote/i })).toBeNull();
+    await next(user);
+
+    expect(screen.getByRole("combobox", { name: "Product id" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Quote id")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "I have a quote id" }));
+    expect(screen.getByLabelText("Quote id")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Product id" })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Get a new quote" }));
+    expect(screen.getByRole("combobox", { name: "Product id" })).toBeInTheDocument();
   });
 
   it("quotes first, shows the rate, and only then books that quote", async () => {

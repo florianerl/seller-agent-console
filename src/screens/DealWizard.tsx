@@ -5,6 +5,8 @@ import AccordionSummary from "@mui/material/AccordionSummary";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import ToggleButton from "@mui/material/ToggleButton";
+import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
 import {
   bookDeal,
@@ -58,12 +60,7 @@ const METHODS: readonly { value: Method; title: string; description: string }[] 
   {
     value: "new-quote",
     title: "Quote, then book",
-    description: "Price a product first, see the rate, and book it if you like it.",
-  },
-  {
-    value: "quote",
-    title: "Book an existing quote",
-    description: "You already have a quote id, from an order or an earlier request.",
+    description: "Price a product and book it, or book a quote you already have.",
   },
   {
     value: "proposal",
@@ -248,7 +245,12 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
     if (m.value === "curated") return !(curatorList.data && curatorList.data.curators.length === 0);
     return true;
   });
-  const method: Method = available.some((m) => m.value === chosen) ? chosen : "new-quote";
+  // "Book an existing quote" is the same route as "Quote, then book" entered
+  // halfway: both end in booking a quote, and differ only in whether it has to
+  // be asked for first. One card and a switch, not two cards that read alike.
+  const [haveQuote, setHaveQuote] = useState(false);
+  const route: Method = available.some((m) => m.value === chosen) ? chosen : "new-quote";
+  const method: Method = route === "new-quote" && haveQuote ? "quote" : route;
   const [quoteId, setQuoteId] = useState("");
   // What a look at the quote found, keyed by the id it was for, so editing the
   // id on the previous step drops an answer about a different quote.
@@ -460,6 +462,7 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
       setStep(0);
       setQuoteId("");
       setLooked(undefined);
+      setHaveQuote(false);
       setProposalId("");
       setProductId("");
       setImpressions("");
@@ -585,11 +588,24 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
   let body: ReactNode;
   if (step === 0) {
     body = (
-      <ChoiceCards value={method} onChange={setMethod} options={available} label="How to create the deal" />
+      <ChoiceCards value={route} onChange={setMethod} options={available} label="How to create the deal" />
     );
   } else if (step === 1) {
     body = (
       <Box sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
+        {route === "new-quote" && (
+          <ToggleButtonGroup
+            exclusive
+            fullWidth
+            size="small"
+            value={haveQuote ? "have" : "new"}
+            onChange={(_, next: "new" | "have" | null) => next && setHaveQuote(next === "have")}
+            aria-label="Where the quote comes from"
+          >
+            <ToggleButton value="new">Get a new quote</ToggleButton>
+            <ToggleButton value="have">I have a quote id</ToggleButton>
+          </ToggleButtonGroup>
+        )}
         {method === "new-quote" && (
           <>
             <ProductPicker
@@ -668,7 +684,7 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
     body = (
       <Box>
         <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
-          {METHODS.find((m) => m.value === method)?.title}
+          {method === "quote" ? "Book an existing quote" : METHODS.find((m) => m.value === method)?.title}
         </Typography>
         <ReviewList rows={summary} />
         {method === "new-quote" ? (
