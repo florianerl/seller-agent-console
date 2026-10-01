@@ -2,7 +2,8 @@ import type { ReactNode } from "react";
 import Autocomplete from "@mui/material/Autocomplete";
 import Box from "@mui/material/Box";
 import type { SxProps, Theme } from "@mui/material/styles";
-import { agents, approvals, curators, deals, orders, packages, products } from "../api/endpoints";
+import { z } from "zod";
+import { agents, ApiKeySummary, apiKeys, approvals, curators, deals, orders, packages, products } from "../api/endpoints";
 import { describe, type Result } from "../api/errors";
 import { TipField } from "../components/TipField";
 import { CADENCE } from "../query/cadence";
@@ -176,6 +177,35 @@ export function AgentPicker({ label = "Agent id", hint, ...rest }: PickerProps) 
       loading={list.loading}
       result={list.result}
       empty="No agents registered."
+    />
+  );
+}
+
+// The list route is read for its status code elsewhere, so its schema is
+// `z.unknown()` on purpose. The picker parses what it can on its own and
+// offers nothing, rather than failing, when the body is not the shape it knows.
+const KeyListBody = z.union([
+  z.array(ApiKeySummary),
+  z.object({ keys: z.array(ApiKeySummary) }).loose().transform((b) => b.keys),
+]);
+
+export function ApiKeyPicker({ label = "Key id", hint, ...rest }: PickerProps) {
+  // Same key as the Console access card, so opening the dialog costs no request.
+  const list = useResource("api-keys", apiKeys, { refreshInterval: CADENCE.health });
+  const parsed = KeyListBody.safeParse(list.data);
+  return (
+    <EntityPicker
+      {...rest}
+      label={label}
+      hint={hint ?? "An API key from the list. Pick one, or type or paste a key_id (never the secret)."}
+      options={(parsed.success ? parsed.data : []).map((k) => ({
+        id: k.key_id,
+        title: k.label || undefined,
+        detail: [k.role, k.is_active === false ? "inactive" : ""].filter(Boolean).join(" · "),
+      }))}
+      loading={list.loading}
+      result={list.result}
+      empty="No API keys listed."
     />
   );
 }

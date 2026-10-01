@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { render, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { ThemeProvider } from "@mui/material/styles";
 import { SWRConfig } from "swr";
@@ -220,5 +221,27 @@ describe("the four health cards", () => {
       const caption = card(name).querySelector("[data-freshness]");
       expect(caption?.textContent ?? "", `${name} rendered without a caption`).not.toBe("");
     }
+  });
+
+  it("offers the listed key ids when revoking or looking up a key", async () => {
+    server.use(
+      http.get(`${API}/auth/api-keys`, () =>
+        HttpResponse.json({
+          keys: [{ key_id: "key-abc", label: "ci runner", role: "buyer", is_active: true }],
+        }),
+      ),
+    );
+    await saveCredential({ ...CREDENTIAL, writesEnabled: true });
+    const user = userEvent.setup();
+    renderCards();
+    await waitForCards();
+    await waitFor(() => expect(stateOf("access")).toBe("live"));
+
+    await user.click(document.querySelector('[data-action="manage-keys"]') as HTMLElement);
+    const dialog = await screen.findByRole("dialog");
+    const [revoke] = within(dialog).getAllByRole("combobox", { name: /key id/i });
+    await user.click(revoke as HTMLElement);
+
+    expect(await screen.findByRole("option", { name: /key-abc.*ci runner · buyer/ })).toBeInTheDocument();
   });
 });

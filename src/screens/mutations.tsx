@@ -92,7 +92,7 @@ import { ConfirmAction } from "../components/ConfirmAction";
 import { EnumSelect } from "../components/EnumSelect";
 import { Hint } from "../components/Hint";
 import { TipField } from "../components/TipField";
-import { AgentPicker, OrderPicker, PackagePicker, ProductPicker } from "./pickers";
+import { AgentPicker, ApiKeyPicker, OrderPicker, PackagePicker, ProductPicker } from "./pickers";
 import { JsonView } from "../components/JsonView";
 import { FormFields, FormRow, ReadForm, WriteForm } from "../components/WriteForm";
 import { WritesNotice } from "../components/WritesNotice";
@@ -400,14 +400,11 @@ export function ApiKeyWrites() {
           </>
         }
       >
-        <TipField
-          hint="Id of the key to revoke, as shown in the API keys list (the key_id, not the secret)."
-          size="small"
-          label="Key id"
+        <ApiKeyPicker
+          hint="Key to revoke. Pick one, or type or paste a key_id (not the secret)."
           value={revokeId}
-          onChange={(e) => setRevokeId(e.target.value)}
+          onChange={setRevokeId}
           disabled={!writesEnabled}
-          sx={{ minWidth: 220 }}
         />
       </WriteForm>
       {secret?.api_key ? (
@@ -2012,7 +2009,7 @@ export function ApiKeyDetailLookup() {
   return (
     <Box sx={{ mt: 1 }}>
       <FormRow>
-        <TipField hint="Id of the API key to look up, as shown in the API keys list. Metadata only; the secret is never returned." size="small" label="Key id" value={id} onChange={(e) => setId(e.target.value)} />
+        <ApiKeyPicker hint="Key to look up. Metadata only; the secret is never returned." value={id} onChange={setId} />
         <ReadForm
           label="Load key"
           action="fetch-key"
