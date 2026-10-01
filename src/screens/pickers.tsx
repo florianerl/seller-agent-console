@@ -2,10 +2,11 @@ import type { ReactNode } from "react";
 import Autocomplete from "@mui/material/Autocomplete";
 import Box from "@mui/material/Box";
 import type { SxProps, Theme } from "@mui/material/styles";
-import { agents, approvals, curators, deals, orders, packages, products } from "../api/endpoints";
+import { agents, approvals, curators, deals, openProposals, orders, packages, products } from "../api/endpoints";
 import { describe, type Result } from "../api/errors";
 import { TipField } from "../components/TipField";
 import { CADENCE } from "../query/cadence";
+import { useOpenProposalSupport } from "../query/useOpenProposalSupport";
 import { useResource } from "../query/useResource";
 import { palette } from "../theme/palette";
 
@@ -241,6 +242,57 @@ export function DealPicker({ label = "Deal", hint, ...rest }: PickerProps) {
       loading={list.loading}
       result={list.result}
       empty="No stored deals. Book one on the Deals screen, or type a deal id."
+    />
+  );
+}
+
+/**
+ * Proposals the agent can list. The legacy `/proposals` routes this form
+ * drives have no list endpoint, so the only enumerable source is the
+ * OpenProposal list — read only when the agent card advertises it, to keep a
+ * 2.x agent free of `/api/v3` traffic (ADR 14). `known` carries ids the
+ * caller already holds, such as one just submitted, which no list returns.
+ */
+function OpenProposalOptions(props: PickerProps & { known: readonly string[] }) {
+  const { known, label = "Proposal id", hint, ...rest } = props;
+  // Same key and page size as the Proposals screen's unfiltered list.
+  const list = useResource("open-proposals::", (c, signal) => openProposals(c, { limit: 50, offset: 0 }, signal), {
+    refreshInterval: CADENCE.proposals,
+  });
+  const listed = (list.data?.proposals.items ?? []).map((p) => ({
+    id: p.proposal_id,
+    title: p.description || undefined,
+    detail: [p.type, p.status].filter(Boolean).join(" · "),
+  }));
+  const ids = new Set(listed.map((o) => o.id));
+  const options = [...known.filter((id) => !ids.has(id)).map((id) => ({ id, title: "Submitted in this session" })), ...listed];
+  return (
+    <EntityPicker
+      {...rest}
+      label={label}
+      hint={hint}
+      options={options}
+      loading={list.loading}
+      result={list.result}
+      empty="No proposals listed. Submit one above, or type an id."
+    />
+  );
+}
+
+export function ProposalPicker({ known = [], label = "Proposal id", hint, ...rest }: PickerProps & { known?: readonly string[] }) {
+  const { support } = useOpenProposalSupport();
+  const shared =
+    hint ?? "Proposal to counter or check. Pick one, or type or paste an id (the agent has no list of legacy proposals).";
+  if (support === "supported") return <OpenProposalOptions {...rest} known={known} label={label} hint={shared} />;
+  return (
+    <EntityPicker
+      {...rest}
+      label={label}
+      hint={shared}
+      options={known.map((id) => ({ id, title: "Submitted in this session" }))}
+      loading={false}
+      result={undefined}
+      empty="This agent lists no proposals. Submit one above, or paste an id."
     />
   );
 }
