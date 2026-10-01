@@ -20,6 +20,13 @@ export const Package = z
     rate_type: z.string().nullable().catch(null),
     is_featured: z.boolean().catch(false),
     ad_formats: z.array(z.string()).catch([]),
+    // Both views carry these (AuthenticatedPackageView extends the public
+    // one upstream); they are what the package editor prefills from.
+    description: z.string().nullable().catch(null),
+    // AdCOM DeviceType integers — see the same field in media-kit.ts.
+    device_types: z.array(z.union([z.number(), z.string()])).catch([]),
+    geo_targets: z.array(z.string()).catch([]),
+    tags: z.array(z.string()).catch([]),
     // Public view only.
     price_range: z.string().nullable().catch(null),
     // Authenticated view only.
@@ -50,9 +57,27 @@ export const packageById = (
 ): Promise<Result<Package>> =>
   get(c, `${PATHS.packages}/${encodeURIComponent(packageId)}`, { schema: Package, signal });
 
+/**
+ * `PackageCreateRequest` (interfaces/api/schemas.py), less what the console
+ * never sends. Only name and the two prices are required; every list defaults
+ * to empty upstream. A package created without `product_ids` has no
+ * placements — Assemble is the route that builds one from products.
+ */
+export type PackageCreate = {
+  name: string;
+  base_price: number;
+  floor_price: number;
+  description?: string;
+  ad_formats?: string[];
+  device_types?: number[];
+  geo_targets?: string[];
+  tags?: string[];
+  is_featured?: boolean;
+};
+
 export const createPackage = (
   c: Connection,
-  body: { name: string; base_price: number; floor_price: number },
+  body: PackageCreate,
   signal?: AbortSignal,
 ): Promise<Result<Package>> =>
   request(c, PATHS.packages, { schema: Package, method: "POST", body, signal });

@@ -32,7 +32,11 @@ export const MediaKitPackage = z
     name: z.string().catch(""),
     description: z.string().nullable().catch(null),
     ad_formats: z.array(z.string()).catch([]),
-    device_types: z.array(z.string()).catch([]),
+    // AdCOM DeviceType integers on the live agent (models/media_kit.py). The
+    // first schema here said strings, and `.catch([])` turned every real
+    // payload into an empty list, so the column read "—" for every package.
+    // Strings are still accepted in case a view ever names them.
+    device_types: z.array(z.union([z.number(), z.string()])).catch([]),
     geo_targets: z.array(z.string()).catch([]),
     tags: z.array(z.string()).catch([]),
     price_range: z.string().nullable().catch(null),

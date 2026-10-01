@@ -172,3 +172,31 @@ export const EVENT_TYPES: readonly Option[] = [
   // Labelled with the raw value: these are dotted identifiers people search
   // logs for, and "timed out" reads worse than the name it stands for.
 ].map((value) => ({ value, label: value }));
+
+/**
+ * AdCOM `DeviceType`, the integers a package stores (models/media_kit.py,
+ * `Package.device_types`). The agent does not check them against this list —
+ * the field is `list[int]` — so an unlisted value is stored as sent; that is
+ * why the form offers only these.
+ */
+export const DEVICE_TYPES: readonly { readonly value: number; readonly label: string }[] = [
+  { value: 1, label: "mobile / tablet" },
+  { value: 2, label: "PC" },
+  { value: 3, label: "connected TV" },
+  { value: 4, label: "phone" },
+  { value: 5, label: "tablet" },
+  { value: 6, label: "connected device" },
+  { value: 7, label: "set-top box" },
+];
+
+/** A device type as read: the AdCOM name when it is one, the raw value otherwise. */
+export function deviceLabel(value: number | string): string {
+  return DEVICE_TYPES.find((d) => d.value === value)?.label ?? String(value);
+}
+
+/**
+ * OpenRTB imp sub-object names, per the comment on `Package.ad_formats`
+ * (models/media_kit.py). The field is a free `list[str]`, so these are
+ * suggestions, not a closed set.
+ */
+export const AD_FORMATS = ["banner", "video", "native", "audio"] as const;

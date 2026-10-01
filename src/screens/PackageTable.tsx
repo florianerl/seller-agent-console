@@ -32,6 +32,7 @@ import { CADENCE } from "../query/cadence";
 import { useMutation } from "../query/useMutation";
 import { useResource } from "../query/useResource";
 import { palette } from "../theme/palette";
+import { PACKAGE_VIEWS } from "./package-draft";
 import { ProductMultiPicker } from "./pickers";
 
 /** Which row is open: a package id, or one of the two new-package rows. */
@@ -42,12 +43,6 @@ type Draft = { name: string; featured: boolean; base: string; floor: string; pro
 const EMPTY: Draft = { name: "", featured: false, base: "", floor: "", productIds: [] };
 
 const cellSx = { fontSize: 12 } as const;
-
-/**
- * The media kit reads the same packages under its own names, so a write here
- * drops those too rather than leave that screen showing the old ones.
- */
-const PACKAGE_VIEWS = ["packages", "media-kit*"];
 
 /**
  * Only the fields the operator changed go on the wire. The PUT is a partial

@@ -11,8 +11,19 @@ import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
-import { mediaKit, mediaKitPackage, mediaKitPackages, searchMediaKit } from "../api/endpoints";
+import {
+  deletePackage,
+  mediaKit,
+  mediaKitPackage,
+  mediaKitPackages,
+  searchMediaKit,
+} from "../api/endpoints";
 import { describe } from "../api/errors";
+import { deviceLabel } from "../api/vocabulary";
+import { ConfirmButton, WRITES_OFF_HINT } from "../components/ConfirmButton";
+import { Hint } from "../components/Hint";
+import { useCredential } from "../credentials/context";
+import { useMutation } from "../query/useMutation";
 import { DataPanel, FreshnessNote } from "../components/DataPanel";
 import { Field, FieldGrid } from "../components/Field";
 import { GatedNotice } from "../components/GatedNotice";
@@ -25,6 +36,8 @@ import { useResource } from "../query/useResource";
 import { FormRow } from "../components/WriteForm";
 import { TipField } from "../components/TipField";
 import { AudienceMatchForm } from "./mutations";
+import { CreatePackageForm, EditPackageForm, Failure } from "./MediaKitPackageForm";
+import { PACKAGE_VIEWS } from "./package-draft";
 import { palette } from "../theme/palette";
 
 /**
@@ -104,6 +117,7 @@ function PackageDetail({ packageId }: { packageId: string }) {
     <Stack spacing={1.5} sx={{ py: 1 }} data-block="media-kit-package-detail">
       <FieldGrid min={140}>
         <Field label="Description">{pkg.description ?? "—"}</Field>
+        <Field label="Device types">{pkg.device_types.map(deviceLabel).join(", ") || "—"}</Field>
         <Field label="Geo targets">{pkg.geo_targets.join(", ") || "—"}</Field>
         <Field label="Tags">{pkg.tags.join(", ") || "—"}</Field>
         <Field label="Standard taxonomy">
@@ -128,8 +142,29 @@ function PackageDetail({ packageId }: { packageId: string }) {
   );
 }
 
+/** Which row is expanded, and as what. Only one at a time, like the Catalog's table. */
+type Open = { kind: "detail" | "edit"; id: string } | { kind: "create" };
+
 function PackagesTable() {
-  const [openPackage, setOpenPackage] = useState<string | undefined>();
+  const { writesEnabled } = useCredential();
+  const [open, setOpen] = useState<Open | undefined>();
+  const blocked = !writesEnabled;
+
+  // Archive lives on the row rather than in a form, so its outcome is shown
+  // under the table; the create and edit forms show their own.
+  const archive = useMutation<{ id: string }, unknown>((c, args) => deletePackage(c, args.id), {
+    invalidates: (args) => [...PACKAGE_VIEWS, `package:${args.id}`],
+  });
+  const editing = open !== undefined && open.kind !== "detail";
+
+  function toggle(next: Open) {
+    archive.reset();
+    setOpen((current) =>
+      current?.kind === next.kind && "id" in current && "id" in next && current.id === next.id
+        ? undefined
+        : next,
+    );
+  }
 
   const list = useResource("media-kit-packages", mediaKitPackages, {
     refreshInterval: CADENCE.mediaKit,
@@ -142,6 +177,25 @@ function PackagesTable() {
 
   return (
     <>
+      <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
+        <Hint hint={blocked ? WRITES_OFF_HINT : undefined}>
+          <Button
+            size="small"
+            variant="outlined"
+            data-action="media-kit-new-package"
+            disabled={blocked || editing}
+            onClick={() => toggle({ kind: "create" })}
+          >
+            New package
+          </Button>
+        </Hint>
+      </Stack>
+      {open?.kind === "create" && (
+        <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+          <CreatePackageForm onClose={() => setOpen(undefined)} />
+        </Paper>
+      )}
+
       <FreshnessNote freshness={list.freshness}>
         {list.freshness === "live" &&
           `${plural(rows.length, "package")} · as of ${asOfStamp(list.asOf!)}`}
@@ -184,7 +238,7 @@ function PackagesTable() {
                     <TableCell sx={{ fontSize: 13 }}>{pkg.name || pkg.package_id}</TableCell>
                     <TableCell sx={{ fontSize: 12 }}>{pkg.ad_formats.join(", ") || "—"}</TableCell>
                     <TableCell sx={{ fontSize: 12 }}>
-                      {pkg.device_types.join(", ") || "—"}
+                      {pkg.device_types.map(deviceLabel).join(", ") || "—"}
                     </TableCell>
                     <TableCell sx={{ fontSize: 12 }}>{pkg.price_range ?? "—"}</TableCell>
                     <TableCell sx={{ fontSize: 12, color: palette.textSecondary }}>
@@ -192,23 +246,52 @@ function PackagesTable() {
                     </TableCell>
                     <TableCell sx={{ fontSize: 12 }}>{featuredCell(pkg.is_featured)}</TableCell>
                     <TableCell align="right">
-                      <Button
-                        size="small"
-                        onClick={() =>
-                          setOpenPackage((current) =>
-                            current === pkg.package_id ? undefined : pkg.package_id,
-                          )
-                        }
-                        aria-expanded={openPackage === pkg.package_id}
-                      >
-                        {openPackage === pkg.package_id ? "Hide details" : "Details"}
-                      </Button>
+                      <Stack direction="row" spacing={1} justifyContent="flex-end">
+                        <Button
+                          size="small"
+                          disabled={editing}
+                          onClick={() => toggle({ kind: "detail", id: pkg.package_id })}
+                          aria-expanded={isOpen(open, "detail", pkg.package_id)}
+                        >
+                          {isOpen(open, "detail", pkg.package_id) ? "Hide details" : "Details"}
+                        </Button>
+                        <Hint hint={blocked ? WRITES_OFF_HINT : undefined}>
+                          <Button
+                            size="small"
+                            data-action="media-kit-edit-package"
+                            disabled={blocked || editing}
+                            onClick={() => toggle({ kind: "edit", id: pkg.package_id })}
+                          >
+                            Edit
+                          </Button>
+                        </Hint>
+                        <ConfirmButton
+                          label="Archive"
+                          title={`Archive ${pkg.name || pkg.package_id}?`}
+                          confirmLabel="Archive package"
+                          action="media-kit-archive-package"
+                          variant="text"
+                          color="error"
+                          blocked={blocked}
+                          pending={archive.pending}
+                          disabled={editing}
+                          onConfirm={() => void archive.run({ id: pkg.package_id })}
+                          consequence="Soft delete: the package is archived and leaves the media kit for every buyer. Nothing in the console lists archived packages, so undoing it means a PUT of status by id outside the console. A second archive 404s."
+                        />
+                      </Stack>
                     </TableCell>
                   </TableRow>
-                  {openPackage === pkg.package_id && (
+                  {isOpen(open, "detail", pkg.package_id) && (
                     <TableRow>
                       <TableCell colSpan={7} sx={{ backgroundColor: palette.ground }}>
                         <PackageDetail packageId={pkg.package_id} />
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {isOpen(open, "edit", pkg.package_id) && (
+                    <TableRow data-editing="true">
+                      <TableCell colSpan={7} sx={{ backgroundColor: palette.ground }}>
+                        <EditPackageForm pkg={pkg} onClose={() => setOpen(undefined)} />
                       </TableCell>
                     </TableRow>
                   )}
@@ -218,8 +301,13 @@ function PackagesTable() {
           </Table>
         )}
       </DataPanel>
+      <Failure last={archive.last} />
     </>
   );
+}
+
+function isOpen(open: Open | undefined, kind: "detail" | "edit", id: string): boolean {
+  return open?.kind === kind && open.id === id;
 }
 
 function SearchResults({ query }: { query: string }) {
@@ -281,7 +369,7 @@ function SearchResults({ query }: { query: string }) {
               <TableRow key={pkg.package_id} hover data-row="media-kit-search-result">
                 <TableCell sx={{ fontSize: 13 }}>{pkg.name || pkg.package_id}</TableCell>
                 <TableCell sx={{ fontSize: 12 }}>{pkg.ad_formats.join(", ") || "—"}</TableCell>
-                <TableCell sx={{ fontSize: 12 }}>{pkg.device_types.join(", ") || "—"}</TableCell>
+                <TableCell sx={{ fontSize: 12 }}>{pkg.device_types.map(deviceLabel).join(", ") || "—"}</TableCell>
                 <TableCell sx={{ fontSize: 12 }}>{pkg.price_range ?? "—"}</TableCell>
                 <TableCell sx={{ fontSize: 12, color: palette.textSecondary }}>
                   {pkg.rate_type ?? "—"}
@@ -337,7 +425,7 @@ export default function MediaKitScreen() {
     <section data-screen="media-kit">
       <PageHeader
         title="Media kit"
-        subtitle="The packages this agent publishes to buyers, with full-text search over them."
+        subtitle="The packages this agent publishes to buyers, with full-text search over them. Packages can be created, edited and archived here; prices are edited on the Catalog."
       >
 
       <ScreenSection title="Summary">
