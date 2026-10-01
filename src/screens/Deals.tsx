@@ -333,18 +333,20 @@ export default function DealsScreen() {
                   </MenuItem>
                 ))}
               </TipField>
-              <Button
-                variant="outlined"
-                size="small"
-                onClick={list.refresh}
-                disabled={list.validating}
-                data-action="refresh"
-              >
-                {list.validating ? "Refreshing…" : "Refresh"}
-              </Button>
-              <Typography variant="body2" color="text.secondary" sx={{ fontSize: 12, pb: 1 }}>
-                This list does not poll — it reads every deal in one unpaginated pass.
-              </Typography>
+              {/* The "does not poll, reads every deal in one pass" caption moved
+                  here: it is about this button, and a line of grey text in the
+                  filter row was read as noise. */}
+              <Hint hint="Re-reads every deal in one unpaginated pass. The list never refreshes on its own.">
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={list.refresh}
+                  disabled={list.validating}
+                  data-action="refresh"
+                >
+                  {list.validating ? "Refreshing…" : "Refresh"}
+                </Button>
+              </Hint>
               <Box sx={{ flex: 1 }} />
               <Button
                 variant="contained"
