@@ -21,7 +21,7 @@ import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { StatusChip } from "../components/StatusChip";
 import { TipField } from "../components/TipField";
 import { useCredential } from "../credentials/context";
-import { CuratorWrite, Panel } from "./mutations";
+import { CuratorWrite } from "./mutations";
 import { plural, stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
 import { useResource } from "../query/useResource";
@@ -115,13 +115,8 @@ export default function CuratorsScreen() {
       >
 
       {!writesEnabled && <ReadOnlyNotice what="Registering a curator" />}
-      <Panel title="Register">
-        <CuratorWrite />
-      </Panel>
 
-      {list.freshness === "blocked" ? (
-        <GatedNotice what="The curator list" result={list.result} />
-      ) : (
+      {list.freshness !== "blocked" && (
         <>
           <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }}>
             <TipField
@@ -145,8 +140,19 @@ export default function CuratorsScreen() {
             {list.freshness === "empty" &&
               (list.loading ? "loading…" : list.result ? describe(list.result) : "")}
           </FreshnessNote>
+        </>
+      )}
 
-          <DataPanel>
+      {/* The register form sits in the table's own panel: it adds a row to this
+          list, and it stays put when the list itself is gated or empty. */}
+      <DataPanel>
+        <Box sx={{ p: 2, borderBottom: `1px solid ${palette.line}` }} data-block="curator-register">
+          <CuratorWrite />
+        </Box>
+        {list.freshness === "blocked" ? (
+          <GatedNotice what="The curator list" result={list.result} />
+        ) : (
+          <>
             {list.loading && rows.length === 0 ? (
               <Box sx={{ p: 2 }}>
                 <Skeleton height={28} />
@@ -229,9 +235,9 @@ export default function CuratorsScreen() {
                 </TableBody>
               </Table>
             )}
-          </DataPanel>
-        </>
-      )}
+          </>
+        )}
+      </DataPanel>
       </PageHeader>
     </section>
   );
