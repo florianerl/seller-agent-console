@@ -31,3 +31,18 @@ export type Money = z.infer<typeof Money>;
 /** Empty ack: many mutation routes return an untyped body. */
 export const MutationAck = z.looseObject({});
 export type MutationAck = z.infer<typeof MutationAck>;
+
+/**
+ * Who the deal is for, as the quote, template and booking routes take it. The
+ * agent uses it to set the pricing tier (capped server-side by what its
+ * registry can verify), so supplying it can change the rate. Only the four
+ * fields every one of those routes accepts: the template route's model has no
+ * names, and a field one route would drop silently is worse than not offering
+ * it.
+ */
+export type BuyerIdentityInput = {
+  seat_id?: string;
+  agency_id?: string;
+  advertiser_id?: string;
+  dsp_platform?: string;
+};

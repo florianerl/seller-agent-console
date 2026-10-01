@@ -2,7 +2,7 @@ import { z } from "zod";
 import { get, request, type Connection } from "../http";
 import type { Result } from "../errors";
 import type { DealTypeCode, QuoteMediaType } from "../vocabulary";
-import { Money } from "./shared";
+import { Money, type BuyerIdentityInput } from "./shared";
 
 const PATHS = {
   quotes: "/api/v1/quotes",
@@ -102,6 +102,11 @@ export const createQuote = (
     deal_type: DealTypeCode;
     media_type?: QuoteMediaType;
     impressions?: number;
+    flight_start?: string;
+    flight_end?: string;
+    /** Advisory: the CPM the buyer would like. The agent prices on its own rate card. */
+    target_cpm?: { amount_micros: number; currency: string };
+    buyer_identity?: BuyerIdentityInput;
   },
   signal?: AbortSignal,
 ): Promise<Result<QuoteResponse>> =>

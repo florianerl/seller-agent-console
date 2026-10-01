@@ -1,4 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
+import Accordion from "@mui/material/Accordion";
+import AccordionDetails from "@mui/material/AccordionDetails";
+import AccordionSummary from "@mui/material/AccordionSummary";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -11,6 +14,7 @@ import {
   distributeDeal,
   generateDeal,
   pushDeal,
+  type BuyerIdentityInput,
   type Money,
   type Quote,
 } from "../api/endpoints";
@@ -211,17 +215,44 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
   const [mediaType, setMediaType] = useState<QuoteMediaType>("digital");
   const [impressions, setImpressions] = useState("");
   const [curatorId, setCuratorId] = useState("");
+  const [flightStart, setFlightStart] = useState("");
+  const [flightEnd, setFlightEnd] = useState("");
+  // Target CPM on a quote (advisory), max CPM on a template (a ceiling the
+  // agent enforces). One field, because an operator holds one number.
+  const [cpm, setCpm] = useState("");
+  const [notes, setNotes] = useState("");
+  const [buyer, setBuyer] = useState({ advertiser_id: "", agency_id: "", seat_id: "", dsp_platform: "" });
 
   const prod = productId.trim();
-  // `QuoteRequest` says impressions are required for PG; the others take none.
+  // `QuoteRequest` says impressions are required for PG; the others take them optionally.
   const volume = Number(impressions);
   const needsVolume = dealType === "PG";
+  const hasVolume = impressions.trim() !== "";
   const volumeOk = Number.isInteger(volume) && volume > 0;
+  const impressionsOk = needsVolume ? volumeOk : !hasVolume || volumeOk;
+  const cpmValue = Number(cpm);
+  const hasCpm = cpm.trim() !== "";
+  const cpmOk = !hasCpm || (Number.isFinite(cpmValue) && cpmValue > 0);
+  // Both dates or neither: the agent prices a flight, not half of one.
+  const flightOk =
+    (flightStart === "" && flightEnd === "") ||
+    (flightStart !== "" && flightEnd !== "" && flightEnd >= flightStart);
+  const buyerIdentity: BuyerIdentityInput = Object.fromEntries(
+    Object.entries(buyer)
+      .map(([k, v]) => [k, v.trim()] as const)
+      .filter(([, v]) => v !== ""),
+  );
+  const hasBuyer = Object.keys(buyerIdentity).length > 0;
+  const flight = flightStart !== "" ? { flight_start: flightStart, flight_end: flightEnd } : {};
+  const bookNotes = notes.trim() ? { notes: notes.trim() } : {};
   const quoteBody = {
     product_id: prod,
     deal_type: dealType,
     media_type: mediaType,
-    ...(needsVolume ? { impressions: volume } : {}),
+    ...(hasVolume || needsVolume ? { impressions: volume } : {}),
+    ...flight,
+    ...(hasCpm ? { target_cpm: { amount_micros: Math.round(cpmValue * 1_000_000), currency: "USD" } } : {}),
+    ...(hasBuyer ? { buyer_identity: buyerIdentity } : {}),
   };
   // The quote is only worth booking for the request it answered. Edit the
   // product or the volume after quoting and this changes, which drops the
@@ -243,20 +274,36 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
       deal_type: DealTypeCode;
       media_type: QuoteMediaType;
       impressions?: number;
+      flight_start?: string;
+      flight_end?: string;
+      target_cpm?: { amount_micros: number; currency: string };
+      buyer_identity?: BuyerIdentityInput;
     },
     { quote: Quote }
   >((c, a) => createQuote(c, a));
-  const book = useMutation<{ quote_id: string; idempotency_key: string }, unknown>(
+  const book = useMutation<
+    { quote_id: string; idempotency_key: string; notes?: string; buyer_identity?: BuyerIdentityInput },
+    unknown
+  >(
     (c, a) => bookDeal(c, a),
     { invalidates },
   );
   const gen = useMutation<{ proposal_id: string }, unknown>((c, a) => generateDeal(c, a), {
     invalidates,
   });
-  const template = useMutation<{ deal_type: DealTypeCode; product_id: string }, unknown>(
-    (c, a) => dealFromTemplate(c, a),
-    { invalidates },
-  );
+  const template = useMutation<
+    {
+      deal_type: DealTypeCode;
+      product_id: string;
+      impressions?: number;
+      max_cpm?: number;
+      flight_start?: string;
+      flight_end?: string;
+      buyer_identity?: BuyerIdentityInput;
+      notes?: string;
+    },
+    unknown
+  >((c, a) => dealFromTemplate(c, a), { invalidates });
   const curated = useMutation<{ curator_id: string }, unknown>(
     (c, a) => createCuratedDeal(c, a),
     { invalidates },
@@ -284,27 +331,36 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
   const p = proposalId.trim();
   const cur = curatorId.trim();
   const ready = {
-    "new-quote": prod !== "" && (!needsVolume || volumeOk),
+    "new-quote": prod !== "" && impressionsOk && cpmOk && flightOk,
     quote: q !== "",
     proposal: p !== "",
-    template: prod !== "",
+    template: prod !== "" && impressionsOk && cpmOk && flightOk,
     curated: cur !== "",
   }[method];
 
   const dealTypeLabel = DEAL_TYPES.find((t) => t.value === dealType)?.label ?? dealType;
-  const quoteRows: [string, string][] = [
-    ["Product", prod],
-    ["Deal type", dealTypeLabel],
-    ["Media type", mediaType],
-  ];
-  if (needsVolume) quoteRows.push(["Impressions", impressions.trim()]);
+  const termRows: [string, string][] = [];
+  if (hasVolume || needsVolume) termRows.push(["Impressions", impressions.trim()]);
+  if (flightStart !== "") termRows.push(["Flight", `${flightStart} → ${flightEnd}`]);
+  if (hasCpm) termRows.push([method === "template" ? "Max CPM" : "Target CPM", `$${cpm.trim()}`]);
+  if (hasBuyer)
+    termRows.push(["Buyer", Object.entries(buyerIdentity).map(([k, v]) => `${k.replace(/_/g, " ")}: ${v}`).join(", ")]);
+  if (notes.trim()) termRows.push(["Notes", notes.trim()]);
+  const quoteRows: [string, string][] = [["Quote", q]];
+  if (notes.trim()) quoteRows.push(["Notes", notes.trim()]);
   const summary: [string, string][] = {
-    "new-quote": quoteRows,
-    quote: [["Quote", q]] as [string, string][],
+    "new-quote": [
+      ["Product", prod],
+      ["Deal type", dealTypeLabel],
+      ["Media type", mediaType],
+      ...termRows,
+    ] as [string, string][],
+    quote: quoteRows,
     proposal: [["Proposal", p]] as [string, string][],
     template: [
       ["Product", prod],
       ["Deal type", dealTypeLabel],
+      ...termRows,
     ] as [string, string][],
     curated: [["Curator", cur]] as [string, string][],
   }[method];
@@ -312,16 +368,31 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
   function finish() {
     switch (method) {
       case "new-quote":
-        if (quote) return void book.run({ quote_id: quote.quote_id, idempotency_key: bookingKey });
+        if (quote)
+          return void book.run({
+            quote_id: quote.quote_id,
+            idempotency_key: bookingKey,
+            ...bookNotes,
+            // The identity the quote was priced for: the agent re-verifies the tier at booking.
+            ...(hasBuyer ? { buyer_identity: buyerIdentity } : {}),
+          });
         return void quoteReq
           .run({ ...quoteBody, idempotency_key: quoteKey })
           .then((r) => r.kind === "ok" && setQuotedFor(requestSignature));
       case "quote":
-        return void book.run({ quote_id: q, idempotency_key: bookingKey });
+        return void book.run({ quote_id: q, idempotency_key: bookingKey, ...bookNotes });
       case "proposal":
         return void gen.run({ proposal_id: p });
       case "template":
-        return void template.run({ deal_type: dealType, product_id: prod });
+        return void template.run({
+          deal_type: dealType,
+          product_id: prod,
+          ...(hasVolume ? { impressions: volume } : {}),
+          ...(hasCpm ? { max_cpm: cpmValue } : {}),
+          ...flight,
+          ...(hasBuyer ? { buyer_identity: buyerIdentity } : {}),
+          ...bookNotes,
+        });
       case "curated":
         return void curated.run({ curator_id: cur });
     }
@@ -339,6 +410,11 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
       setProductId("");
       setImpressions("");
       setCuratorId("");
+      setFlightStart("");
+      setFlightEnd("");
+      setCpm("");
+      setNotes("");
+      setBuyer({ advertiser_id: "", agency_id: "", seat_id: "", dsp_platform: "" });
       setQuotedFor(undefined);
       quoteReq.reset();
       book.reset();
@@ -347,6 +423,110 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
       curated.reset();
     }, 200);
   }
+
+  const notesField = (
+    <TipField
+      hint="Optional note kept on the deal. Sent when the deal is booked."
+      size="small"
+      label="Notes (optional)"
+      value={notes}
+      onChange={(e) => setNotes(e.target.value)}
+      fullWidth
+      multiline
+      minRows={2}
+    />
+  );
+  const buyerField = (key: keyof typeof buyer, label: string, hint: string) => (
+    <TipField
+      hint={hint}
+      size="small"
+      label={label}
+      value={buyer[key]}
+      onChange={(e) => setBuyer({ ...buyer, [key]: e.target.value })}
+      fullWidth
+    />
+  );
+  // The commercial terms, shared by the two routes that price a product. The
+  // agent prices from its own rate card, so everything here is optional except
+  // the volume a guaranteed deal cannot be priced without.
+  const terms = (
+    <>
+      <TipField
+        hint={
+          needsVolume
+            ? "Number of impressions. Required for a guaranteed (PG) deal and a whole number above zero."
+            : "Optional number of impressions, a whole number above zero. Volume can change the rate."
+        }
+        size="small"
+        type="number"
+        label={needsVolume ? "Impressions" : "Impressions (optional)"}
+        value={impressions}
+        onChange={(e) => setImpressions(e.target.value)}
+        error={impressions.trim() !== "" && !volumeOk}
+        fullWidth
+      />
+      {/* The hint wrapper is an inline-block span; let each date take half the row. */}
+      <Box sx={{ display: "flex", gap: 2, "& > span": { flex: 1 } }}>
+        <TipField
+          hint="First day of the flight. Give both dates or neither."
+          size="small"
+          label="Flight start (optional)"
+          type="date"
+          slotProps={{ inputLabel: { shrink: true } }}
+          value={flightStart}
+          onChange={(e) => setFlightStart(e.target.value)}
+          fullWidth
+        />
+        <TipField
+          hint="Last day of the flight, on or after the start."
+          size="small"
+          label="Flight end (optional)"
+          type="date"
+          slotProps={{ inputLabel: { shrink: true } }}
+          value={flightEnd}
+          onChange={(e) => setFlightEnd(e.target.value)}
+          error={!flightOk && flightEnd !== ""}
+          fullWidth
+        />
+      </Box>
+      <TipField
+        hint={
+          method === "template"
+            ? "Optional ceiling in dollars, a plain number such as 12.50. The deal is refused with a 422 when this is below the seller's floor price."
+            : "Optional CPM you would like, in dollars, a plain number such as 12.50. Advisory: the agent prices from its own rate card."
+        }
+        size="small"
+        type="number"
+        label={method === "template" ? "Max CPM (optional)" : "Target CPM (optional)"}
+        value={cpm}
+        onChange={(e) => setCpm(e.target.value)}
+        error={!cpmOk}
+        fullWidth
+      />
+      {notesField}
+      <Accordion disableGutters variant="outlined" sx={{ "&:before": { display: "none" } }}>
+        <AccordionSummary
+          expandIcon={
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true" focusable="false">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          }
+        >
+          <Typography variant="body2">Buyer details (optional)</Typography>
+        </AccordionSummary>
+        <AccordionDetails sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <Typography variant="caption" color="text.secondary">
+            Who the deal is for. The agent uses it to pick the pricing tier, capped by what its
+            registry can verify, so it can change the rate.
+          </Typography>
+          {buyerField("advertiser_id", "Advertiser id", "The advertiser the deal is for.")}
+          {buyerField("agency_id", "Agency id", "The agency buying on the advertiser's behalf.")}
+          {buyerField("seat_id", "Seat id", "The DSP seat the deal will be activated on.")}
+          {buyerField("dsp_platform", "DSP platform", "DSP platform slug, for example ttd or dv360.")}
+        </AccordionDetails>
+      </Accordion>
+    </>
+  );
 
   let body: ReactNode;
   if (step === 0) {
@@ -380,17 +560,7 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
               onChange={(v) => v && setMediaType(v)}
               sx={{ width: "100%" }}
             />
-            {needsVolume && (
-              <TipField
-                hint="Number of impressions to quote. Required for a guaranteed (PG) quote and a whole number above zero."
-                size="small"
-                type="number"
-                label="Impressions"
-                value={impressions}
-                onChange={(e) => setImpressions(e.target.value)}
-                fullWidth
-              />
-            )}
+            {terms}
           </>
         )}
         {method === "quote" && (
@@ -404,6 +574,7 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
             fullWidth
           />
         )}
+        {method === "quote" && notesField}
         {method === "proposal" && (
           <TipField
             hint="Id of an accepted proposal. Copy it from the Proposals screen."
@@ -431,6 +602,7 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
               onChange={(v) => v && setDealType(v)}
               sx={{ width: "100%" }}
             />
+            {terms}
           </>
         )}
         {method === "curated" && (

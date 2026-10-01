@@ -2,7 +2,7 @@ import { z } from "zod";
 import { get, request, TIMEOUTS, type Connection } from "../http";
 import type { Result } from "../errors";
 import type { BulkDealAction, DealTypeCode } from "../vocabulary";
-import { Money, MutationAck } from "./shared";
+import { Money, MutationAck, type BuyerIdentityInput } from "./shared";
 
 const PATHS = {
   deals: "/api/v1/deals",
@@ -399,7 +399,13 @@ export const generateDeal = (
 
 export const bookDeal = (
   c: Connection,
-  body: { quote_id: string; idempotency_key: string; notes?: string },
+  body: {
+    quote_id: string;
+    idempotency_key: string;
+    notes?: string;
+    /** Must match the identity the quote was priced for; the agent re-verifies the tier. */
+    buyer_identity?: BuyerIdentityInput;
+  },
   signal?: AbortSignal,
 ): Promise<Result<MutationAck>> =>
   request(c, PATHS.deals, {
@@ -413,7 +419,17 @@ export const dealFromTemplate = (
   c: Connection,
   // Short codes only: the service uppercases this and looks it up in a
   // PG/PD/PA map, so a long form like "preferred_deal" is a 400.
-  body: { deal_type: DealTypeCode; product_id: string },
+  body: {
+    deal_type: DealTypeCode;
+    product_id: string;
+    impressions?: number;
+    /** Dollars, a plain number. Refused with a 422 when below the seller's floor. */
+    max_cpm?: number;
+    flight_start?: string;
+    flight_end?: string;
+    buyer_identity?: BuyerIdentityInput;
+    notes?: string;
+  },
   signal?: AbortSignal,
 ): Promise<Result<MutationAck>> =>
   request(c, `${PATHS.deals}/from-template`, {

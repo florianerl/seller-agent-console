@@ -228,10 +228,91 @@ describe("the new-deal wizard", () => {
     await user.click(await screen.findByRole("option", { name: /prod-91/ }));
     await user.click(screen.getByLabelText("Deal type"));
     await user.click(await screen.findByRole("option", { name: "PG — programmatic guaranteed" }));
+    // A guaranteed deal cannot be priced without a volume.
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+    await user.type(screen.getByLabelText("Impressions"), "250000");
     await next(user);
     await user.click(await createButton());
 
-    await waitFor(() => expect(sent).toEqual([{ deal_type: "PG", product_id: "prod-91" }]));
+    await waitFor(() =>
+      expect(sent).toEqual([{ deal_type: "PG", product_id: "prod-91", impressions: 250_000 }]),
+    );
+  });
+
+  it("sends the commercial terms the template route takes: flight, ceiling, notes and buyer", async () => {
+    const sent = capture("/api/v1/deals/from-template");
+    const user = userEvent.setup();
+    mount();
+
+    await pick(user, "From a template");
+    await user.type(screen.getByRole("combobox", { name: "Product id" }), "prod-1");
+    await user.type(screen.getByLabelText("Flight start (optional)"), "2026-11-01");
+    // One date without the other is half a flight.
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+    await user.type(screen.getByLabelText("Flight end (optional)"), "2026-11-30");
+    await user.type(screen.getByLabelText("Max CPM (optional)"), "12.5");
+    await user.type(screen.getByLabelText("Notes (optional)"), "Q4 push");
+    await user.click(screen.getByText("Buyer details (optional)"));
+    await user.type(await screen.findByLabelText("Advertiser id"), "adv-1");
+    await next(user);
+    await user.click(await createButton());
+
+    await waitFor(() =>
+      expect(sent).toEqual([
+        {
+          deal_type: "PD",
+          product_id: "prod-1",
+          flight_start: "2026-11-01",
+          flight_end: "2026-11-30",
+          max_cpm: 12.5,
+          notes: "Q4 push",
+          buyer_identity: { advertiser_id: "adv-1" },
+        },
+      ]),
+    );
+  });
+
+  it("will not accept a flight that ends before it starts", async () => {
+    const user = userEvent.setup();
+    mount();
+
+    await pick(user, "From a template");
+    await user.type(screen.getByRole("combobox", { name: "Product id" }), "prod-1");
+    await user.type(screen.getByLabelText("Flight start (optional)"), "2026-11-30");
+    await user.type(screen.getByLabelText("Flight end (optional)"), "2026-11-01");
+
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+  });
+
+  it("quotes with a target CPM in micros and books with the same buyer and the notes", async () => {
+    const quotes = capture("/api/v1/quotes", { quote: { quote_id: "qt-3" } });
+    const deals = capture("/api/v1/deals", { deal: { deal_id: "D-3" } });
+    const user = userEvent.setup();
+    mount();
+
+    await next(user);
+    await user.type(screen.getByRole("combobox", { name: "Product id" }), "prod-1");
+    await user.type(screen.getByLabelText("Target CPM (optional)"), "7.25");
+    await user.type(screen.getByLabelText("Notes (optional)"), "hold for Q4");
+    await user.click(screen.getByText("Buyer details (optional)"));
+    await user.type(await screen.findByLabelText("Seat id"), "seat-9");
+    await next(user);
+    await user.click(await screen.findByRole("button", { name: "Get quote" }));
+    await waitFor(() => expect(quotes).toHaveLength(1));
+    expect(quotes[0]).toMatchObject({
+      target_cpm: { amount_micros: 7_250_000, currency: "USD" },
+      buyer_identity: { seat_id: "seat-9" },
+    });
+    // Notes belong to the booking, not the quote.
+    expect(quotes[0]).not.toHaveProperty("notes");
+
+    await user.click(await screen.findByRole("button", { name: "Book deal" }));
+    await waitFor(() => expect(deals).toHaveLength(1));
+    expect(deals[0]).toMatchObject({
+      quote_id: "qt-3",
+      notes: "hold for Q4",
+      buyer_identity: { seat_id: "seat-9" },
+    });
   });
 
   it("offers the registered curators for a curated deal", async () => {
