@@ -22,7 +22,6 @@ import {
   createChangeRequest,
   createOperatorApiKey,
   createPackage,
-  createQuote,
   createSession,
   dealBuyerStatus,
   dealById,
@@ -76,15 +75,11 @@ import {
   ACTOR_KINDS,
   BULK_DEAL_ACTIONS,
   CHANGE_TYPES,
-  DEAL_TYPES,
   INVENTORY_TYPES,
   LEGACY_DEAL_TYPES,
-  QUOTE_MEDIA_TYPES,
   SSP_NAMES,
   words,
   type BulkDealAction,
-  type DealTypeCode,
-  type QuoteMediaType,
 } from "../api/vocabulary";
 import { ConfirmAction } from "../components/ConfirmAction";
 import { EnumSelect } from "../components/EnumSelect";
@@ -624,88 +619,6 @@ export function CatalogWrites() {
   );
 }
 
-export function CreateQuoteWrite() {
-  const { writesEnabled } = useCredential();
-  const [productId, setProductId] = useState("");
-  const [dealType, setDealType] = useState<DealTypeCode>("PD");
-  const [mediaType, setMediaType] = useState<QuoteMediaType>("digital");
-  const [impressions, setImpressions] = useState("");
-  // `QuoteRequest` says impressions are required for PG; the others take none.
-  const volume = Number(impressions);
-  const needsVolume = dealType === "PG";
-  const volumeOk = Number.isInteger(volume) && volume > 0;
-  const create = useMutation<
-    {
-      product_id: string;
-      idempotency_key: string;
-      deal_type: DealTypeCode;
-      media_type: QuoteMediaType;
-      impressions?: number;
-    },
-    unknown
-  >((c, args) => createQuote(c, args));
-
-  return (
-    <WriteForm
-      title="Request a quote?"
-      confirmLabel="Create quote"
-      action="create-quote"
-      blocked={!writesEnabled || !productId.trim() || (needsVolume && !volumeOk)}
-      pending={create.pending}
-      last={create.last}
-      onConfirm={() =>
-        void create.run({
-          product_id: productId.trim(),
-          idempotency_key: newKey(),
-          deal_type: dealType,
-          media_type: mediaType,
-          ...(needsVolume ? { impressions: volume } : {}),
-        })
-      }
-      consequence={
-        <>
-          Quotes are ephemeral (24h TTL) and non-binding. The same idempotency
-          key with the same body returns the original quote; a different body
-          with that key 409s.
-        </>
-      }
-    >
-      <FormFields>
-        <ProductPicker value={productId} onChange={setProductId} disabled={!writesEnabled} />
-        <EnumSelect
-          hint="PG is guaranteed and needs an impression count; PD (preferred) and PA (private auction) do not."
-          label="Deal type"
-          value={dealType}
-          options={DEAL_TYPES}
-          onChange={(v) => v && setDealType(v)}
-          disabled={!writesEnabled}
-          sx={{ minWidth: 220 }}
-        />
-        <EnumSelect
-          hint="Media type the quote is for. The agent accepts only the listed values."
-          label="Media type"
-          value={mediaType}
-          options={QUOTE_MEDIA_TYPES}
-          onChange={(v) => v && setMediaType(v)}
-          disabled={!writesEnabled}
-          sx={{ minWidth: 140 }}
-        />
-        {needsVolume && (
-          <TipField
-            hint="Number of impressions to quote. Required for a guaranteed (PG) quote and a whole number above zero; other deal types send none."
-            size="small"
-            type="number"
-            label="Impressions"
-            value={impressions}
-            onChange={(e) => setImpressions(e.target.value)}
-            disabled={!writesEnabled}
-          />
-        )}
-      </FormFields>
-    </WriteForm>
-  );
-}
-
 export function PackageLookup() {
   const [id, setId] = useState("");
   const [submitted, setSubmitted] = useState<string | undefined>();
@@ -1208,7 +1121,7 @@ function BuyerStatusBody({ dealId, buyerUrl }: { dealId: string; buyerUrl: strin
  * names are suggestions and anything can be typed. An unknown name is a 400
  * that lists the configured ones.
  */
-function SspNameField({
+export function SspNameField({
   label,
   hint,
   value,

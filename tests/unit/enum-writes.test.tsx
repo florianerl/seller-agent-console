@@ -14,7 +14,6 @@ import { resetWritePolicy } from "../../src/api/policy";
 import { resetReachability } from "../../src/query/reachability";
 import {
   CatalogWrites,
-  CreateQuoteWrite,
   DealLookups,
   DealWrites,
   ProposalWrites,
@@ -156,35 +155,6 @@ describe("forms that send an enum", () => {
     });
     expect(button).toBeDisabled();
     expect(screen.getByLabelText("SSP")).toHaveValue("");
-  });
-
-  it("requests a quote with a deal type and a media type the agent accepts", async () => {
-    const sent = capture("post", "/api/v1/quotes", { quote: {} });
-    const user = userEvent.setup();
-    mount(<CreateQuoteWrite />);
-
-    await user.type(await enabled("Product id"), "prod-1");
-    await choose(user, "Media type", "ctv");
-    await confirm(user, "create-quote", "Create quote");
-
-    await waitFor(() => expect(sent).toHaveLength(1));
-    expect(sent[0]).toMatchObject({ product_id: "prod-1", deal_type: "PD", media_type: "ctv" });
-    expect(sent[0]).not.toHaveProperty("impressions");
-  });
-
-  it("asks for impressions before quoting a guaranteed deal", async () => {
-    const sent = capture("post", "/api/v1/quotes", { quote: {} });
-    const user = userEvent.setup();
-    mount(<CreateQuoteWrite />);
-
-    await user.type(await enabled("Product id"), "prod-1");
-    await choose(user, "Deal type", "PG — programmatic guaranteed");
-    expect(document.querySelector('[data-action="create-quote"]')).toBeDisabled();
-
-    await user.type(screen.getByLabelText("Impressions"), "250000");
-    await confirm(user, "create-quote", "Create quote");
-
-    await waitFor(() => expect(sent[0]).toMatchObject({ deal_type: "PG", impressions: 250_000 }));
   });
 
   it("sets an inventory type override from the documented set", async () => {

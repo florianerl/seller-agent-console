@@ -33,10 +33,10 @@ function mount() {
   );
 }
 
-function capture(path: string, reply: unknown = {}, status = 200) {
+function capture(path: string, reply: unknown = {}, status = 200, method: "post" = "post") {
   const bodies: Record<string, unknown>[] = [];
   server.use(
-    http.post(`${API}${path}`, async ({ request }) => {
+    http[method](`${API}${path}`, async ({ request }) => {
       bodies.push((await request.json()) as Record<string, unknown>);
       return HttpResponse.json(reply as Record<string, unknown>, { status });
     }),
@@ -79,7 +79,7 @@ describe("the new-deal wizard", () => {
     const user = userEvent.setup();
     mount();
 
-    await pick(user, "Book a quote");
+    await pick(user, "Book an existing quote");
 
     expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
     await user.type(screen.getByLabelText("Quote id"), "qt-1");
@@ -91,7 +91,7 @@ describe("the new-deal wizard", () => {
     const user = userEvent.setup();
     mount();
 
-    await pick(user, "Book a quote");
+    await pick(user, "Book an existing quote");
     await user.type(screen.getByLabelText("Quote id"), "qt-1");
     await next(user);
 
@@ -105,6 +105,99 @@ describe("the new-deal wizard", () => {
     expect(sent[0]).toMatchObject({ quote_id: "qt-1" });
     expect(typeof sent[0]!["idempotency_key"]).toBe("string");
     expect(await screen.findByText(/agent accepted/i)).toBeInTheDocument();
+  });
+
+  it("quotes first, shows the rate, and only then books that quote", async () => {
+    const quotes = capture("/api/v1/quotes", {
+      quote: {
+        quote_id: "qt-9",
+        pricing: { final_cpm: { amount_micros: 6_800_000, currency: "USD" } },
+        expires_at: "2026-10-28T13:25:43Z",
+      },
+    });
+    const deals = capture("/api/v1/deals", { deal: { deal_id: "D-9" } });
+    const user = userEvent.setup();
+    mount();
+
+    // Quote, then book is the default route.
+    await user.click(await screen.findByRole("button", { name: "Next" }));
+    await user.type(screen.getByRole("combobox", { name: "Product id" }), "prod-1");
+    await user.click(screen.getByLabelText("Media type"));
+    await user.click(await screen.findByRole("option", { name: "ctv" }));
+    await next(user);
+
+    await user.click(await screen.findByRole("button", { name: "Get quote" }));
+    await waitFor(() => expect(quotes).toHaveLength(1));
+    expect(quotes[0]).toMatchObject({ product_id: "prod-1", deal_type: "PD", media_type: "ctv" });
+    expect(quotes[0]).not.toHaveProperty("impressions");
+
+    // The price is on screen, and nothing has been booked.
+    expect(await screen.findByText("qt-9")).toBeInTheDocument();
+    expect(screen.getByText(/\$6\.80 CPM/)).toBeInTheDocument();
+    expect(deals).toHaveLength(0);
+
+    await user.click(screen.getByRole("button", { name: "Book deal" }));
+    await waitFor(() => expect(deals).toHaveLength(1));
+    expect(deals[0]).toMatchObject({ quote_id: "qt-9" });
+    await waitFor(() =>
+      expect(document.querySelector('[data-state="write-ok"]')?.textContent).toContain("D-9"),
+    );
+  });
+
+  it("asks for impressions before quoting a guaranteed deal", async () => {
+    const quotes = capture("/api/v1/quotes", { quote: { quote_id: "qt-1" } });
+    const user = userEvent.setup();
+    mount();
+
+    await next(user);
+    await user.type(screen.getByRole("combobox", { name: "Product id" }), "prod-1");
+    await user.click(screen.getByLabelText("Deal type"));
+    await user.click(await screen.findByRole("option", { name: "PG — programmatic guaranteed" }));
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+
+    await user.type(screen.getByLabelText("Impressions"), "250000");
+    await next(user);
+    await user.click(await screen.findByRole("button", { name: "Get quote" }));
+
+    await waitFor(() => expect(quotes[0]).toMatchObject({ deal_type: "PG", impressions: 250_000 }));
+  });
+
+  it("drops a quote when the request behind it changes, instead of booking a stale price", async () => {
+    capture("/api/v1/quotes", { quote: { quote_id: "qt-1" } });
+    const user = userEvent.setup();
+    mount();
+
+    await next(user);
+    await user.type(screen.getByRole("combobox", { name: "Product id" }), "prod-1");
+    await next(user);
+    await user.click(await screen.findByRole("button", { name: "Get quote" }));
+    expect(await screen.findByRole("button", { name: "Book deal" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    await user.type(screen.getByRole("combobox", { name: "Product id" }), "2");
+    await next(user);
+
+    expect(await screen.findByRole("button", { name: "Get quote" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Book deal" })).toBeNull();
+  });
+
+  it("offers to send a new deal to a buyer once it exists", async () => {
+    capture("/api/v1/deals", { deal: { deal_id: "D-7" } });
+    const pushed = capture("/api/v1/deals/push");
+    const user = userEvent.setup();
+    mount();
+
+    await pick(user, "Book an existing quote");
+    await user.type(screen.getByLabelText("Quote id"), "qt-1");
+    await next(user);
+    await user.click(await createButton());
+
+    await user.type(await screen.findByLabelText("Buyer URL"), "https://buyer.example");
+    await user.click(screen.getByRole("button", { name: "Notify buyer" }));
+
+    await waitFor(() =>
+      expect(pushed).toEqual([{ deal_id: "D-7", buyer_urls: ["https://buyer.example"] }]),
+    );
   });
 
   it("generates a deal from a proposal", async () => {
@@ -168,7 +261,7 @@ describe("the new-deal wizard", () => {
     const user = userEvent.setup();
     mount();
 
-    await pick(user, "Book a quote");
+    await pick(user, "Book an existing quote");
     await user.type(screen.getByLabelText("Quote id"), "qt-old");
     await next(user);
     await user.click(await createButton());

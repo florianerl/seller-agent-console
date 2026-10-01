@@ -41,7 +41,7 @@ import { palette } from "../theme/palette";
 import { FormRow } from "../components/WriteForm";
 import { TipField } from "../components/TipField";
 import { ProductPicker } from "./pickers";
-import { CatalogWrites, CreateQuoteWrite, PackageLookup } from "./mutations";
+import { CatalogWrites, PackageLookup } from "./mutations";
 import { useCredential } from "../credentials/context";
 
 function money(amount: Money | null | undefined): string {
@@ -748,7 +748,6 @@ export default function CatalogScreen() {
         {!writesEnabled && <ReadOnlyNotice what="Changing the catalog" />}
         <CatalogWrites />
         <PackageLookup />
-        <CreateQuoteWrite />
         <Typography variant="body2" color="text.secondary" data-note="quote-lookup-moved">
           Look up an existing quote on <Link href="#/quotes">Quotes</Link>.
         </Typography>

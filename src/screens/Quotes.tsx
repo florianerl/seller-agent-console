@@ -215,7 +215,7 @@ export default function QuotesScreen() {
           >
             <FormRow>
               <TipField
-                hint="The id of a quote requested on Catalog (or shown on an order). The agent cannot list quotes, so paste it exactly."
+                hint="The id of a quote, from New deal on the Deals screen or shown on an order. The agent cannot list quotes, so paste it exactly."
                 size="small"
                 label="Quote id"
                 value={id}
@@ -238,7 +238,7 @@ export default function QuotesScreen() {
         </Paper>
 
         <Typography variant="body2" color="text.secondary">
-          Quotes are requested on <a href="#/catalog">Catalog</a>. An order carries the id of the
+          Quotes are requested from <a href="#/deals">New deal</a> on Deals. An order carries the id of the
           quote it came from.
         </Typography>
       </PageHeader>
