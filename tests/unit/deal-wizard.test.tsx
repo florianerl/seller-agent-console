@@ -12,6 +12,8 @@ import { sameResult } from "../../src/query/freshness";
 import { resetWritePolicy } from "../../src/api/policy";
 import { resetReachability } from "../../src/query/reachability";
 import { DealWizard } from "../../src/screens/DealWizard";
+import { OPENPROPOSAL_PROTOCOL } from "../../src/api/capabilities";
+import { card, WHOLE } from "../fixtures/proposals-harness";
 
 /**
  * The wizard replaced four forms, each of which had its own test of the body
@@ -264,7 +266,13 @@ describe("the new-deal wizard", () => {
     );
   });
 
-  it("generates a deal from a proposal", async () => {
+  it("offers the proposal route only when the agent lists a proposal, and generates from it", async () => {
+    server.use(
+      http.get(`${API}/.well-known/agent.json`, () =>
+        HttpResponse.json(card(["opendirect21", OPENPROPOSAL_PROTOCOL])),
+      ),
+      http.get(`${API}/api/v3/proposals`, () => HttpResponse.json({ proposals: [WHOLE], total: 1 })),
+    );
     const sent = capture("/deals");
     const user = userEvent.setup();
     mount();
@@ -275,6 +283,33 @@ describe("the new-deal wizard", () => {
     await user.click(await createButton());
 
     await waitFor(() => expect(sent).toEqual([{ proposal_id: "prop-1" }]));
+  });
+
+  it("does not offer the proposal route to an agent that lists none, or has no proposals", async () => {
+    const listed: string[] = [];
+    server.use(
+      http.get(`${API}/.well-known/agent.json`, () =>
+        HttpResponse.json(card(["opendirect21", OPENPROPOSAL_PROTOCOL])),
+      ),
+      http.get(`${API}/api/v3/proposals`, () => {
+        listed.push("list");
+        return HttpResponse.json({ proposals: [], total: 0 });
+      }),
+    );
+    mount();
+
+    // Advertises OpenProposal but holds none: nothing to generate a deal from.
+    await waitFor(() => expect(listed.length).toBeGreaterThan(0));
+    expect(screen.queryByRole("radio", { name: /From a proposal/ })).toBeNull();
+    expect(screen.getByRole("radio", { name: /From a template/ })).toBeInTheDocument();
+  });
+
+  it("does not offer the curator route when no curator is registered", async () => {
+    server.use(http.get(`${API}/api/v1/curators`, () => HttpResponse.json({ curators: [], count: 0 })));
+    mount();
+
+    await waitFor(() => expect(screen.queryByRole("radio", { name: /For a curator/ })).toBeNull());
+    expect(screen.getByRole("radio", { name: /From a template/ })).toBeInTheDocument();
   });
 
   it("creates a deal from a template with a short deal-type code, and picks the product by name", async () => {
