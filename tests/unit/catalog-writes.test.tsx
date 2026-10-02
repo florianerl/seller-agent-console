@@ -268,8 +268,74 @@ describe("catalog inline writes", () => {
     await confirm(user, "create-package", "Create package");
 
     await waitFor(() =>
-      expect(sent).toEqual([{ name: "Q4 bundle", base_price: 10, floor_price: 5 }]),
+      expect(sent).toEqual([
+        { name: "Q4 bundle", base_price: 10, floor_price: 5, is_featured: false },
+      ]),
     );
+  });
+
+  it("creates a package with every field the create route takes", async () => {
+    await credential(true);
+    const sent = capture("post", "/packages", PACKAGE);
+    const user = userEvent.setup();
+    mount();
+
+    await user.click(
+      await waitFor(() => {
+        const el = document.querySelector('[data-action="new-package"]');
+        expect(el).toBeEnabled();
+        return el as HTMLElement;
+      }),
+    );
+    await user.type(screen.getByLabelText("Name"), "Holiday");
+    await user.type(screen.getByLabelText("Base price"), "10");
+    await user.type(screen.getByLabelText("Floor"), "5");
+    await user.type(screen.getByLabelText("Description"), "Seasonal bundle");
+    await user.type(screen.getByLabelText("Products"), "prod-1, prod-2{Enter}");
+    await user.type(screen.getByLabelText("Content categories"), "IAB1, IAB2{Enter}");
+    await user.type(screen.getByLabelText("Content taxonomy"), "6");
+    await user.type(screen.getByLabelText("Seasonal label"), "Q4");
+    await user.type(screen.getByLabelText("Audience segment ids"), "seg-1{Enter}");
+    // user-event reads `{` as a key descriptor, so it is doubled.
+    await user.type(screen.getByLabelText("Audience capabilities"), '{{"supports_standard": true}');
+    await confirm(user, "create-package", "Create package");
+
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0]).toEqual({
+      name: "Holiday",
+      base_price: 10,
+      floor_price: 5,
+      is_featured: false,
+      description: "Seasonal bundle",
+      product_ids: ["prod-1", "prod-2"],
+      cat: ["IAB1", "IAB2"],
+      cattax: 6,
+      seasonal_label: "Q4",
+      audience_segment_ids: ["seg-1"],
+      audience_capabilities: { supports_standard: true },
+    });
+  });
+
+  it("refuses audience capabilities that are not a JSON object, without sending", async () => {
+    await credential(true);
+    const sent = capture("post", "/packages", PACKAGE);
+    const user = userEvent.setup();
+    mount();
+
+    await user.click(
+      await waitFor(() => {
+        const el = document.querySelector('[data-action="new-package"]');
+        expect(el).toBeEnabled();
+        return el as HTMLElement;
+      }),
+    );
+    await user.type(screen.getByLabelText("Name"), "x");
+    await user.type(screen.getByLabelText("Base price"), "10");
+    await user.type(screen.getByLabelText("Floor"), "5");
+    await user.type(screen.getByLabelText("Audience capabilities"), "[[1]");
+
+    expect(document.querySelector('[data-action="create-package"]')).toBeDisabled();
+    expect(sent).toHaveLength(0);
   });
 
   it("assembles a package from several products picked by name, and from pasted ids", async () => {

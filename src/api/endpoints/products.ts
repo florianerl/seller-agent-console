@@ -28,6 +28,28 @@ export const Product = z
     base_price: Money.nullable().catch(null),
     ad_formats: z.array(z.string()).catch([]),
     available_impressions: z.number().nullable().catch(null),
+    description: z.string().nullable().catch(null),
+    seller_organization_id: z.string().nullable().catch(null),
+    // fixed | floor | on_request. Says what `base_price` means, which the
+    // price alone does not: a floor is the least the product sells for.
+    pricing_type: z.string().nullable().catch(null),
+    domain: z.string().nullable().catch(null),
+    // Free-form objects upstream; shown as received rather than modelled.
+    audience_targeting: z.record(z.string(), z.unknown()).nullable().catch(null),
+    ad_product_targeting: z.record(z.string(), z.unknown()).nullable().catch(null),
+    content_targeting: z.record(z.string(), z.unknown()).nullable().catch(null),
+    commercial_terms: z
+      .object({
+        supported_deal_types: z.array(z.string()).catch([]),
+        supported_pricing_models: z.array(z.string()).catch([]),
+        minimum_deal_value: Money.nullable().catch(null),
+        guarantee_allowed: z.boolean().nullable().catch(null),
+        makegood_allowed: z.boolean().nullable().catch(null),
+      })
+      .loose()
+      .nullable()
+      .catch(null),
+    ext: z.record(z.string(), z.unknown()).nullable().catch(null),
   })
   .loose();
 export type Product = z.infer<typeof Product>;
@@ -132,8 +154,42 @@ export const Avails = z
   .loose();
 export type Avails = z.infer<typeof Avails>;
 
-/** The spec dialect's envelope: the same records, wrapped in `{ avails }`. */
-export const AvailsCollection = z.object({ avails: z.array(Avails) }).loose();
+/**
+ * One record of the OpenDirect dialect, the answer to the multi-product
+ * request. A different shape from `Avails`: a price and an availability count
+ * with a status, not a forecast with a CPM. `price` is the product's price for
+ * the flight, not a total.
+ */
+export const OpenDirectAvails = z
+  .object({
+    productid: z.string(),
+    accountid: z.string().catch(""),
+    availability: z.number().nullable().catch(null),
+    availsstatus: z
+      .object({
+        status: z.string().catch(""),
+        reason: z.string().nullable().catch(null),
+        comment: z.string().nullable().catch(null),
+      })
+      .loose()
+      .nullable()
+      .catch(null),
+    currency: z.string().nullable().catch(null),
+    price: z.number().nullable().catch(null),
+    startdate: z.string().catch(""),
+    enddate: z.string().catch(""),
+  })
+  .loose();
+export type OpenDirectAvails = z.infer<typeof OpenDirectAvails>;
+
+/**
+ * The multi-product answer, wrapped in `{ avails }`. The single-product
+ * request is answered with a bare `Avails`; a record of either shape is
+ * accepted here, since the first one that parses decides which table renders.
+ */
+export const AvailsCollection = z
+  .object({ avails: z.array(z.union([Avails, OpenDirectAvails])) })
+  .loose();
 export type AvailsCollection = z.infer<typeof AvailsCollection>;
 
 export const AvailsCheckResult = z.union([AvailsCollection, Avails]);

@@ -1,8 +1,11 @@
 import { useState } from "react";
 import Button from "@mui/material/Button";
+import Box from "@mui/material/Box";
 import Checkbox from "@mui/material/Checkbox";
+import Collapse from "@mui/material/Collapse";
 import Chip from "@mui/material/Chip";
 import FormControlLabel from "@mui/material/FormControlLabel";
+import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
 import Skeleton from "@mui/material/Skeleton";
 import Stack from "@mui/material/Stack";
@@ -20,6 +23,8 @@ import {
   syncPackages,
   updatePackage,
   type Package,
+  type PackageCreate,
+  type PackageListQuery,
 } from "../api/endpoints";
 import { describe, type Result } from "../api/errors";
 import { ConfirmButton, WRITES_OFF_HINT } from "../components/ConfirmButton";
@@ -32,7 +37,14 @@ import { CADENCE } from "../query/cadence";
 import { useMutation } from "../query/useMutation";
 import { useResource } from "../query/useResource";
 import { palette } from "../theme/palette";
-import { PACKAGE_VIEWS } from "./package-draft";
+import {
+  EMPTY_DRAFT,
+  PACKAGE_VIEWS,
+  createBody,
+  createProblem as packageProblem,
+  type PackageDraft,
+} from "./package-draft";
+import { Fields } from "./MediaKitPackageForm";
 import { ProductMultiPicker } from "./pickers";
 
 /** Which row is open: a package id, or one of the two new-package rows. */
@@ -75,22 +87,31 @@ function Failure({ last }: { last: Result<unknown> | undefined }) {
 
 export function PackageTable() {
   const { writesEnabled } = useCredential();
-  const list = useResource("packages", packages, { refreshInterval: CADENCE.rateCard });
+  // What the list is filtered by. The unfiltered list keeps the plain name the
+  // pickers and the write invalidations know it by.
+  const [filters, setFilters] = useState<PackageListQuery>({});
+  const [filterDraft, setFilterDraft] = useState<PackageListQuery>({});
+  const [showFilters, setShowFilters] = useState(false);
+  const filtered = Object.keys(filters).length > 0;
+  const list = useResource(
+    filtered ? `packages:${JSON.stringify(filters)}` : "packages",
+    (c, signal) => packages(c, filters, signal),
+    { refreshInterval: CADENCE.rateCard },
+  );
   const [editing, setEditing] = useState<Editing | undefined>();
   const [draft, setDraft] = useState<Draft>(EMPTY);
+  const [createDraft, setCreateDraft] = useState<PackageDraft>(EMPTY_DRAFT);
 
   const update = useMutation<{ id: string; body: Record<string, unknown> }, unknown>(
     (c, args) => updatePackage(c, args.id, args.body),
     { invalidates: (args) => [...PACKAGE_VIEWS, `package:${args.id}`] },
   );
-  const archive = useMutation<{ id: string }, unknown>(
-    (c, args) => deletePackage(c, args.id),
-    { invalidates: (args) => [...PACKAGE_VIEWS, `package:${args.id}`] },
-  );
-  const create = useMutation<{ name: string; base_price: number; floor_price: number }, unknown>(
-    (c, args) => createPackage(c, args),
-    { invalidates: PACKAGE_VIEWS },
-  );
+  const archive = useMutation<{ id: string }, unknown>((c, args) => deletePackage(c, args.id), {
+    invalidates: (args) => [...PACKAGE_VIEWS, `package:${args.id}`],
+  });
+  const create = useMutation<PackageCreate, unknown>((c, args) => createPackage(c, args), {
+    invalidates: PACKAGE_VIEWS,
+  });
   const assemble = useMutation<{ name: string; product_ids: string[] }, unknown>(
     (c, args) => assemblePackage(c, args),
     { invalidates: PACKAGE_VIEWS },
@@ -152,7 +173,10 @@ export function PackageTable() {
           variant="outlined"
           data-action="new-package"
           disabled={blocked || editing !== undefined}
-          onClick={() => open({ kind: "create" })}
+          onClick={() => {
+            setCreateDraft(EMPTY_DRAFT);
+            open({ kind: "create" });
+          }}
         >
           New package
         </Button>
@@ -188,50 +212,154 @@ export function PackageTable() {
     </Stack>
   );
 
-  if (list.loading && rows.length === 0) return <Skeleton height={60} />;
+  const createIssue = packageProblem(createDraft);
 
-  const createProblem =
-    (draft.name.trim() ? undefined : "Name the package.") ??
-    priceProblem(draft.base) ??
-    priceProblem(draft.floor);
+  const filterField = (label: string, key: keyof PackageListQuery, hint: string, width = 150) => (
+    <TipField
+      hint={hint}
+      size="small"
+      label={label}
+      value={filterDraft[key] ?? ""}
+      onChange={(e) => setFilterDraft({ ...filterDraft, [key]: e.target.value })}
+      sx={{ width }}
+    />
+  );
 
-  const createRow = editing?.kind === "create" && (
-    <TableRow data-row="package" data-editing="true">
-      <TableCell>{nameField}</TableCell>
-      <TableCell sx={cellSx}>—</TableCell>
-      <TableCell>
-        {priceField("Base price", "base", "Base (list) price as a plain number, for example 10.")}
-      </TableCell>
-      <TableCell>
-        {priceField("Floor", "floor", "Lowest price the package may be sold at, for example 5.")}
-      </TableCell>
-      <TableCell align="right">
-        <Stack direction="row" spacing={1} justifyContent="flex-end">
-          <ConfirmButton
-            label="Create"
-            title="Create a curated package?"
-            confirmLabel="Create package"
-            action="create-package"
-            variant="contained"
-            blocked={blocked}
-            pending={create.pending}
-            disabled={createProblem !== undefined}
-            hint={createProblem}
-            onConfirm={() =>
-              void settle(
-                create.run({
-                  name: draft.name.trim(),
-                  base_price: Number(draft.base),
-                  floor_price: Number(draft.floor),
-                }),
-              )
-            }
-            consequence="Not idempotent: each call mints a new package id, so a retry after an unclear failure may leave two."
-          />
-          {cancel}
+  function applyFilters() {
+    const next: PackageListQuery = {};
+    for (const [key, value] of Object.entries(filterDraft)) {
+      if (typeof value === "string" && value.trim()) {
+        next[key as keyof PackageListQuery] = value.trim();
+      }
+    }
+    setFilters(next);
+  }
+
+  const filterBar = (
+    <Box sx={{ mb: 1 }} data-block="package-filters">
+      <Stack direction="row" spacing={1} alignItems="center">
+        <Button
+          size="small"
+          onClick={() => setShowFilters(!showFilters)}
+          aria-expanded={showFilters}
+        >
+          {showFilters ? "Hide filters" : "Filters"}
+        </Button>
+        {filtered && (
+          <Typography
+            variant="body2"
+            sx={{ fontSize: 12, color: palette.textSecondary }}
+            data-state="filtered"
+          >
+            Filtered by{" "}
+            {Object.entries(filters)
+              .map(([k, v]) => `${k.replace(/_/g, " ")} ${v}`)
+              .join(" · ")}
+          </Typography>
+        )}
+      </Stack>
+      <Collapse in={showFilters}>
+        <Stack
+          direction="row"
+          spacing={1.5}
+          flexWrap="wrap"
+          useFlexGap
+          alignItems="flex-end"
+          sx={{ mt: 1 }}
+        >
+          {filterField(
+            "Buyer tier",
+            "buyer_tier",
+            "Whose pricing tier to list the packages as. Blank means public. The agent caps it at what it can verify of the buyer.",
+            130,
+          )}
+          {filterField(
+            "Agency id",
+            "agency_id",
+            "List the packages as this agency would see them. Optional.",
+          )}
+          {filterField(
+            "Advertiser id",
+            "advertiser_id",
+            "List the packages as this advertiser would see them. Optional.",
+          )}
+          {filterField(
+            "Layer",
+            "layer",
+            "Only packages in this layer. The agent does not publish the values; blank lists all.",
+            120,
+          )}
+          <TipField
+            hint="Only packages that support this kind of audience taxonomy."
+            select
+            size="small"
+            label="Audience type"
+            value={filterDraft.audience_type ?? ""}
+            onChange={(e) => setFilterDraft({ ...filterDraft, audience_type: e.target.value })}
+            sx={{ width: 150 }}
+          >
+            <MenuItem value="">Any</MenuItem>
+            {["standard", "contextual", "agentic"].map((t) => (
+              <MenuItem key={t} value={t}>
+                {t}
+              </MenuItem>
+            ))}
+          </TipField>
+          {filterField(
+            "Audience id",
+            "audience_id",
+            "A taxonomy id for standard or contextual audiences, or a URI for agentic ones. Needs an audience type.",
+            170,
+          )}
+          {filterField(
+            "Taxonomy version",
+            "audience_taxonomy_version",
+            "Pin the audience taxonomy version. Blank uses the one the agent has locked.",
+            150,
+          )}
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={applyFilters}
+            data-action="apply-package-filters"
+          >
+            Apply
+          </Button>
+          <Button
+            size="small"
+            disabled={!filtered && Object.keys(filterDraft).length === 0}
+            onClick={() => {
+              setFilterDraft({});
+              setFilters({});
+            }}
+          >
+            Clear
+          </Button>
         </Stack>
-      </TableCell>
-    </TableRow>
+      </Collapse>
+    </Box>
+  );
+
+  const createPanel = editing?.kind === "create" && (
+    <Paper variant="outlined" sx={{ p: 2, mb: 1.5 }} data-block="create-package">
+      <Fields draft={createDraft} onChange={setCreateDraft} withPrices full />
+      <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
+        <ConfirmButton
+          label="Create"
+          title="Create a curated package?"
+          confirmLabel="Create package"
+          action="create-package"
+          variant="contained"
+          blocked={blocked}
+          pending={create.pending}
+          disabled={createIssue !== undefined}
+          hint={createIssue}
+          onConfirm={() => void settle(create.run(createBody(createDraft)))}
+          consequence="Not idempotent: each call mints a new package id, so a retry after an unclear failure may leave two."
+        />
+        {cancel}
+      </Stack>
+    </Paper>
   );
 
   const assembleProblem =
@@ -263,9 +391,7 @@ export function PackageTable() {
             disabled={assembleProblem !== undefined}
             hint={assembleProblem}
             onConfirm={() =>
-              void settle(
-                assemble.run({ name: draft.name.trim(), product_ids: draft.productIds }),
-              )
+              void settle(assemble.run({ name: draft.name.trim(), product_ids: draft.productIds }))
             }
             consequence="Not idempotent: each call mints a new package. A product id that no longer resolves is refused (422) and nothing is created."
           />
@@ -325,9 +451,9 @@ export function PackageTable() {
               onConfirm={() => void settle(update.run({ id: pkg.package_id, body }))}
               consequence={
                 <>
-                  Sends {Object.keys(body).join(", ") || "nothing"} and leaves every
-                  other field as stored. Saving the same values twice is harmless.
-                  A package archived meanwhile 404s.
+                  Sends {Object.keys(body).join(", ") || "nothing"} and leaves every other field as
+                  stored. Saving the same values twice is harmless. A package archived meanwhile
+                  404s.
                 </>
               }
             />
@@ -359,7 +485,9 @@ export function PackageTable() {
             a key the agent returns a band instead. Showing whichever
             arrived, and the section header says whose view this is. */}
         <TableCell sx={cellSx}>
-          {pkg.exact_price != null ? plain(pkg.exact_price, pkg.currency) : (pkg.price_range ?? "—")}
+          {pkg.exact_price != null
+            ? plain(pkg.exact_price, pkg.currency)
+            : (pkg.price_range ?? "—")}
         </TableCell>
         <TableCell sx={{ ...cellSx, color: palette.textSecondary }}>
           {plain(pkg.floor_price, pkg.currency)}
@@ -408,7 +536,13 @@ export function PackageTable() {
   return (
     <>
       {toolbar}
-      {rows.length === 0 && !editing ? (
+      {filterBar}
+      {createPanel}
+      {/* Only the table waits. The bar stays mounted through a load, or a
+          field being typed in would lose focus when the list refreshed. */}
+      {list.loading && rows.length === 0 ? (
+        <Skeleton height={60} />
+      ) : rows.length === 0 && !editing ? (
         <Paper variant="outlined" sx={{ p: 3 }} data-state="no-packages">
           <Typography variant="body2" color="text.secondary">
             {list.result && list.result.kind !== "ok" ? describe(list.result) : "No packages."}
@@ -427,7 +561,6 @@ export function PackageTable() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {createRow}
               {assembleRow}
               {rows.map((pkg) =>
                 editing?.kind === "edit" && editing.id === pkg.package_id

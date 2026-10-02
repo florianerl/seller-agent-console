@@ -8,13 +8,19 @@ import FormControlLabel from "@mui/material/FormControlLabel";
 import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import { createPackage, updatePackage, type MediaKitPackage, type PackageCreate } from "../api/endpoints";
+import {
+  createPackage,
+  updatePackage,
+  type MediaKitPackage,
+  type PackageCreate,
+} from "../api/endpoints";
 import { describe, type Result } from "../api/errors";
 import { AD_FORMATS, DEVICE_TYPES, deviceLabel } from "../api/vocabulary";
 import { ConfirmButton } from "../components/ConfirmButton";
 import { TipField } from "../components/TipField";
 import { useCredential } from "../credentials/context";
 import { useMutation } from "../query/useMutation";
+import { ProductMultiPicker } from "./pickers";
 import { palette } from "../theme/palette";
 import {
   EMPTY_DRAFT,
@@ -31,7 +37,7 @@ import {
  * split on commas, the same as the id pickers; a value typed and left in the
  * box counts (`autoSelect`), so pressing Save never silently drops it.
  */
-function ListField({
+export function ListField({
   label,
   hint,
   value,
@@ -54,7 +60,10 @@ function ListField({
       options={[...suggestions]}
       value={[...value]}
       onChange={(_, next) => {
-        const items = next.flatMap((v) => v.split(",")).map((v) => v.trim()).filter(Boolean);
+        const items = next
+          .flatMap((v) => v.split(","))
+          .map((v) => v.trim())
+          .filter(Boolean);
         onChange([...new Set(items)]);
       }}
       renderValue={(items, getItemProps) =>
@@ -69,14 +78,17 @@ function ListField({
   );
 }
 
-function Fields({
+export function Fields({
   draft,
   onChange,
   withPrices,
+  full = false,
 }: {
   draft: PackageDraft;
   onChange: (draft: PackageDraft) => void;
   withPrices: boolean;
+  /** Also the create-only fields: placements, content categories, audience, season. */
+  full?: boolean;
 }) {
   const set = <K extends keyof PackageDraft>(key: K, value: PackageDraft[K]) =>
     onChange({ ...draft, [key]: value });
@@ -151,7 +163,10 @@ function Fields({
           value={draft.deviceTypes}
           onChange={(e) => {
             const raw = e.target.value as unknown;
-            set("deviceTypes", (Array.isArray(raw) ? raw : []).map(Number).sort((a, b) => a - b));
+            set(
+              "deviceTypes",
+              (Array.isArray(raw) ? raw : []).map(Number).sort((a, b) => a - b),
+            );
           }}
           slotProps={{
             select: {
@@ -182,6 +197,62 @@ function Fields({
           onChange={(v) => set("tags", v)}
         />
       </Stack>
+      {full && (
+        <>
+          <ProductMultiPicker
+            hint="Products the package is built from — its placements. Pick as many as you need, or type or paste ids. Blank creates a package with none."
+            value={draft.productIds}
+            onChange={(v) => set("productIds", v)}
+          />
+          <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
+            <ListField
+              label="Content categories"
+              hint="IAB content category ids, for example IAB1, read against the taxonomy below."
+              value={draft.cat}
+              onChange={(v) => set("cat", v)}
+            />
+            <TipField
+              hint="AdCOM number of the taxonomy the categories come from. Blank takes the agent's default, 2 (IAB Content Category Taxonomy 2.0)."
+              size="small"
+              label="Content taxonomy"
+              placeholder="2"
+              value={draft.cattax}
+              onChange={(e) => set("cattax", e.target.value)}
+              slotProps={{ htmlInput: { inputMode: "numeric" } }}
+              sx={{ width: 150 }}
+            />
+            <TipField
+              hint="A label for seasonal packages, such as Q4 holiday. No view returns it, so it can be set here but not read back."
+              size="small"
+              label="Seasonal label"
+              value={draft.seasonalLabel}
+              onChange={(e) => set("seasonalLabel", e.target.value)}
+              sx={{ minWidth: 180 }}
+            />
+          </Stack>
+          <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
+            <ListField
+              label="Audience segment ids"
+              hint="Audience segment ids the package targets. Stored as typed; the agent does not check them."
+              value={draft.audienceSegmentIds}
+              onChange={(v) => set("audienceSegmentIds", v)}
+            />
+            <TipField
+              hint='Which audience taxonomies the package supports, as a JSON object, for example {"standard_taxonomy_version": "1.1", "supports_standard": true}. Blank sends none.'
+              size="small"
+              label="Audience capabilities"
+              multiline
+              minRows={2}
+              value={draft.audienceCapabilities}
+              onChange={(e) => set("audienceCapabilities", e.target.value)}
+              slotProps={{
+                htmlInput: { spellCheck: false, style: { fontFamily: "monospace", fontSize: 12 } },
+              }}
+              sx={{ minWidth: 280, flex: 1 }}
+            />
+          </Stack>
+        </>
+      )}
     </Stack>
   );
 }

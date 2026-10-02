@@ -74,6 +74,7 @@ export const pricingQuote = (
     agency_id?: string;
     advertiser_id?: string;
     volume?: number;
+    agent_url?: string;
   },
   signal?: AbortSignal,
 ): Promise<Result<PricingQuote>> =>

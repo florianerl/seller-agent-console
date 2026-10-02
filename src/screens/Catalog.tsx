@@ -12,7 +12,6 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import {
-  checkAvails,
   deleteInventoryTypeOverride,
   discovery,
   inventoryTypeOverride,
@@ -20,9 +19,8 @@ import {
   productById,
   products,
   setInventoryTypeOverride,
-  type Avails,
-  type AvailsCheckResult,
-  type AvailsCollection,
+  type DiscoveryQuery,
+  type Product,
   type Money,
 } from "../api/endpoints";
 import { describe } from "../api/errors";
@@ -38,6 +36,9 @@ import { useResource } from "../query/useResource";
 import { palette } from "../theme/palette";
 import { FormRow } from "../components/WriteForm";
 import { TipField } from "../components/TipField";
+import { BuyerIdentityFields } from "./BuyerIdentityFields";
+import { NO_IDENTITY, identityBody, type BuyerIdentity } from "./buyer-identity";
+import { AvailsCheck } from "./AvailsCheck";
 import { ProductPicker } from "./pickers";
 import { useCredential } from "../credentials/context";
 import { INVENTORY_TYPES } from "../api/vocabulary";
@@ -61,14 +62,6 @@ function money(amount: Money | null | undefined): string {
 /** `asOf` is epoch ms; `stamp` takes ISO. Same round-trip as MediaKit. */
 function asOfStamp(at: number): string {
   return stamp(new Date(at).toISOString());
-}
-
-function isAvailsCollection(result: AvailsCheckResult): result is AvailsCollection {
-  return Array.isArray((result as AvailsCollection).avails);
-}
-
-function availsList(result: AvailsCheckResult): Avails[] {
-  return isAvailsCollection(result) ? result.avails : [result];
 }
 
 /**
@@ -143,7 +136,10 @@ function OverrideEditor({
             pending={set.pending}
             onConfirm={() =>
               void set
-                .run({ inventory_type: inventoryType, ...(reason.trim() ? { reason: reason.trim() } : {}) })
+                .run({
+                  inventory_type: inventoryType,
+                  ...(reason.trim() ? { reason: reason.trim() } : {}),
+                })
                 .then((r) => r.kind === "ok" && setEditing(false))
             }
             consequence="The override persists across inventory syncs. Setting it again replaces it, so a retry is harmless."
@@ -184,6 +180,59 @@ function OverrideEditor({
   );
 }
 
+/** An object the agent returns free-form, shown as received. Empty and absent read the same. */
+function JsonField({ label, value }: { label: string; value: Record<string, unknown> | null }) {
+  if (!value || Object.keys(value).length === 0) return null;
+  return (
+    <Field label={label}>
+      <Box
+        component="pre"
+        sx={{
+          m: 0,
+          fontSize: 11,
+          fontFamily: "monospace",
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+        }}
+      >
+        {JSON.stringify(value, null, 1)}
+      </Box>
+    </Field>
+  );
+}
+
+/** Everything else the agent says about a product, under what the row already shows. */
+function ProductExtras({ product }: { product: Product }) {
+  const terms = product.commercial_terms;
+  const yesNo = (v: boolean | null | undefined) => (v == null ? "—" : v ? "yes" : "no");
+  return (
+    <Stack spacing={1.5} data-block="product-extras">
+      {product.description && (
+        <Typography variant="body2" data-field="description">
+          {product.description}
+        </Typography>
+      )}
+      {terms && (
+        <FieldGrid min={160} data-block="commercial-terms">
+          <Field label="Deal types">{terms.supported_deal_types.join(", ") || "—"}</Field>
+          <Field label="Pricing models">{terms.supported_pricing_models.join(", ") || "—"}</Field>
+          <Field label="Minimum deal value">
+            {terms.minimum_deal_value ? money(terms.minimum_deal_value) : "—"}
+          </Field>
+          <Field label="Guarantee allowed">{yesNo(terms.guarantee_allowed)}</Field>
+          <Field label="Makegood allowed">{yesNo(terms.makegood_allowed)}</Field>
+        </FieldGrid>
+      )}
+      <FieldGrid min={220}>
+        <JsonField label="Audience targeting" value={product.audience_targeting} />
+        <JsonField label="Ad product targeting" value={product.ad_product_targeting} />
+        <JsonField label="Content targeting" value={product.content_targeting} />
+        <JsonField label="Extensions" value={product.ext} />
+      </FieldGrid>
+    </Stack>
+  );
+}
+
 function ProductDetail({ productId }: { productId: string }) {
   const product = useResource(`product:${productId}`, (c, signal) =>
     productById(c, productId, signal),
@@ -192,8 +241,7 @@ function ProductDetail({ productId }: { productId: string }) {
     inventoryTypeOverride(c, productId, signal),
   );
 
-  const noOverride =
-    override.result?.kind === "unavailable" && override.result.status === 404;
+  const noOverride = override.result?.kind === "unavailable" && override.result.status === 404;
 
   return (
     <Stack spacing={1.5} sx={{ py: 1 }} data-block="product-detail">
@@ -215,8 +263,12 @@ function ProductDetail({ productId }: { productId: string }) {
           <Field label="Pricing model">{product.data.pricing_model ?? "—"}</Field>
           <Field label="Delivery">{product.data.delivery_type ?? "—"}</Field>
           <Field label="Base price">{money(product.data.base_price)}</Field>
+          <Field label="Pricing type">{product.data.pricing_type ?? "—"}</Field>
+          <Field label="Domain">{product.data.domain ?? "—"}</Field>
+          <Field label="Seller organization">{product.data.seller_organization_id ?? "—"}</Field>
         </FieldGrid>
       )}
+      {product.data && <ProductExtras product={product.data} />}
 
       <Box>
         <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 0.5 }}>
@@ -273,7 +325,9 @@ function ProductDetail({ productId }: { productId: string }) {
         component="p"
         data-freshness={product.freshness}
         data-block="product-freshness"
-        sx={{ color: product.freshness === "stale" ? palette.warningText : palette.textSecondary }}
+        sx={{
+          color: product.freshness === "stale" ? palette.warningText : palette.textSecondary,
+        }}
       >
         {product.freshness === "live" &&
           product.asOf !== undefined &&
@@ -284,12 +338,23 @@ function ProductDetail({ productId }: { productId: string }) {
   );
 }
 
+/**
+ * The agent's default page is 50. 200 is what the pickers read too, so the
+ * first page is the same cached resource for all of them; past it, the table
+ * pages by offset rather than quietly showing the first 200 of a larger catalog.
+ */
+const PRODUCT_PAGE = 200;
+
 function Products() {
   const [openProduct, setOpenProduct] = useState<string | undefined>();
-  const list = useResource("products", (c, signal) => products(c, { limit: 200 }, signal), {
-    refreshInterval: CADENCE.rateCard,
-  });
+  const [offset, setOffset] = useState(0);
+  const list = useResource(
+    offset === 0 ? "products" : `products:offset:${offset}`,
+    (c, signal) => products(c, { limit: PRODUCT_PAGE, ...(offset > 0 ? { offset } : {}) }, signal),
+    { refreshInterval: CADENCE.rateCard },
+  );
   const rows = list.data?.products ?? [];
+  const total = list.data?.total_count ?? rows.length;
 
   if (list.loading && rows.length === 0) return <Skeleton height={80} />;
   if (rows.length === 0) {
@@ -321,9 +386,7 @@ function Products() {
               <TableRow hover data-row="product">
                 <TableCell sx={{ fontSize: 13 }}>{product.name || product.product_id}</TableCell>
                 <TableCell sx={{ fontSize: 12 }}>{product.delivery_type ?? "—"}</TableCell>
-                <TableCell sx={{ fontSize: 12 }}>
-                  {product.ad_formats.join(", ") || "—"}
-                </TableCell>
+                <TableCell sx={{ fontSize: 12 }}>{product.ad_formats.join(", ") || "—"}</TableCell>
                 {/* A null base_price means "pricing on request only", which is a
                     real state of a real product, not missing data. */}
                 <TableCell sx={{ fontSize: 12 }}>{money(product.base_price)}</TableCell>
@@ -355,18 +418,55 @@ function Products() {
           ))}
         </TableBody>
       </Table>
+      {total > PRODUCT_PAGE && (
+        <Stack
+          direction="row"
+          spacing={1}
+          alignItems="center"
+          justifyContent="flex-end"
+          sx={{ p: 1 }}
+          data-block="products-paging"
+        >
+          <Typography variant="body2" sx={{ fontSize: 12, color: palette.textSecondary }}>
+            {offset + 1}–{offset + rows.length} of {total}
+          </Typography>
+          <Button
+            size="small"
+            disabled={offset === 0}
+            onClick={() => {
+              setOpenProduct(undefined);
+              setOffset(Math.max(0, offset - PRODUCT_PAGE));
+            }}
+          >
+            Previous
+          </Button>
+          <Button
+            size="small"
+            disabled={offset + rows.length >= total}
+            onClick={() => {
+              setOpenProduct(undefined);
+              setOffset(offset + PRODUCT_PAGE);
+            }}
+          >
+            Next
+          </Button>
+        </Stack>
+      )}
     </DataPanel>
   );
 }
 
 function Discovery() {
   const [queryInput, setQueryInput] = useState("");
-  const [submitted, setSubmitted] = useState<string | undefined>(undefined);
+  const [identity, setIdentity] = useState<BuyerIdentity>(NO_IDENTITY);
+  const [submitted, setSubmitted] = useState<DiscoveryQuery | undefined>(undefined);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const trimmed = queryInput.trim();
-    setSubmitted(trimmed || undefined);
+    setSubmitted(
+      trimmed ? { query: trimmed, ...identityBody(identity, { agentUrl: true }) } : undefined,
+    );
   }
 
   return (
@@ -381,6 +481,7 @@ function Discovery() {
             onChange={(e) => setQueryInput(e.target.value)}
             sx={{ minWidth: 280 }}
           />
+          <BuyerIdentityFields value={identity} onChange={setIdentity} agentUrl />
           <Button type="submit" variant="outlined" size="small" data-action="discover">
             Discover
           </Button>
@@ -391,12 +492,13 @@ function Discovery() {
   );
 }
 
-function DiscoveryResults({ query }: { query: string }) {
+function DiscoveryResults({ query: asked }: { query: DiscoveryQuery }) {
+  const query = asked.query;
   // Keyed on the submitted brief, same pattern as media-kit search: a POST
   // that answers a question and stores nothing, so it goes through useResource
   // and runs with writes off.
-  const results = useResource(`discovery:${query}`, (c, signal) =>
-    discovery(c, { query }, signal),
+  const results = useResource(`discovery:${JSON.stringify(asked)}`, (c, signal) =>
+    discovery(c, asked, signal),
   );
   const rows = results.data?.catalog ?? [];
 
@@ -455,136 +557,13 @@ function DiscoveryResults({ query }: { query: string }) {
   );
 }
 
-function AvailsCheck() {
-  const [productId, setProductId] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [submitted, setSubmitted] = useState<
-    { productid: string; startdate: string; enddate: string } | undefined
-  >(undefined);
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!productId.trim() || !startDate || !endDate) return;
-    setSubmitted({
-      productid: productId.trim(),
-      startdate: startDate,
-      enddate: endDate,
-    });
-  }
-
-  return (
-    <Paper variant="outlined" sx={{ p: 2.5 }} data-block="avails">
-      <Box component="form" onSubmit={handleSubmit}>
-        <FormRow>
-          <ProductPicker value={productId} onChange={setProductId} hint="The product to use. Pick one, or type or paste an id. Required." />
-          <TipField
-            hint="First day of the flight to check. Required; the check will not run without it."
-            size="small"
-            label="Start"
-            type="date"
-            slotProps={{ inputLabel: { shrink: true } }}
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-          />
-          <TipField
-            hint="Last day of the flight to check. Required; the check will not run without it."
-            size="small"
-            label="End"
-            type="date"
-            slotProps={{ inputLabel: { shrink: true } }}
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-          />
-          <Button type="submit" variant="outlined" size="small" data-action="check-avails">
-            Check avails
-          </Button>
-        </FormRow>
-      </Box>
-      {submitted !== undefined && <AvailsResults query={submitted} />}
-    </Paper>
-  );
-}
-
-function AvailsResults({
-  query,
-}: {
-  query: { productid: string; startdate: string; enddate: string };
-}) {
-  const results = useResource(
-    `avails:${query.productid}:${query.startdate}:${query.enddate}`,
-    (c, signal) => checkAvails(c, query, signal),
-  );
-  const rows = results.data ? availsList(results.data) : [];
-
-  if (results.freshness === "blocked") {
-    return <GatedNotice what="Availability" result={results.result} />;
-  }
-
-  return (
-    <Box sx={{ mt: 2 }} data-block="avails-results">
-      <Box
-        data-freshness={results.freshness}
-        sx={{
-          mb: 1,
-          fontSize: 12,
-          color: results.freshness === "stale" ? palette.warningText : palette.textSecondary,
-        }}
-      >
-        {results.freshness === "live" &&
-          results.asOf !== undefined &&
-          `as of ${asOfStamp(results.asOf)}`}
-        {results.freshness === "stale" && "couldn't refresh — showing the last avails received"}
-        {results.freshness === "empty" &&
-          (results.loading ? "checking…" : results.result ? describe(results.result) : "")}
-      </Box>
-
-      {results.loading && rows.length === 0 ? (
-        <Skeleton height={28} />
-      ) : rows.length === 0 ? (
-        <Typography variant="body2" color="text.secondary" data-state="no-avails">
-          {results.result ? describe(results.result) : "No availability returned."}
-        </Typography>
-      ) : (
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell sx={{ fontWeight: 600 }}>Product</TableCell>
-              <TableCell sx={{ fontWeight: 600 }}>Available impressions</TableCell>
-              <TableCell sx={{ fontWeight: 600 }}>Estimated CPM</TableCell>
-              <TableCell sx={{ fontWeight: 600 }}>Total cost</TableCell>
-              <TableCell sx={{ fontWeight: 600 }}>Delivery confidence</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {rows.map((row) => (
-              <TableRow key={row.productid} hover data-row="avail">
-                <TableCell sx={{ fontFamily: "monospace", fontSize: 12 }}>{row.productid}</TableCell>
-                <TableCell sx={{ fontSize: 12 }}>
-                  {row.availableImpressions.toLocaleString()}
-                </TableCell>
-                <TableCell sx={{ fontSize: 12 }}>{row.estimatedCpm}</TableCell>
-                <TableCell sx={{ fontSize: 12 }}>{row.totalCost}</TableCell>
-                <TableCell sx={{ fontSize: 12, color: palette.textSecondary }}>
-                  {/* Omitted when the seller has no forecast source — never
-                      shown as a zero, which would look measured. */}
-                  {row.deliveryConfidence ?? "not provided"}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
-    </Box>
-  );
-}
+type PricingQuery = Parameters<typeof pricingQuote>[1];
 
 function Pricing() {
   const [productId, setProductId] = useState("");
   const [volume, setVolume] = useState("");
-  const [submitted, setSubmitted] = useState<{ product_id: string; volume?: number } | undefined>(
-    undefined,
-  );
+  const [identity, setIdentity] = useState<BuyerIdentity>(NO_IDENTITY);
+  const [submitted, setSubmitted] = useState<PricingQuery | undefined>(undefined);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -594,6 +573,7 @@ function Pricing() {
     setSubmitted({
       product_id: id,
       ...(parsed !== undefined && Number.isFinite(parsed) ? { volume: parsed } : {}),
+      ...identityBody(identity, { advertiser: true, agentUrl: true }),
     });
   }
 
@@ -601,7 +581,11 @@ function Pricing() {
     <Paper variant="outlined" sx={{ p: 2.5 }} data-block="pricing">
       <Box component="form" onSubmit={handleSubmit}>
         <FormRow>
-          <ProductPicker value={productId} onChange={setProductId} hint="The product to use. Pick one, or type or paste an id. Required." />
+          <ProductPicker
+            value={productId}
+            onChange={setProductId}
+            hint="The product to use. Pick one, or type or paste an id. Required."
+          />
           <TipField
             hint="Optional impressions to price for. The agent applies its volume discounts to this figure; leave blank to quote without one."
             size="small"
@@ -611,6 +595,7 @@ function Pricing() {
             onChange={(e) => setVolume(e.target.value)}
             sx={{ width: 140 }}
           />
+          <BuyerIdentityFields value={identity} onChange={setIdentity} advertiser agentUrl />
           <Button type="submit" variant="outlined" size="small" data-action="quote">
             Quote
           </Button>
@@ -621,10 +606,9 @@ function Pricing() {
   );
 }
 
-function PricingResult({ query }: { query: { product_id: string; volume?: number } }) {
-  const quote = useResource(
-    `pricing:${query.product_id}:${query.volume ?? ""}`,
-    (c, signal) => pricingQuote(c, query, signal),
+function PricingResult({ query }: { query: PricingQuery }) {
+  const quote = useResource(`pricing:${JSON.stringify(query)}`, (c, signal) =>
+    pricingQuote(c, query, signal),
   );
 
   if (quote.freshness === "blocked") {
@@ -685,62 +669,62 @@ export default function CatalogScreen() {
   return (
     <section data-screen="catalog">
       <PageHeader title="Catalog" subtitle="What this agent offers buyers.">
-      {!writesEnabled && (
-        <ReadOnlyNotice what="Editing the rate card, packages, or inventory type overrides" />
-      )}
+        {!writesEnabled && (
+          <ReadOnlyNotice what="Editing the rate card, packages, or inventory type overrides" />
+        )}
 
-      <ScreenSection
-        title="Products"
-        caption="The same for every caller — this route ignores the key entirely."
-      >
-        {/* Not a ReadOnlyNotice: the write switch is irrelevant here. The
+        <ScreenSection
+          title="Products"
+          caption="The same for every caller — this route ignores the key entirely."
+        >
+          {/* Not a ReadOnlyNotice: the write switch is irrelevant here. The
             agent API has no create/update/delete route for products, so there
             is nothing for the switch to enable. */}
-        <Alert severity="info" variant="outlined" sx={{ mb: 2.5 }} data-note="products-read-only">
-          Products can't be created, edited or archived from this console. The agent API offers no
-          write endpoints for products yet, so this table is read-only whatever the write switch is
-          set to.
-          <br />
-          Products come from the agent's own setup and inventory sync, so changing one means changing
-          it there.
-        </Alert>
-        <Products />
-      </ScreenSection>
+          <Alert severity="info" variant="outlined" sx={{ mb: 2.5 }} data-note="products-read-only">
+            Products can't be created, edited or archived from this console. The agent API offers no
+            write endpoints for products yet, so this table is read-only whatever the write switch
+            is set to.
+            <br />
+            Products come from the agent's own setup and inventory sync, so changing one means
+            changing it there.
+          </Alert>
+          <Products />
+        </ScreenSection>
 
-      <RateCardTable />
+        <RateCardTable />
 
-      <ScreenSection
-        title="Packages"
-        // The one catalog route whose content depends on the credential:
-        // without a key the agent returns a price band, with one it returns
-        // exact and floor prices. Calling this "the catalog" would overstate
-        // what is on screen, so the keyless view is shown beside it.
-        caption="Exact and floor prices, as returned for the key you are connected with. Callers without a key only see a price range."
-      >
-        <PackageTable />
-        <PublicPackages />
-      </ScreenSection>
+        <ScreenSection
+          title="Packages"
+          // The one catalog route whose content depends on the credential:
+          // without a key the agent returns a price band, with one it returns
+          // exact and floor prices. Calling this "the catalog" would overstate
+          // what is on screen, so the keyless view is shown beside it.
+          caption="Exact and floor prices, as returned for the key you are connected with. Callers without a key only see a price range."
+        >
+          <PackageTable />
+          <PublicPackages />
+        </ScreenSection>
 
-      <ScreenSection
-        title="Discovery"
-        caption="What matches a brief. A POST that reads the catalog and stores nothing, so it runs with writes off."
-      >
-        <Discovery />
-      </ScreenSection>
+        <ScreenSection
+          title="Discovery"
+          caption="What matches a brief. A POST that reads the catalog and stores nothing, so it runs with writes off."
+        >
+          <Discovery />
+        </ScreenSection>
 
-      <ScreenSection
-        title="Availability"
-        caption="A forecast for a flight. Reserves nothing; also a query-shaped POST."
-      >
-        <AvailsCheck />
-      </ScreenSection>
+        <ScreenSection
+          title="Availability"
+          caption="A forecast for a flight. Reserves nothing; also a query-shaped POST."
+        >
+          <AvailsCheck />
+        </ScreenSection>
 
-      <ScreenSection
-        title="Price a line"
-        caption="Applies tier and volume discounts to the rate card without booking. An unknown product is a typo, not an outage."
-      >
-        <Pricing />
-      </ScreenSection>
+        <ScreenSection
+          title="Price a line"
+          caption="Applies tier and volume discounts to the rate card without booking. An unknown product is a typo, not an outage."
+        >
+          <Pricing />
+        </ScreenSection>
       </PageHeader>
     </section>
   );

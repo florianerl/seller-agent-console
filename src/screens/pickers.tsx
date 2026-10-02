@@ -248,7 +248,7 @@ export function ProductMultiPicker({
 }
 
 export function PackagePicker({ label = "Package id", hint, ...rest }: PickerProps) {
-  const list = useResource("packages", packages, { refreshInterval: CADENCE.rateCard });
+  const list = useResource("packages", (c) => packages(c), { refreshInterval: CADENCE.rateCard });
   return (
     <EntityPicker
       {...rest}

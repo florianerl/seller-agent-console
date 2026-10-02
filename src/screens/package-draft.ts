@@ -6,7 +6,7 @@ import { priceProblem } from "../lib/money";
  * different resource names, so a write from either drops both rather than
  * leave the other screen showing the old ones.
  */
-export const PACKAGE_VIEWS = ["packages", "packages-public", "media-kit*"];
+export const PACKAGE_VIEWS = ["packages*", "media-kit*"];
 
 /**
  * What the media kit form edits: the fields a buyer browsing the kit sees,
@@ -27,6 +27,14 @@ export type PackageDraft = {
   featured: boolean;
   base: string;
   floor: string;
+  // Create only, and only from the Catalog: placements and classification
+  // that the media kit form leaves to Assemble.
+  productIds: string[];
+  cat: string[];
+  cattax: string;
+  audienceCapabilities: string;
+  audienceSegmentIds: string[];
+  seasonalLabel: string;
 };
 
 export const EMPTY_DRAFT: PackageDraft = {
@@ -39,6 +47,12 @@ export const EMPTY_DRAFT: PackageDraft = {
   featured: false,
   base: "",
   floor: "",
+  productIds: [],
+  cat: [],
+  cattax: "",
+  audienceCapabilities: "",
+  audienceSegmentIds: [],
+  seasonalLabel: "",
 };
 
 export function draftOf(pkg: MediaKitPackage): PackageDraft {
@@ -85,16 +99,33 @@ export function packageChanges(pkg: MediaKitPackage, draft: PackageDraft): Recor
   return out;
 }
 
+/** Blank is "not sent"; anything else must be a JSON object. */
+function capabilitiesProblem(text: string): string | undefined {
+  if (!text.trim()) return undefined;
+  try {
+    const value: unknown = JSON.parse(text);
+    return typeof value === "object" && value !== null && !Array.isArray(value)
+      ? undefined
+      : "Audience capabilities must be a JSON object.";
+  } catch {
+    return "Audience capabilities is not valid JSON.";
+  }
+}
+
 /** Why the draft cannot be created yet, or undefined when it can. */
 export function createProblem(draft: PackageDraft): string | undefined {
   return (
     (draft.name.trim() ? undefined : "Name the package.") ??
     priceProblem(draft.base) ??
-    priceProblem(draft.floor)
+    priceProblem(draft.floor) ??
+    (draft.cattax.trim() === "" || Number.isInteger(Number(draft.cattax))
+      ? undefined
+      : "The content taxonomy is a whole number.") ??
+    capabilitiesProblem(draft.audienceCapabilities)
   );
 }
 
-/** Empty lists and a blank description are left out; upstream defaults them. */
+/** Empty lists and blank fields are left out; upstream defaults them. */
 export function createBody(draft: PackageDraft): PackageCreate {
   const body: PackageCreate = {
     name: draft.name.trim(),
@@ -108,5 +139,13 @@ export function createBody(draft: PackageDraft): PackageCreate {
   if (draft.deviceTypes.length) body.device_types = draft.deviceTypes;
   if (draft.geoTargets.length) body.geo_targets = draft.geoTargets;
   if (draft.tags.length) body.tags = draft.tags;
+  if (draft.productIds.length) body.product_ids = draft.productIds;
+  if (draft.cat.length) body.cat = draft.cat;
+  if (draft.cattax.trim()) body.cattax = Number(draft.cattax);
+  if (draft.audienceCapabilities.trim()) {
+    body.audience_capabilities = JSON.parse(draft.audienceCapabilities) as Record<string, unknown>;
+  }
+  if (draft.audienceSegmentIds.length) body.audience_segment_ids = draft.audienceSegmentIds;
+  if (draft.seasonalLabel.trim()) body.seasonal_label = draft.seasonalLabel.trim();
   return body;
 }
