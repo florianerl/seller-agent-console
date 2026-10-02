@@ -249,4 +249,68 @@ describe("the four health cards", () => {
     await user.click(within(row).getByRole("button", { name: "Load" }));
     expect(await within(dialog).findByText(/3 uses · revoked false/)).toBeInTheDocument();
   });
+
+  it("sends every field the buyer-key request declares, and expiry on both kinds", async () => {
+    const bodies: Record<string, unknown>[] = [];
+    server.use(
+      http.post(`${API}/auth/api-keys`, async ({ request }) => {
+        bodies.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json({ key_id: "k1", api_key: "secret", role: "buyer" });
+      }),
+      http.post(`${API}/auth/api-keys/operator`, async ({ request }) => {
+        bodies.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json({ key_id: "k2", api_key: "secret", role: "operator" });
+      }),
+    );
+    await saveCredential({ ...CREDENTIAL, writesEnabled: true });
+    const user = userEvent.setup();
+    renderCards();
+    await waitForCards();
+    await waitFor(() => expect(stateOf("access")).toBe("live"));
+
+    await user.click(document.querySelector('[data-action="manage-keys"]') as HTMLElement);
+    const dialog = await screen.findByRole("dialog");
+    await user.type(within(dialog).getByLabelText("Label"), "ci");
+    await user.type(within(dialog).getByLabelText("Expires in (days)"), "30");
+    await user.click(within(dialog).getByRole("button", { name: /Buyer identity/ }));
+    for (const [name, value] of [
+      ["Seat id", "s1"],
+      ["Seat name", "Seat One"],
+      ["DSP platform", "ttd"],
+      ["Agency id", "a1"],
+      ["Agency name", "Agency"],
+      ["Holding company", "Holdco"],
+      ["Advertiser id", "adv1"],
+      ["Advertiser name", "Adv"],
+    ] as const) {
+      await user.type(within(dialog).getByLabelText(name), value);
+    }
+
+    const mint = async (action: string) => {
+      await user.click(document.querySelector(`[data-action="${action}"]`) as HTMLElement);
+      await waitFor(() =>
+        expect(document.querySelector('[data-action="confirm-mutation"]')).not.toBeNull(),
+      );
+      await user.click(document.querySelector('[data-action="confirm-mutation"]') as HTMLElement);
+    };
+    await mint("create-buyer-key");
+    await waitFor(() => expect(bodies).toHaveLength(1));
+    expect(bodies[0]).toEqual({
+      label: "ci",
+      expires_in_days: 30,
+      seat_id: "s1",
+      seat_name: "Seat One",
+      dsp_platform: "ttd",
+      agency_id: "a1",
+      agency_name: "Agency",
+      agency_holding_company: "Holdco",
+      advertiser_id: "adv1",
+      advertiser_name: "Adv",
+    });
+
+    await waitFor(() => expect(document.querySelector('[data-action="confirm-mutation"]')).toBeNull());
+    await mint("create-operator-key");
+    await waitFor(() => expect(bodies).toHaveLength(2));
+    expect(bodies[1]).toEqual({ label: "ci", expires_in_days: 30 });
+  });
 });

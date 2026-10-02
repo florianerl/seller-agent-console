@@ -1,5 +1,8 @@
 import { useState, type ReactNode } from "react";
 import Autocomplete from "@mui/material/Autocomplete";
+import Accordion from "@mui/material/Accordion";
+import AccordionDetails from "@mui/material/AccordionDetails";
+import AccordionSummary from "@mui/material/AccordionSummary";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Dialog from "@mui/material/Dialog";
@@ -16,6 +19,7 @@ import {
   bulkDealOperations,
   closeSession,
   createBuyerApiKey,
+  type BuyerKeyRequest,
   createChangeRequest,
   createOperatorApiKey,
   dealBuyerStatus,
@@ -287,22 +291,60 @@ export function ApiKeysDialog() {
   );
 }
 
+const BUYER_KEY_FIELDS = [
+  ["seat_id", "Seat id", "The DSP seat this key acts for."],
+  ["seat_name", "Seat name", "Display name of the DSP seat."],
+  ["dsp_platform", "DSP platform", "DSP platform slug, for example ttd or dv360."],
+  ["agency_id", "Agency id", "The agency buying on the advertiser's behalf."],
+  ["agency_name", "Agency name", "Display name of the agency."],
+  ["agency_holding_company", "Holding company", "The agency's holding company."],
+  ["advertiser_id", "Advertiser id", "The advertiser the key buys for."],
+  ["advertiser_name", "Advertiser name", "Display name of the advertiser."],
+] as const;
+
 export function ApiKeyWrites() {
   const { writesEnabled } = useCredential();
   const [label, setLabel] = useState("");
+  const [expires, setExpires] = useState("");
+  const [identity, setIdentity] = useState<Record<(typeof BUYER_KEY_FIELDS)[number][0], string>>({
+    seat_id: "",
+    seat_name: "",
+    dsp_platform: "",
+    agency_id: "",
+    agency_name: "",
+    agency_holding_company: "",
+    advertiser_id: "",
+    advertiser_name: "",
+  });
   const [secret, setSecret] = useState<CreatedApiKey | undefined>();
 
-  const buyer = useMutation<{ label?: string }, CreatedApiKey>(
+  const buyer = useMutation<BuyerKeyRequest, CreatedApiKey>(
     (c, args) => createBuyerApiKey(c, args),
     { invalidates: ["api-keys"] },
   );
-  const operator = useMutation<{ label?: string }, CreatedApiKey>(
+  const operator = useMutation<{ label?: string; expires_in_days?: number }, CreatedApiKey>(
     (c, args) => createOperatorApiKey(c, args),
     { invalidates: ["api-keys"] },
   );
   function showSecret(result: { kind: string; data?: CreatedApiKey }) {
     if (result.kind === "ok" && result.data) setSecret(result.data);
   }
+
+  // Empty means "not sent": the agent applies its own default (no expiry).
+  const days = expires.trim() === "" ? undefined : Number(expires);
+  const daysInvalid = days !== undefined && (!Number.isInteger(days) || days < 1);
+  const common = {
+    ...(label.trim() ? { label: label.trim() } : {}),
+    ...(days !== undefined && !daysInvalid ? { expires_in_days: days } : {}),
+  };
+  const buyerBody: BuyerKeyRequest = {
+    ...common,
+    ...Object.fromEntries(
+      Object.entries(identity)
+        .map(([k, v]) => [k, v.trim()] as const)
+        .filter(([, v]) => v),
+    ),
+  };
 
   return (
     <Stack spacing={2}>
@@ -320,16 +362,24 @@ export function ApiKeyWrites() {
           disabled={!writesEnabled}
           sx={{ minWidth: 180 }}
         />
+        <TipField
+          hint="Days until the key expires, as a whole number. Leave empty for the agent's default."
+          size="small"
+          label="Expires in (days)"
+          value={expires}
+          onChange={(e) => setExpires(e.target.value)}
+          error={daysInvalid}
+          disabled={!writesEnabled}
+          sx={{ width: 150 }}
+        />
         <WriteForm
           title="Mint a buyer API key?"
           confirmLabel="Create buyer key"
           action="create-buyer-key"
-          blocked={!writesEnabled}
+          blocked={!writesEnabled || daysInvalid}
           pending={buyer.pending}
           last={buyer.last}
-          onConfirm={() =>
-            void buyer.run({ ...(label ? { label } : {}) }).then(showSecret)
-          }
+          onConfirm={() => void buyer.run(buyerBody).then(showSecret)}
           consequence={
             <>
               Not idempotent: each call mints a new key. The secret is in this
@@ -342,12 +392,10 @@ export function ApiKeyWrites() {
           title="Mint an operator API key?"
           confirmLabel="Create operator key"
           action="create-operator-key"
-          blocked={!writesEnabled}
+          blocked={!writesEnabled || daysInvalid}
           pending={operator.pending}
           last={operator.last}
-          onConfirm={() =>
-            void operator.run({ ...(label ? { label } : {}) }).then(showSecret)
-          }
+          onConfirm={() => void operator.run(common).then(showSecret)}
           consequence={
             <>
               Not idempotent. Some agents 409 if an extra operator key already
@@ -356,6 +404,32 @@ export function ApiKeyWrites() {
           }
         />
       </FormRow>
+      <Accordion disableGutters variant="outlined" sx={{ "&:before": { display: "none" } }}>
+        <AccordionSummary
+          expandIcon={
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true" focusable="false">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          }
+        >
+          <Typography variant="body2">Buyer identity (optional, buyer keys only)</Typography>
+        </AccordionSummary>
+        <AccordionDetails
+          sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" } }}
+        >
+          {BUYER_KEY_FIELDS.map(([name, fieldLabel, hint]) => (
+            <TipField
+              key={name}
+              hint={hint}
+              size="small"
+              label={fieldLabel}
+              value={identity[name]}
+              onChange={(e) => setIdentity((cur) => ({ ...cur, [name]: e.target.value }))}
+              disabled={!writesEnabled}
+            />
+          ))}
+        </AccordionDetails>
+      </Accordion>
       {secret?.api_key ? (
         <Box
           component="pre"

@@ -80,9 +80,23 @@ export const CreatedApiKey = z
   .loose();
 export type CreatedApiKey = z.infer<typeof CreatedApiKey>;
 
+/** Every field the spec's CreateApiKeyRequest declares; all optional. */
+export type BuyerKeyRequest = {
+  label?: string;
+  expires_in_days?: number;
+  seat_id?: string;
+  seat_name?: string;
+  dsp_platform?: string;
+  agency_id?: string;
+  agency_name?: string;
+  agency_holding_company?: string;
+  advertiser_id?: string;
+  advertiser_name?: string;
+};
+
 export const createBuyerApiKey = (
   c: Connection,
-  body: { label?: string; expires_in_days?: number; seat_id?: string },
+  body: BuyerKeyRequest,
   signal?: AbortSignal,
 ): Promise<Result<CreatedApiKey>> =>
   request(c, PATHS.apiKeys, { schema: CreatedApiKey, method: "POST", body, signal });
