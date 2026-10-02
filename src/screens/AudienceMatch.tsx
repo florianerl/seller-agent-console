@@ -1,4 +1,5 @@
 import { useState } from "react";
+import Collapse from "@mui/material/Collapse";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
@@ -7,6 +8,7 @@ import { describe } from "../api/errors";
 import { AUDIENCE_SOURCES } from "../api/vocabulary";
 import { EnumSelect } from "../components/EnumSelect";
 import { Field, FieldGrid } from "../components/Field";
+import { MoreOptionsToggle, OptionGroup } from "../components/MoreOptions";
 import { TipField } from "../components/TipField";
 import { FormRow, ReadForm } from "../components/WriteForm";
 import { useResource } from "../query/useResource";
@@ -105,7 +107,12 @@ export function AudienceMatchForm() {
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [submitted, setSubmitted] = useState<Body | undefined>();
   const set = (key: keyof Draft) => (value: string) => setDraft({ ...draft, [key]: value });
+  const [more, setMore] = useState(false);
   const why = problem(draft);
+  // Everything under "More options": all of the draft but the identifier.
+  const optionsSet = Object.entries(draft).filter(
+    ([key, value]) => key !== "identifier" && value.trim(),
+  ).length;
 
   return (
     <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }} data-block="audience-match">
@@ -113,8 +120,8 @@ export function AudienceMatchForm() {
         Audience match
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-        A POST that stores nothing, so it runs with writes off. The agent scores only the identifier
-        today; the rest of the ref and the package are echoed, not used.
+        Stores nothing, so it runs with writes off. Only the identifier is scored today; the other
+        options are sent and echoed back unused.
       </Typography>
       <Stack spacing={1.5}>
         <FormRow>
@@ -124,14 +131,9 @@ export function AudienceMatchForm() {
             label="Audience identifier"
             value={draft.identifier}
             onChange={(e) => set("identifier")(e.target.value)}
-            sx={{ minWidth: 280 }}
+            sx={{ minWidth: 320, flex: 1, maxWidth: 480 }}
           />
-          <PackagePicker
-            label="Package"
-            hint="Scope the match to one package. The route accepts it, but the current agent ignores it."
-            value={draft.packageId}
-            onChange={set("packageId")}
-          />
+          <MoreOptionsToggle open={more} onToggle={() => setMore(!more)} set={optionsSet} />
           <ReadForm
             label="Match"
             action="audience-match"
@@ -144,82 +146,94 @@ export function AudienceMatchForm() {
             {why}
           </Typography>
         )}
-        <FormRow>
-          <TipField
-            hint="Which taxonomy the identifier belongs to; for agentic refs, agentic-audiences."
-            size="small"
-            label="Taxonomy"
-            placeholder="agentic-audiences"
-            value={draft.taxonomy}
-            onChange={(e) => set("taxonomy")(e.target.value)}
-          />
-          <TipField
-            hint="Taxonomy or spec version, for example draft-2026-01."
-            size="small"
-            label="Version"
-            value={draft.version}
-            onChange={(e) => set("version")(e.target.value)}
-            sx={{ width: 140 }}
-          />
-          <EnumSelect
-            label="Source"
-            hint="Where the ref came from: named by the buyer, resolved, or inferred."
-            value={draft.source}
-            options={AUDIENCE_SOURCES}
-            any="Not given"
-            onChange={set("source")}
-            sx={{ minWidth: 140 }}
-          />
-          <TipField
-            hint="How sure the buyer is, from 0 to 1. Only for resolved or inferred refs."
-            size="small"
-            label="Confidence"
-            value={draft.confidence}
-            onChange={(e) => set("confidence")(e.target.value)}
-            slotProps={{ htmlInput: { inputMode: "decimal" } }}
-            sx={{ width: 120 }}
-          />
-        </FormRow>
-        <FormRow>
-          <TipField
-            hint="Consent context: the jurisdiction, for example US, EU or GLOBAL. The ref model requires a compliance context for agentic refs."
-            size="small"
-            label="Jurisdiction"
-            value={draft.jurisdiction}
-            onChange={(e) => set("jurisdiction")(e.target.value)}
-            sx={{ width: 130 }}
-          />
-          <TipField
-            hint="Consent framework, for example IAB-TCFv2, GPP, advertiser-1p or none."
-            size="small"
-            label="Consent framework"
-            value={draft.consentFramework}
-            onChange={(e) => set("consentFramework")(e.target.value)}
-          />
-          <TipField
-            hint="An opaque pointer to the consent string — never the raw string."
-            size="small"
-            label="Consent string ref"
-            value={draft.consentStringRef}
-            onChange={(e) => set("consentStringRef")(e.target.value)}
-          />
-          <TipField
-            hint="A hash or signature carrying any required attestation."
-            size="small"
-            label="Attestation"
-            value={draft.attestation}
-            onChange={(e) => set("attestation")(e.target.value)}
-          />
-          <EnumSelect
-            label="Embedding provenance"
-            hint="Where the embedding bytes came from."
-            value={draft.provenance}
-            options={PROVENANCES}
-            any="Not given"
-            onChange={set("provenance")}
-            sx={{ minWidth: 180 }}
-          />
-        </FormRow>
+        <Collapse in={more}>
+          <Stack spacing={1.5}>
+            <OptionGroup title="Scope — accepted, but the agent ignores it today">
+              <PackagePicker
+                label="Package"
+                hint="Scope the match to one package. The route accepts it, but the current agent ignores it."
+                value={draft.packageId}
+                onChange={set("packageId")}
+              />
+            </OptionGroup>
+            <OptionGroup title="Audience reference">
+              <TipField
+                hint="Which taxonomy the identifier belongs to; for agentic refs, agentic-audiences."
+                size="small"
+                label="Taxonomy"
+                placeholder="agentic-audiences"
+                value={draft.taxonomy}
+                onChange={(e) => set("taxonomy")(e.target.value)}
+              />
+              <TipField
+                hint="Taxonomy or spec version, for example draft-2026-01."
+                size="small"
+                label="Version"
+                value={draft.version}
+                onChange={(e) => set("version")(e.target.value)}
+                sx={{ width: 140 }}
+              />
+              <EnumSelect
+                label="Source"
+                hint="Where the ref came from: named by the buyer, resolved, or inferred."
+                value={draft.source}
+                options={AUDIENCE_SOURCES}
+                any="Not given"
+                onChange={set("source")}
+                sx={{ minWidth: 140 }}
+              />
+              <TipField
+                hint="How sure the buyer is, from 0 to 1. Only for resolved or inferred refs."
+                size="small"
+                label="Confidence"
+                value={draft.confidence}
+                onChange={(e) => set("confidence")(e.target.value)}
+                slotProps={{ htmlInput: { inputMode: "decimal" } }}
+                sx={{ width: 120 }}
+              />
+            </OptionGroup>
+            <OptionGroup title="Consent — jurisdiction and framework go together">
+              <TipField
+                hint="Consent context: the jurisdiction, for example US, EU or GLOBAL. The ref model requires a compliance context for agentic refs."
+                size="small"
+                label="Jurisdiction"
+                value={draft.jurisdiction}
+                onChange={(e) => set("jurisdiction")(e.target.value)}
+                sx={{ width: 130 }}
+              />
+              <TipField
+                hint="Consent framework, for example IAB-TCFv2, GPP, advertiser-1p or none."
+                size="small"
+                label="Consent framework"
+                value={draft.consentFramework}
+                onChange={(e) => set("consentFramework")(e.target.value)}
+              />
+              <TipField
+                hint="An opaque pointer to the consent string — never the raw string."
+                size="small"
+                label="Consent string ref"
+                value={draft.consentStringRef}
+                onChange={(e) => set("consentStringRef")(e.target.value)}
+              />
+              <TipField
+                hint="A hash or signature carrying any required attestation."
+                size="small"
+                label="Attestation"
+                value={draft.attestation}
+                onChange={(e) => set("attestation")(e.target.value)}
+              />
+              <EnumSelect
+                label="Embedding provenance"
+                hint="Where the embedding bytes came from."
+                value={draft.provenance}
+                options={PROVENANCES}
+                any="Not given"
+                onChange={set("provenance")}
+                sx={{ minWidth: 210 }}
+              />
+            </OptionGroup>
+          </Stack>
+        </Collapse>
       </Stack>
       {submitted && <AudienceMatchBody body={submitted} />}
     </Paper>

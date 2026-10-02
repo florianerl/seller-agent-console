@@ -3,6 +3,7 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Checkbox from "@mui/material/Checkbox";
 import Chip from "@mui/material/Chip";
+import Collapse from "@mui/material/Collapse";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Paper from "@mui/material/Paper";
 import Skeleton from "@mui/material/Skeleton";
@@ -26,6 +27,7 @@ import {
 import { describe } from "../api/errors";
 import { AUDIENCE_TYPES, PACKAGE_LAYERS, deviceLabel, type AudienceType } from "../api/vocabulary";
 import { EnumSelect } from "../components/EnumSelect";
+import { MoreOptionsToggle, OptionGroup } from "../components/MoreOptions";
 import { plain } from "../lib/money";
 import { ConfirmButton, WRITES_OFF_HINT } from "../components/ConfirmButton";
 import { Hint } from "../components/Hint";
@@ -592,7 +594,16 @@ function Search() {
   // <SearchResults> mounts (and therefore fetches) only once the operator has
   // actually submitted, never on the keystrokes that fill the field.
   const [submitted, setSubmitted] = useState<MediaKitSearchQuery | undefined>(undefined);
+  const [more, setMore] = useState(false);
   const problem = audienceProblem(audience);
+  const optionsSet = [
+    identity.tier,
+    identity.agencyId,
+    identity.advertiserId,
+    audience.type,
+    audience.id,
+    audience.version,
+  ].filter((v) => v.trim()).length;
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -612,8 +623,9 @@ function Search() {
               label="Search the media kit"
               value={queryInput}
               onChange={(e) => setQueryInput(e.target.value)}
-              sx={{ minWidth: 280 }}
+              sx={{ minWidth: 320, flex: 1, maxWidth: 480 }}
             />
+            <MoreOptionsToggle open={more} onToggle={() => setMore(!more)} set={optionsSet} />
             <Hint hint={problem}>
               <Button
                 type="submit"
@@ -626,13 +638,24 @@ function Search() {
               </Button>
             </Hint>
           </FormRow>
-          {/* This console always sends its key, so results come back in the
-              authenticated view whatever the tier says; the tier and ids
-              choose which buyer's prices that view shows. */}
-          <FormRow>
-            <BuyerIdentityFields value={identity} onChange={setIdentity} advertiser />
-            <AudienceFields value={audience} onChange={setAudience} />
-          </FormRow>
+          {problem && !more && (
+            <Typography variant="body2" sx={{ color: palette.warningText }}>
+              {problem}
+            </Typography>
+          )}
+          <Collapse in={more}>
+            <Stack spacing={1.5}>
+              {/* This console always sends its key, so results come back in the
+                  authenticated view whatever the tier says; the tier and ids
+                  choose which buyer's prices that view shows. */}
+              <OptionGroup title="Search as a buyer — whose prices the results show">
+                <BuyerIdentityFields value={identity} onChange={setIdentity} advertiser />
+              </OptionGroup>
+              <OptionGroup title="Only packages for an audience">
+                <AudienceFields value={audience} onChange={setAudience} />
+              </OptionGroup>
+            </Stack>
+          </Collapse>
         </Stack>
       </Box>
 
