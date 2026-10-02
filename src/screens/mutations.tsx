@@ -25,11 +25,9 @@ import {
   dealById,
   dealSspTroubleshoot,
   deprecateDeal,
-  distributeDeal,
   eventById,
   migrateDeal,
   negotiationStatus,
-  pushDeal,
   reviewChangeRequest,
   sendSessionMessage,
   transitionOrder,
@@ -40,6 +38,7 @@ import {
   withdrawProposal,
   type CreatedApiKey,
   type BulkDealResponse,
+  type BuyerIdentityInput,
   type ChangeRequestAck,
   type ChangeRequestReviewInput,
   type LineItem,
@@ -60,7 +59,6 @@ import {
   ACTOR_KINDS,
   BULK_DEAL_ACTIONS,
   CHANGE_TYPES,
-  SSP_NAMES,
   words,
   type BulkDealAction,
 } from "../api/vocabulary";
@@ -68,10 +66,13 @@ import { ConfirmAction } from "../components/ConfirmAction";
 import { EnumSelect } from "../components/EnumSelect";
 import { Hint } from "../components/Hint";
 import { TipField } from "../components/TipField";
-import { ProposalPicker } from "./pickers";
+import { DealPicker, ProductPicker, ProposalPicker } from "./pickers";
 import { ProposalWizard } from "./ProposalWizard";
 import { NegotiationMessageWizard } from "./NegotiationMessageWizard";
 import { SessionWizard } from "./SessionWizard";
+import { Optional, SspNameField } from "./dealFields";
+import { useBuyerIdentity, useListField } from "./dealHooks";
+import { DistributeForm, PushForm } from "./DealSend";
 import { ApiKeyTable } from "./ApiKeyTable";
 import { JsonView } from "../components/JsonView";
 import { FormFields, FormRow, ReadForm, WriteForm } from "../components/WriteForm";
@@ -662,180 +663,213 @@ export function DealWrites({
 }) {
   const show = (g: "distribute" | "manage" | "danger") => !group || group === g;
   const { writesEnabled } = useCredential();
-  const [buyerUrl, setBuyerUrl] = useState("https://buyer.example");
-  const [ssp, setSsp] = useState("");
-  const [reason, setReason] = useState("");
-  const [deprecateReason, setDeprecateReason] = useState("");
   const id = dealId;
+  const blocked = !writesEnabled;
+
+  // Cancel or edit notes (the bulk route).
   const [bulkAction, setBulkAction] = useState<BulkDealAction>("cancel");
   const [bulkNotes, setBulkNotes] = useState("");
-
+  const bulkBuyer = useBuyerIdentity();
   const bulk = useMutation<
-    { operations: { action: BulkDealAction; deal_id?: string; quote_id?: string; notes?: string }[] },
+    {
+      operations: {
+        action: BulkDealAction;
+        deal_id?: string;
+        quote_id?: string;
+        notes?: string;
+        buyer_identity?: BuyerIdentityInput;
+      }[];
+    },
     BulkDealResponse
-  >(
-    (c, a) => bulkDealOperations(c, a),
-    { invalidates: ["deals:*"] },
-  );
-  const push = useMutation<{ deal_id: string; buyer_urls: string[] }, unknown>(
-    (c, a) => pushDeal(c, a),
-    { invalidates: ["deals:*"] },
-  );
-  const dist = useMutation<{ deal_id: string; ssp_name?: string }, unknown>(
-    (c, a) => distributeDeal(c, a),
-    { invalidates: ["deals:*"] },
-  );
-  const migrate = useMutation<{ id: string; reason?: string }, unknown>(
-    (c, a) =>
-      migrateDeal(c, a.id, { old_deal_id: a.id, ...(a.reason ? { reason: a.reason } : {}) }),
+  >((c, a) => bulkDealOperations(c, a), { invalidates: ["deals:*"] });
+
+  // Replace with a new deal (migrate). Every term is optional: left out, the
+  // agent carries the old deal's over, so these only say what should differ.
+  const [reason, setReason] = useState("");
+  const [mDealType, setMDealType] = useState("");
+  const [mProduct, setMProduct] = useState("");
+  const [mMaxCpm, setMMaxCpm] = useState("");
+  const [mImpressions, setMImpressions] = useState("");
+  const [mStart, setMStart] = useState("");
+  const [mEnd, setMEnd] = useState("");
+  const mSeats = useListField("Buyer seat ids", "Seat ids the new deal is restricted to, separated by commas.");
+  const mBuyer = useBuyerIdentity();
+  const migrate = useMutation<Parameters<typeof migrateDeal>[2], unknown>(
+    (c, a) => migrateDeal(c, a.old_deal_id, a),
     { invalidates: ["deals:*", `deal-lineage:${id}`] },
   );
-  const deprecate = useMutation<{ id: string; reason: string }, unknown>(
-    (c, a) => deprecateDeal(c, a.id, { reason: a.reason }),
+  const mCpm = Number(mMaxCpm);
+  const mCpmOk = mMaxCpm.trim() === "" || (Number.isFinite(mCpm) && mCpm > 0);
+  const mImp = Number(mImpressions);
+  const mImpOk = mImpressions.trim() === "" || (Number.isInteger(mImp) && mImp > 0);
+  const mDatesOk = (mStart === "" && mEnd === "") || (mStart !== "" && mEnd !== "" && mEnd >= mStart);
+
+  // Deprecate.
+  const [deprecateReason, setDeprecateReason] = useState("");
+  const [replacement, setReplacement] = useState("");
+  const deprecate = useMutation<{ id: string; reason: string; replacement_deal_id?: string }, unknown>(
+    (c, a) =>
+      deprecateDeal(c, a.id, {
+        reason: a.reason,
+        ...(a.replacement_deal_id ? { replacement_deal_id: a.replacement_deal_id } : {}),
+      }),
     { invalidates: ["deals:*"] },
   );
-
-  const blocked = !writesEnabled;
 
   return (
     <Box>
       {show("distribute") && (
         <>
-            <ActionBlock
-              title="Notify a buyer"
-              description="Sends this deal to a buyer agent at the URL below."
-            >
-              <WriteForm
-                title="Push this deal to a buyer?"
-                confirmLabel="Push"
-                action="push-deal"
-                blocked={blocked}
-                pending={push.pending}
-                last={push.last}
-                onConfirm={() => void push.run({ deal_id: id, buyer_urls: [buyerUrl] })}
-                consequence="Notifies the named buyer URLs. A retry may notify twice."
-              >
-                <TipField hint="Full URL of the buyer agent to notify, for example https://buyer.example. Only this one URL is sent." size="small" label="Buyer URL" value={buyerUrl} onChange={(e) => setBuyerUrl(e.target.value)} disabled={blocked} sx={{ minWidth: 240 }} />
-              </WriteForm>
-            </ActionBlock>
-            <ActionBlock
-              title="Send to an SSP"
-              description="Pushes this deal to one SSP connector. Leave the name empty to use the agent's default."
-            >
-              <WriteForm
-                title="Distribute this deal to an SSP?"
-                confirmLabel="Distribute"
-                action="distribute-deal"
-                blocked={blocked}
-                pending={dist.pending}
-                last={dist.last}
-                onConfirm={() =>
-                  void dist.run({ deal_id: id, ...(ssp ? { ssp_name: ssp } : {}) })
-                }
-                consequence="A retry may push a second copy to the SSP."
-              >
-                <SspNameField label="SSP name (optional)" hint="Name of the SSP connector to send the deal to. Pick a known one or type another; an unknown name is a 400 that lists the configured ones." value={ssp} onChange={setSsp} disabled={blocked} />
-              </WriteForm>
-            </ActionBlock>
+          <ActionBlock
+            title="Notify buyers"
+            description="Sends this deal to the buyer agents at the URLs below."
+          >
+            <PushForm dealId={id} />
+          </ActionBlock>
+          <ActionBlock
+            title="Send to an SSP"
+            description="Pushes this deal to one SSP connector. Leave the name empty to use the agent's default."
+          >
+            <DistributeForm dealId={id} />
+          </ActionBlock>
         </>
       )}
       {show("manage") && (
-        <>
         <ActionBlock
           title="Replace with a new deal"
-          description="Creates a successor deal and links the two in this deal's lineage."
+          description="Creates a successor deal and links the two in this deal's lineage. Whatever you leave empty carries over from this deal."
         >
           <WriteForm
             title="Migrate this deal?"
             confirmLabel="Migrate"
             action="migrate-deal"
-            blocked={blocked}
+            blocked={blocked || !mCpmOk || !mImpOk || !mDatesOk}
             pending={migrate.pending}
             last={migrate.last}
-            onConfirm={() => void migrate.run({ id, ...(reason ? { reason } : {}) })}
+            onConfirm={() =>
+              void migrate.run({
+                old_deal_id: id,
+                ...(reason.trim() ? { reason: reason.trim() } : {}),
+                ...(mDealType.trim() ? { deal_type: mDealType.trim() } : {}),
+                ...(mProduct.trim() ? { product_id: mProduct.trim() } : {}),
+                ...(mMaxCpm.trim() ? { max_cpm: mCpm } : {}),
+                ...(mImpressions.trim() ? { impressions: mImp } : {}),
+                ...(mStart ? { flight_start: mStart, flight_end: mEnd } : {}),
+                ...(mSeats.value ? { buyer_seat_ids: mSeats.value } : {}),
+                ...(mBuyer.value ? { buyer_identity: mBuyer.value } : {}),
+              })
+            }
             consequence="Mints a successor and records lineage. A retry may mint a second successor."
           >
             <TipField hint="Optional reason recorded with the migration." size="small" label="Reason (optional)" value={reason} onChange={(e) => setReason(e.target.value)} disabled={blocked} />
           </WriteForm>
+          <Box sx={{ mt: 1.5 }}>
+            <Optional summary="Terms of the new deal (optional)">
+              <ProductPicker value={mProduct} onChange={setMProduct} hint="Product for the new deal. Left empty, it keeps this deal's product." sx={{ width: "100%" }} />
+              <TipField hint="Deal type for the new deal, for example PG, PD or PA. Left empty, it keeps this deal's." size="small" label="Deal type" value={mDealType} onChange={(e) => setMDealType(e.target.value)} fullWidth />
+              <TipField hint="Ceiling in dollars for the new deal's CPM, a plain number." size="small" type="number" label="Max CPM" value={mMaxCpm} onChange={(e) => setMMaxCpm(e.target.value)} error={!mCpmOk} fullWidth />
+              <TipField hint="Impressions for the new deal, a whole number above zero." size="small" type="number" label="Impressions" value={mImpressions} onChange={(e) => setMImpressions(e.target.value)} error={!mImpOk} fullWidth />
+              <TipField hint="First day of the new flight. Give both dates or neither." size="small" type="date" label="Flight start" slotProps={{ inputLabel: { shrink: true } }} value={mStart} onChange={(e) => setMStart(e.target.value)} fullWidth />
+              <TipField hint="Last day of the new flight, on or after the start." size="small" type="date" label="Flight end" slotProps={{ inputLabel: { shrink: true } }} value={mEnd} onChange={(e) => setMEnd(e.target.value)} error={!mDatesOk && mEnd !== ""} fullWidth />
+              {mSeats.node}
+              {mBuyer.node}
+            </Optional>
+          </Box>
         </ActionBlock>
-        </>
       )}
       {show("danger") && (
         <>
-        <ActionBlock
-          title="Cancel or edit notes"
-          description="Cancels this deal, or replaces its notes. Cancelling cannot be undone from this console."
-        >
-          <WriteForm
-            title={`Run a bulk ${bulkAction}?`}
-            confirmLabel={bulkAction === "cancel" ? "Cancel deal" : "Update notes"}
-            action="bulk-deals"
-            blocked={blocked}
-            pending={bulk.pending}
-            // Reported below instead: a 200 here can still carry failures.
-            last={bulk.last?.kind === "ok" ? undefined : bulk.last}
-            onConfirm={() =>
-              void bulk.run({
-                operations: [
-                  {
-                    action: bulkAction,
-                    deal_id: id,
-                    ...(bulkNotes.trim() ? { notes: bulkNotes.trim() } : {}),
-                  },
-                ],
-              })
-            }
-            consequence={
-              bulkAction === "cancel"
-                ? "Sets the deal to cancelled, with the notes as the cancel reason. Nothing in this console reverses it."
-                : "Replaces the deal's notes and stamps updated_at. Partial success is possible in a batch: re-read the list rather than repeating it blindly."
-            }
+          <ActionBlock
+            title="Cancel or edit notes"
+            description="Cancels this deal, or replaces its notes. Cancelling cannot be undone from this console."
           >
-            <FormFields>
-              <EnumSelect
-                hint="Cancel ends the deal; update replaces its notes."
-                label="Action"
-                value={bulkAction}
-                options={DEAL_EDIT_ACTIONS}
-                onChange={(v) => v && setBulkAction(v)}
-                disabled={blocked}
-                sx={{ minWidth: 140 }}
-              />
-              <TipField hint="Optional notes. For update they replace the deal's notes; for cancel they become the cancel reason." size="small" label="Notes (optional)" value={bulkNotes} onChange={(e) => setBulkNotes(e.target.value)} disabled={blocked} />
-            </FormFields>
-          </WriteForm>
-          {bulk.last?.kind === "ok" && (
-            <Box sx={{ mt: 1 }} data-block="bulk-results">
-              {bulk.last.data.results.map((r) => (
-                <Typography
-                  key={r.index}
-                  variant="body2"
-                  sx={{ color: r.success ? undefined : palette.error }}
-                  data-state={r.success ? "op-ok" : "op-failed"}
-                >
-                  {r.action} {r.deal_id ?? ""}: {r.success ? "done" : r.error ?? "failed"}
-                </Typography>
-              ))}
-            </Box>
-          )}
-        </ActionBlock>
-        <ActionBlock
-          title="Deprecate"
-          description="Marks this deal deprecated. A reason is required."
-        >
-          <WriteForm
-            title="Deprecate this deal?"
-            confirmLabel="Deprecate"
-            action="deprecate-deal"
-            blocked={blocked || !deprecateReason.trim()}
-            pending={deprecate.pending}
-            last={deprecate.last}
-            onConfirm={() => void deprecate.run({ id, reason: deprecateReason.trim() })}
-            consequence="Marks the deal deprecated. A second deprecate may 409 depending on status."
+            <WriteForm
+              title={`Run a bulk ${bulkAction}?`}
+              confirmLabel={bulkAction === "cancel" ? "Cancel deal" : "Update notes"}
+              action="bulk-deals"
+              blocked={blocked}
+              pending={bulk.pending}
+              // Reported below instead: a 200 here can still carry failures.
+              last={bulk.last?.kind === "ok" ? undefined : bulk.last}
+              onConfirm={() =>
+                void bulk.run({
+                  operations: [
+                    {
+                      action: bulkAction,
+                      deal_id: id,
+                      ...(bulkNotes.trim() ? { notes: bulkNotes.trim() } : {}),
+                      ...(bulkBuyer.value ? { buyer_identity: bulkBuyer.value } : {}),
+                    },
+                  ],
+                })
+              }
+              consequence={
+                bulkAction === "cancel"
+                  ? "Sets the deal to cancelled, with the notes as the cancel reason. Nothing in this console reverses it."
+                  : "Replaces the deal's notes and stamps updated_at. Partial success is possible in a batch: re-read the list rather than repeating it blindly."
+              }
+            >
+              <FormFields>
+                <EnumSelect
+                  hint="Cancel ends the deal; update replaces its notes."
+                  label="Action"
+                  value={bulkAction}
+                  options={DEAL_EDIT_ACTIONS}
+                  onChange={(v) => v && setBulkAction(v)}
+                  disabled={blocked}
+                  sx={{ minWidth: 140 }}
+                />
+                <TipField hint="Optional notes. For update they replace the deal's notes; for cancel they become the cancel reason." size="small" label="Notes (optional)" value={bulkNotes} onChange={(e) => setBulkNotes(e.target.value)} disabled={blocked} />
+              </FormFields>
+            </WriteForm>
+            <Box sx={{ mt: 1.5 }}>{bulkBuyer.node}</Box>
+            {bulk.last?.kind === "ok" && (
+              <Box sx={{ mt: 1 }} data-block="bulk-results">
+                {bulk.last.data.results.map((r) => (
+                  <Typography
+                    key={r.index}
+                    variant="body2"
+                    sx={{ color: r.success ? undefined : palette.error }}
+                    data-state={r.success ? "op-ok" : "op-failed"}
+                  >
+                    {r.action} {r.deal_id ?? ""}: {r.success ? "done" : r.error ?? "failed"}
+                  </Typography>
+                ))}
+              </Box>
+            )}
+          </ActionBlock>
+          <ActionBlock
+            title="Deprecate"
+            description="Marks this deal deprecated. A reason is required; name its replacement if there is one."
           >
-            <TipField hint="Why the deal is being deprecated. Required; sent to the agent with the request." size="small" label="Reason" value={deprecateReason} onChange={(e) => setDeprecateReason(e.target.value)} disabled={blocked} />
-          </WriteForm>
-        </ActionBlock>
+            <WriteForm
+              title="Deprecate this deal?"
+              confirmLabel="Deprecate"
+              action="deprecate-deal"
+              blocked={blocked || !deprecateReason.trim()}
+              pending={deprecate.pending}
+              last={deprecate.last}
+              onConfirm={() =>
+                void deprecate.run({
+                  id,
+                  reason: deprecateReason.trim(),
+                  ...(replacement.trim() ? { replacement_deal_id: replacement.trim() } : {}),
+                })
+              }
+              consequence="Marks the deal deprecated. A second deprecate may 409 depending on status."
+            >
+              <FormFields>
+                <TipField hint="Why the deal is being deprecated. Required; sent to the agent with the request." size="small" label="Reason" value={deprecateReason} onChange={(e) => setDeprecateReason(e.target.value)} disabled={blocked} />
+                <DealPicker
+                  label="Replacement deal (optional)"
+                  value={replacement}
+                  onChange={setReplacement}
+                  disabled={blocked}
+                  hint="The deal that takes this one's place, if there is one. Pick one or paste an id."
+                />
+              </FormFields>
+            </WriteForm>
+          </ActionBlock>
         </>
       )}
     </Box>
@@ -909,38 +943,6 @@ function BuyerStatusBody({ dealId, buyerUrl }: { dealId: string; buyerUrl: strin
   );
   return (
     <ReadOutcome name="Buyer status" data={buyer.data} result={buyer.result} />
-  );
-}
-
-/**
- * Which connectors exist is deployment settings, not code, so the known
- * names are suggestions and anything can be typed. An unknown name is a 400
- * that lists the configured ones.
- */
-export function SspNameField({
-  label,
-  hint,
-  value,
-  onChange,
-  disabled,
-}: {
-  label: string;
-  hint?: string;
-  value: string;
-  onChange: (value: string) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <Autocomplete
-      freeSolo
-      size="small"
-      options={SSP_NAMES}
-      inputValue={value}
-      onInputChange={(_, next) => onChange(next)}
-      disabled={disabled}
-      sx={{ minWidth: 200 }}
-      renderInput={(params) => <TipField {...params} hint={hint} label={label} />}
-    />
   );
 }
 

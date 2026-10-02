@@ -1,0 +1,160 @@
+{
+  "capturedFrom": "https://sales-agent.ad-tags.com/openapi.json",
+  "capturedAt": "2026-10-02",
+  "schemas": {
+    "QuoteRequest": [
+      "agent_url",
+      "audience_plan",
+      "buyer_identity",
+      "consent_context",
+      "deal_type",
+      "flight_end",
+      "flight_start",
+      "idempotency_key",
+      "impressions",
+      "linear_tv",
+      "media_type",
+      "product_id",
+      "rate_card_id",
+      "target_cpm"
+    ],
+    "DealBookingRequest": [
+      "audience_plan",
+      "buyer_identity",
+      "consent_context",
+      "idempotency_key",
+      "notes",
+      "quote_id"
+    ],
+    "DealFromTemplateRequest": [
+      "agent_url",
+      "buyer_identity",
+      "deal_type",
+      "flight_end",
+      "flight_start",
+      "impressions",
+      "max_cpm",
+      "notes",
+      "product_id"
+    ],
+    "DealPushRequest": [
+      "buyer_api_keys",
+      "buyer_seat_ids",
+      "buyer_urls",
+      "deal_id",
+      "deal_type",
+      "flight_end",
+      "flight_start",
+      "impressions",
+      "name",
+      "price"
+    ],
+    "SSPDealDistributeRequest": [
+      "advertiser",
+      "buyer_seat_ids",
+      "cpm",
+      "deal_id",
+      "deal_type",
+      "end_date",
+      "inventory_type",
+      "name",
+      "ssp_name",
+      "start_date",
+      "targeting"
+    ],
+    "CuratedDealRequest": [
+      "audience_segments",
+      "buyer_seat_ids",
+      "content_categories",
+      "curator_id",
+      "deal_type",
+      "flight_end",
+      "flight_start",
+      "impressions",
+      "max_cpm",
+      "product_id"
+    ],
+    "DealMigrationRequest": [
+      "buyer_identity",
+      "buyer_seat_ids",
+      "deal_type",
+      "flight_end",
+      "flight_start",
+      "impressions",
+      "max_cpm",
+      "old_deal_id",
+      "product_id",
+      "reason"
+    ],
+    "DealDeprecationRequest": [
+      "reason",
+      "replacement_deal_id"
+    ],
+    "DealRequest": [
+      "dsp_platform",
+      "proposal_id"
+    ],
+    "BulkDealOperation": [
+      "action",
+      "buyer_identity",
+      "deal_id",
+      "notes",
+      "quote_id"
+    ],
+    "ConsentContext": [
+      "applicable_regimes",
+      "diligence_status",
+      "gdpr_applies",
+      "gpp_section_ids",
+      "gpp_string",
+      "tcf_string",
+      "us_privacy",
+      "verified_at"
+    ],
+    "LinearTVParams": [
+      "dayparts",
+      "dmas",
+      "grps_requested",
+      "measurement_currency",
+      "networks",
+      "rotation",
+      "spot_length",
+      "target_cpp",
+      "target_demo"
+    ],
+    "BuyerIdentity": [
+      "advertiser_id",
+      "advertiser_industry",
+      "advertiser_name",
+      "agency_holding_company",
+      "agency_id",
+      "agency_name",
+      "campaign_id",
+      "campaign_name",
+      "dsp_platform",
+      "seat_id",
+      "seat_name"
+    ],
+    "QuoteBuyerIdentityModel": [
+      "advertiser_id",
+      "agency_id",
+      "dsp_platform",
+      "seat_id"
+    ]
+  },
+  "queries": {
+    "GET /api/v1/deals": [
+      "status"
+    ],
+    "GET /api/v1/deals/export": [
+      "format",
+      "status"
+    ],
+    "GET /api/v1/deals/{deal_id}/buyer-status": [
+      "buyer_url"
+    ],
+    "GET /api/v1/deals/{deal_id}/ssp-troubleshoot": [
+      "ssp_name"
+    ]
+  }
+}

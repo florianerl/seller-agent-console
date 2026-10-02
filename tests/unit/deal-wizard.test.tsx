@@ -415,8 +415,14 @@ describe("the new-deal wizard", () => {
     await next(user);
     await user.click(await createButton());
 
-    await user.type(await screen.findByLabelText("Buyer URL"), "https://buyer.example");
-    await user.click(screen.getByRole("button", { name: "Notify buyer" }));
+    await user.type(await screen.findByLabelText("Buyer URLs"), "https://buyer.example");
+    await user.click(screen.getByRole("button", { name: "Push" }));
+    // Pushing to an outside party asks first, even here.
+    await user.click(await waitFor(() => {
+      const el = document.querySelector('[data-action="confirm-mutation"]');
+      expect(el).toBeTruthy();
+      return el as HTMLElement;
+    }));
 
     await waitFor(() =>
       expect(pushed).toEqual([{ deal_id: "D-7", buyer_urls: ["https://buyer.example"] }]),
@@ -590,7 +596,7 @@ describe("the new-deal wizard", () => {
     await next(user);
     await user.click(await createButton());
 
-    await waitFor(() => expect(sent).toEqual([{ curator_id: "cur-1" }]));
+    await waitFor(() => expect(sent).toEqual([{ curator_id: "cur-1", deal_type: "PMP" }]));
   });
 
   it("says why it was refused, and lets the operator go back and fix it", async () => {

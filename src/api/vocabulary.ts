@@ -57,6 +57,16 @@ export type OrderStatus = (typeof ORDER_STATUSES)[number]["value"];
 export const ACTOR_KINDS = spelled(["human", "agent", "system"] as const);
 export type ActorKind = (typeof ACTOR_KINDS)[number]["value"];
 
+/** `DiligenceStatus` of a request's consent context. */
+export const DILIGENCE_STATUSES = spelled(["unknown", "pending", "passed", "failed"] as const);
+export type DiligenceStatus = (typeof DILIGENCE_STATUSES)[number]["value"];
+
+/**
+ * The export's `status=` filter, in the stored vocabulary — not the wire one
+ * the deal list uses (`confirmed` here is `booked` there).
+ */
+export const DEAL_EXPORT_STATUSES = spelled(["confirmed", "proposed", "cancelled"] as const);
+
 /**
  * `GET /api/v1/deals/export?format=`. The agent documents these five and
  * defaults to `generic`; the others reshape the same deals for one DSP's import.
@@ -114,11 +124,11 @@ export const LEGACY_DEAL_TYPES: readonly Option[] = [
 ];
 
 /**
- * `MediaType`, iab_agentic_primitives/primitives/pricing.py. `linear_tv` is
- * left out on purpose: it requires a `linear_tv` parameter block the quote
- * form does not collect, so offering it would only ever produce a 422.
+ * `MediaType`, iab_agentic_primitives/primitives/pricing.py. `linear_tv` needs
+ * a `linear_tv` parameter block, which the deal wizard collects when it is
+ * chosen; sent without one it is a 422.
  */
-export const QUOTE_MEDIA_TYPES = spelled(["digital", "ctv"] as const);
+export const QUOTE_MEDIA_TYPES = spelled(["digital", "ctv", "linear_tv"] as const);
 export type QuoteMediaType = (typeof QUOTE_MEDIA_TYPES)[number]["value"];
 
 /**

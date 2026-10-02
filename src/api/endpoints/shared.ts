@@ -46,3 +46,43 @@ export type BuyerIdentityInput = {
   advertiser_id?: string;
   dsp_platform?: string;
 };
+
+/**
+ * The full identity the quote and booking routes take (`BuyerIdentity`). The
+ * template and migration routes use a narrower model with only the four
+ * fields of `BuyerIdentityInput`, so the two stay separate types.
+ */
+export type BuyerIdentityFull = BuyerIdentityInput & {
+  seat_name?: string;
+  agency_name?: string;
+  agency_holding_company?: string;
+  advertiser_name?: string;
+  advertiser_industry?: string;
+  campaign_id?: string;
+  campaign_name?: string;
+};
+
+/** `ConsentContext`: privacy signals that ride with a quote or a booking (FD-10). */
+export type ConsentContextInput = {
+  applicable_regimes?: string[];
+  gpp_string?: string;
+  gpp_section_ids?: number[];
+  tcf_string?: string;
+  gdpr_applies?: boolean;
+  us_privacy?: string;
+  diligence_status?: "unknown" | "pending" | "passed" | "failed";
+  verified_at?: string;
+};
+
+/** `LinearTVParams`: required when the media type is linear TV, and refused otherwise. */
+export type LinearTvInput = {
+  target_demo: string;
+  grps_requested?: number;
+  dayparts?: string[];
+  networks?: string[];
+  dmas?: string[];
+  spot_length?: number;
+  target_cpp?: { amount_micros: number; currency: string };
+  measurement_currency?: string;
+  rotation?: string;
+};

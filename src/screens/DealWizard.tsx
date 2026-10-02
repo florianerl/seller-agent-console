@@ -1,7 +1,4 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import Accordion from "@mui/material/Accordion";
-import AccordionDetails from "@mui/material/AccordionDetails";
-import AccordionSummary from "@mui/material/AccordionSummary";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -14,10 +11,11 @@ import {
   createQuote,
   curators,
   dealFromTemplate,
-  distributeDeal,
   generateDeal,
   openProposals,
-  pushDeal,
+  type BuyerIdentityFull,
+  type ConsentContextInput,
+  type LinearTvInput,
   type BuyerIdentityInput,
   type Money,
   type Quote,
@@ -39,8 +37,10 @@ import { useMutation } from "../query/useMutation";
 import { useOpenProposalSupport } from "../query/useOpenProposalSupport";
 import { useResource } from "../query/useResource";
 import { palette } from "../theme/palette";
-import { SspNameField } from "./mutations";
-import { CuratorPicker, ProductMultiPicker } from "./pickers";
+import { CuratorPicker, ProductMultiPicker, ProductPicker } from "./pickers";
+import { Optional } from "./dealFields";
+import { useConsent, useJsonObject, useLinearTv, useListField } from "./dealHooks";
+import { DistributeForm, PushForm } from "./DealSend";
 import { QuoteView, type QuoteAnswer } from "./QuoteView";
 
 type Method = "new-quote" | "quote" | "proposal" | "template" | "curated";
@@ -128,29 +128,6 @@ function createdDealId(data: unknown): string | undefined {
  * the deal exists, and optional: the wizard is finished either way.
  */
 function SendNow({ dealId }: { dealId: string }) {
-  const { writesEnabled } = useCredential();
-  const [buyerUrl, setBuyerUrl] = useState("");
-  const [ssp, setSsp] = useState("");
-  const push = useMutation<{ deal_id: string; buyer_urls: string[] }, unknown>(
-    (c, a) => pushDeal(c, a),
-    { invalidates: ["deals:*"] },
-  );
-  const distribute = useMutation<{ deal_id: string; ssp_name?: string }, unknown>(
-    (c, a) => distributeDeal(c, a),
-    { invalidates: ["deals:*"] },
-  );
-
-  const outcome = (r: Result<unknown> | undefined, what: string) =>
-    r && (
-      <Typography
-        variant="body2"
-        sx={{ mt: 0.5, color: r.kind === "ok" ? undefined : palette.error }}
-        data-state={r.kind === "ok" ? "send-ok" : "send-failed"}
-      >
-        {r.kind === "ok" ? `${what} accepted.` : describe(r)}
-      </Typography>
-    );
-
   return (
     <Box sx={{ mt: 2.5 }} data-block="send-now">
       <Typography variant="body2" sx={{ fontWeight: 600 }}>
@@ -160,48 +137,10 @@ function SendNow({ dealId }: { dealId: string }) {
         Optional. Hands deal <code>{dealId}</code> to a buyer or an SSP. A retry after an unclear
         failure may send it twice.
       </Typography>
-      <Box sx={{ display: "flex", gap: 1.5, alignItems: "flex-start", flexWrap: "wrap" }}>
-        <TipField
-          hint="Full URL of the buyer agent to notify, for example https://buyer.example."
-          size="small"
-          label="Buyer URL"
-          value={buyerUrl}
-          onChange={(e) => setBuyerUrl(e.target.value)}
-          sx={{ minWidth: 240 }}
-        />
-        <Button
-          variant="outlined"
-          size="small"
-          data-action="send-buyer"
-          disabled={!writesEnabled || !buyerUrl.trim() || push.pending}
-          onClick={() => void push.run({ deal_id: dealId, buyer_urls: [buyerUrl.trim()] })}
-          sx={{ mt: 0.5 }}
-        >
-          Notify buyer
-        </Button>
+      <PushForm dealId={dealId} />
+      <Box sx={{ mt: 2 }}>
+        <DistributeForm dealId={dealId} />
       </Box>
-      {outcome(push.last, "The buyer notification was")}
-      <Box sx={{ display: "flex", gap: 1.5, alignItems: "flex-start", flexWrap: "wrap", mt: 1.5 }}>
-        <SspNameField
-          label="SSP name (optional)"
-          hint="Name of the SSP connector to send the deal to. Pick a known one or type another; leave it empty for the agent's default."
-          value={ssp}
-          onChange={setSsp}
-        />
-        <Button
-          variant="outlined"
-          size="small"
-          data-action="send-ssp"
-          disabled={!writesEnabled || distribute.pending}
-          onClick={() =>
-            void distribute.run({ deal_id: dealId, ...(ssp.trim() ? { ssp_name: ssp.trim() } : {}) })
-          }
-          sx={{ mt: 0.5 }}
-        >
-          Send to SSP
-        </Button>
-      </Box>
-      {outcome(distribute.last, "The SSP send was")}
     </Box>
   );
 }
@@ -310,7 +249,34 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
   // agent enforces). One field, because an operator holds one number.
   const [cpm, setCpm] = useState("");
   const [notes, setNotes] = useState("");
-  const [buyer, setBuyer] = useState({ advertiser_id: "", agency_id: "", seat_id: "", dsp_platform: "" });
+  const emptyBuyer = {
+    advertiser_id: "",
+    agency_id: "",
+    seat_id: "",
+    dsp_platform: "",
+    advertiser_name: "",
+    advertiser_industry: "",
+    agency_name: "",
+    agency_holding_company: "",
+    seat_name: "",
+    campaign_id: "",
+    campaign_name: "",
+  };
+  const [buyer, setBuyer] = useState(emptyBuyer);
+  const [agentUrl, setAgentUrl] = useState("");
+  const [rateCardId, setRateCardId] = useState("");
+  const [dspPlatform, setDspPlatform] = useState("");
+  const [curatedDealType, setCuratedDealType] = useState("PMP");
+  const [curatedProduct, setCuratedProduct] = useState("");
+  const consent = useConsent();
+  const audience = useJsonObject(
+    "Audience plan (JSON)",
+    "An audience plan as a JSON object. The agent checks it against what it supports and rejects the parts it cannot, so it is sent as you write it. Leave empty for none.",
+  );
+  const linear = useLinearTv();
+  const seatList = useListField("Buyer seat ids", "Seat ids the deal is restricted to, separated by commas. Leave empty for any seat.");
+  const segmentList = useListField("Audience segments", "Audience segment ids to target, separated by commas.");
+  const categoryList = useListField("Content categories", "Content category ids to target, separated by commas.");
 
   const prods = productIds.map((id) => id.trim()).filter(Boolean);
   const prod = prods[0] ?? "";
@@ -328,11 +294,19 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
   const flightOk =
     (flightStart === "" && flightEnd === "") ||
     (flightStart !== "" && flightEnd !== "" && flightEnd >= flightStart);
-  const buyerIdentity: BuyerIdentityInput = Object.fromEntries(
+  // The quote and booking routes take the full identity; the template route
+  // has a narrower model, so a name or campaign typed here is simply not sent
+  // on that route (and its fields are not shown there).
+  const buyerFull: BuyerIdentityFull = Object.fromEntries(
     Object.entries(buyer)
       .map(([k, v]) => [k, v.trim()] as const)
       .filter(([, v]) => v !== ""),
   );
+  const NARROW = ["seat_id", "agency_id", "advertiser_id", "dsp_platform"] as const;
+  const buyerNarrow: BuyerIdentityInput = Object.fromEntries(
+    Object.entries(buyerFull).filter(([k]) => (NARROW as readonly string[]).includes(k)),
+  );
+  const buyerIdentity: BuyerIdentityFull = method === "template" ? buyerNarrow : buyerFull;
   const hasBuyer = Object.keys(buyerIdentity).length > 0;
   const flight = flightStart !== "" ? { flight_start: flightStart, flight_end: flightEnd } : {};
   const bookNotes = notes.trim() ? { notes: notes.trim() } : {};
@@ -344,6 +318,11 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
     ...flight,
     ...(hasCpm ? { target_cpm: { amount_micros: Math.round(cpmValue * 1_000_000), currency: "USD" } } : {}),
     ...(hasBuyer ? { buyer_identity: buyerIdentity } : {}),
+    ...(agentUrl.trim() ? { agent_url: agentUrl.trim() } : {}),
+    ...(rateCardId.trim() ? { rate_card_id: rateCardId.trim() } : {}),
+    ...(mediaType === "linear_tv" && linear.value ? { linear_tv: linear.value } : {}),
+    ...(audience.value ? { audience_plan: audience.value } : {}),
+    ...(consent.value ? { consent_context: consent.value } : {}),
   };
   // The quotes are only worth booking for the request they answered. Change a
   // term after quoting and this changes, which drops them all instead of
@@ -378,18 +357,30 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
       flight_start?: string;
       flight_end?: string;
       target_cpm?: { amount_micros: number; currency: string };
-      buyer_identity?: BuyerIdentityInput;
+      buyer_identity?: BuyerIdentityFull;
+      agent_url?: string;
+      rate_card_id?: string;
+      linear_tv?: LinearTvInput;
+      audience_plan?: Record<string, unknown>;
+      consent_context?: ConsentContextInput;
     },
     { quote: Quote }
   >((c, a) => createQuote(c, a));
   const book = useMutation<
-    { quote_id: string; idempotency_key: string; notes?: string; buyer_identity?: BuyerIdentityInput },
+    {
+      quote_id: string;
+      idempotency_key: string;
+      notes?: string;
+      buyer_identity?: BuyerIdentityFull;
+      audience_plan?: Record<string, unknown>;
+      consent_context?: ConsentContextInput;
+    },
     unknown
   >(
     (c, a) => bookDeal(c, a),
     { invalidates },
   );
-  const gen = useMutation<{ proposal_id: string }, unknown>((c, a) => generateDeal(c, a), {
+  const gen = useMutation<{ proposal_id: string; dsp_platform?: string }, unknown>((c, a) => generateDeal(c, a), {
     invalidates,
   });
   const template = useMutation<
@@ -402,10 +393,11 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
       flight_end?: string;
       buyer_identity?: BuyerIdentityInput;
       notes?: string;
+      agent_url?: string;
     },
     unknown
   >((c, a) => dealFromTemplate(c, a), { invalidates });
-  const curated = useMutation<{ curator_id: string }, unknown>(
+  const curated = useMutation<Parameters<typeof createCuratedDeal>[1], unknown>(
     (c, a) => createCuratedDeal(c, a),
     { invalidates },
   );
@@ -457,11 +449,18 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
   const p = proposalId.trim();
   const cur = curatorId.trim();
   const ready = {
-    "new-quote": prods.length > 0 && impressionsOk && cpmOk && flightOk,
-    quote: q !== "",
+    "new-quote":
+      prods.length > 0 &&
+      impressionsOk &&
+      cpmOk &&
+      flightOk &&
+      audience.valid &&
+      consent.valid &&
+      (mediaType !== "linear_tv" || linear.valid),
+    quote: q !== "" && audience.valid && consent.valid,
     proposal: p !== "",
     template: prods.length > 0 && impressionsOk && cpmOk && flightOk,
-    curated: cur !== "",
+    curated: cur !== "" && impressionsOk && cpmOk && flightOk,
   }[method];
 
   const dealTypeLabel = DEAL_TYPES.find((t) => t.value === dealType)?.label ?? dealType;
@@ -472,8 +471,17 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
   if (hasBuyer)
     termRows.push(["Buyer", Object.entries(buyerIdentity).map(([k, v]) => `${k.replace(/_/g, " ")}: ${v}`).join(", ")]);
   if (notes.trim()) termRows.push(["Notes", notes.trim()]);
+  if (method === "new-quote" && mediaType === "linear_tv" && linear.value)
+    termRows.push(["Linear TV", `${linear.value.target_demo}, ${linear.value.spot_length}s spots`]);
+  if (agentUrl.trim()) termRows.push(["Agent URL", agentUrl.trim()]);
+  if (method === "new-quote" && rateCardId.trim()) termRows.push(["Rate card", rateCardId.trim()]);
+  if (audience.value) termRows.push(["Audience plan", "included"]);
+  if (consent.value) termRows.push(["Privacy consent", "included"]);
   const quoteRows: [string, string][] = [["Quote", q]];
   if (notes.trim()) quoteRows.push(["Notes", notes.trim()]);
+  if (hasBuyer) quoteRows.push(["Buyer", Object.keys(buyerIdentity).length + " details"]);
+  if (audience.value) quoteRows.push(["Audience plan", "included"]);
+  if (consent.value) quoteRows.push(["Privacy consent", "included"]);
   const summary: [string, string][] = {
     "new-quote": [
       [multi ? "Products" : "Product", prods.join(", ")],
@@ -526,6 +534,8 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
         ...bookNotes,
         // The identity the quote was priced for: the agent re-verifies the tier at booking.
         ...(hasBuyer ? { buyer_identity: buyerIdentity } : {}),
+        ...(audience.value ? { audience_plan: audience.value } : {}),
+        ...(consent.value ? { consent_context: consent.value } : {}),
       });
       current = { ...current, [id]: r };
       setDeals(current);
@@ -550,6 +560,7 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
         ...flight,
         ...(hasBuyer ? { buyer_identity: buyerIdentity } : {}),
         ...bookNotes,
+        ...(agentUrl.trim() ? { agent_url: agentUrl.trim() } : {}),
       });
       current = { ...current, [id]: r };
       setDeals(current);
@@ -562,13 +573,30 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
       case "new-quote":
         return void (allQuoted ? runBooking() : runQuotes());
       case "quote":
-        return void book.run({ quote_id: q, idempotency_key: keyFor(`quote|${q}`), ...bookNotes });
+        return void book.run({
+          quote_id: q,
+          idempotency_key: keyFor(`quote|${q}`),
+          ...bookNotes,
+          ...(hasBuyer ? { buyer_identity: buyerIdentity } : {}),
+          ...(audience.value ? { audience_plan: audience.value } : {}),
+          ...(consent.value ? { consent_context: consent.value } : {}),
+        });
       case "proposal":
-        return void gen.run({ proposal_id: p });
+        return void gen.run({ proposal_id: p, ...(dspPlatform.trim() ? { dsp_platform: dspPlatform.trim() } : {}) });
       case "template":
         return void runTemplates();
       case "curated":
-        return void curated.run({ curator_id: cur });
+        return void curated.run({
+          curator_id: cur,
+          ...(curatedDealType.trim() ? { deal_type: curatedDealType.trim() } : {}),
+          ...(curatedProduct.trim() ? { product_id: curatedProduct.trim() } : {}),
+          ...(hasCpm ? { max_cpm: cpmValue } : {}),
+          ...(hasVolume ? { impressions: volume } : {}),
+          ...flight,
+          ...(seatList.value ? { buyer_seat_ids: seatList.value } : {}),
+          ...(segmentList.value ? { audience_segments: segmentList.value } : {}),
+          ...(categoryList.value ? { content_categories: categoryList.value } : {}),
+        });
     }
   }
 
@@ -593,7 +621,18 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
       setFlightEnd("");
       setCpm("");
       setNotes("");
-      setBuyer({ advertiser_id: "", agency_id: "", seat_id: "", dsp_platform: "" });
+      setBuyer(emptyBuyer);
+      setAgentUrl("");
+      setRateCardId("");
+      setDspPlatform("");
+      setCuratedDealType("PMP");
+      setCuratedProduct("");
+      consent.reset();
+      audience.reset();
+      linear.reset();
+      seatList.reset();
+      segmentList.reset();
+      categoryList.reset();
       setQuotedFor(undefined);
       quoteReq.reset();
       book.reset();
@@ -628,6 +667,57 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
   // The commercial terms, shared by the two routes that price a product. The
   // agent prices from its own rate card, so everything here is optional except
   // the volume a guaranteed deal cannot be priced without.
+  const buyerSection = (
+    <Optional summary="Buyer details (optional)">
+      <Typography variant="caption" color="text.secondary">
+        Who the deal is for. The agent uses it to pick the pricing tier, capped by what its
+        registry can verify, so it can change the rate.
+      </Typography>
+      {buyerField("advertiser_id", "Advertiser id", "The advertiser the deal is for.")}
+      {buyerField("agency_id", "Agency id", "The agency buying on the advertiser's behalf.")}
+      {buyerField("seat_id", "Seat id", "The DSP seat the deal will be activated on.")}
+      {buyerField("dsp_platform", "DSP platform", "DSP platform slug, for example ttd or dv360.")}
+      {method !== "template" && (
+        <>
+          {buyerField("advertiser_name", "Advertiser name", "Display name of the advertiser.")}
+          {buyerField("advertiser_industry", "Advertiser industry", "Industry the advertiser is in.")}
+          {buyerField("agency_name", "Agency name", "Display name of the agency.")}
+          {buyerField("agency_holding_company", "Agency holding company", "Holding company the agency belongs to.")}
+          {buyerField("seat_name", "Seat name", "Display name of the DSP platform.")}
+          {buyerField("campaign_id", "Campaign id", "Scopes the deal to one campaign.")}
+          {buyerField("campaign_name", "Campaign name", "Display name of the campaign.")}
+        </>
+      )}
+    </Optional>
+  );
+  const moreOptions = (
+    <>
+      <Optional summary="More options (optional)">
+        <TipField
+          hint="A2A endpoint of the buyer agent making the request, so the agent can verify its trust in its registry."
+          size="small"
+          label="Agent URL"
+          value={agentUrl}
+          onChange={(e) => setAgentUrl(e.target.value)}
+          fullWidth
+        />
+        {method === "new-quote" && (
+          <>
+            <TipField
+              hint="Id of the private rate card to price against, issued by the seller. The rate card itself is never sent."
+              size="small"
+              label="Rate card id"
+              value={rateCardId}
+              onChange={(e) => setRateCardId(e.target.value)}
+              fullWidth
+            />
+            {audience.node}
+          </>
+        )}
+      </Optional>
+      {method === "new-quote" && consent.node}
+    </>
+  );
   const terms = (
     <>
       <TipField
@@ -683,27 +773,8 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
         fullWidth
       />
       {notesField}
-      <Accordion disableGutters variant="outlined" sx={{ "&:before": { display: "none" } }}>
-        <AccordionSummary
-          expandIcon={
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true" focusable="false">
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
-          }
-        >
-          <Typography variant="body2">Buyer details (optional)</Typography>
-        </AccordionSummary>
-        <AccordionDetails sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          <Typography variant="caption" color="text.secondary">
-            Who the deal is for. The agent uses it to pick the pricing tier, capped by what its
-            registry can verify, so it can change the rate.
-          </Typography>
-          {buyerField("advertiser_id", "Advertiser id", "The advertiser the deal is for.")}
-          {buyerField("agency_id", "Agency id", "The agency buying on the advertiser's behalf.")}
-          {buyerField("seat_id", "Seat id", "The DSP seat the deal will be activated on.")}
-          {buyerField("dsp_platform", "DSP platform", "DSP platform slug, for example ttd or dv360.")}
-        </AccordionDetails>
-      </Accordion>
+      {buyerSection}
+      {moreOptions}
     </>
   );
 
@@ -760,13 +831,14 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
               sx={{ width: "100%" }}
             />
             <EnumSelect
-              hint="Media type the quote is for. The agent accepts only the listed values."
+              hint="Media type the quote is for. Linear TV is priced on ratings and asks for its own details."
               label="Media type"
               value={mediaType}
               options={QUOTE_MEDIA_TYPES}
               onChange={(v) => v && setMediaType(v)}
               sx={{ width: "100%" }}
             />
+            {mediaType === "linear_tv" && linear.node}
             {terms}
           </>
         )}
@@ -782,6 +854,13 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
           />
         )}
         {method === "quote" && notesField}
+        {method === "quote" && (
+          <>
+            {buyerSection}
+            {audience.node}
+            {consent.node}
+          </>
+        )}
         {method === "proposal" && (
           <TipField
             hint="Id of an accepted proposal. Copy it from the Proposals screen."
@@ -790,6 +869,16 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
             value={proposalId}
             onChange={(e) => setProposalId(e.target.value)}
             autoFocus
+            fullWidth
+          />
+        )}
+        {method === "proposal" && (
+          <TipField
+            hint="DSP platform slug the deal is for, for example ttd or dv360. Optional."
+            size="small"
+            label="DSP platform (optional)"
+            value={dspPlatform}
+            onChange={(e) => setDspPlatform(e.target.value)}
             fullWidth
           />
         )}
@@ -814,7 +903,64 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
           </>
         )}
         {method === "curated" && (
-          <CuratorPicker value={curatorId} onChange={setCuratorId} sx={{ width: "100%" }} />
+          <>
+            <CuratorPicker value={curatorId} onChange={setCuratorId} sx={{ width: "100%" }} />
+            <TipField
+              hint="Deal type for the curated deal. The agent defaults it to PMP; this route does not use the PG, PD and PA codes."
+              size="small"
+              label="Deal type"
+              value={curatedDealType}
+              onChange={(e) => setCuratedDealType(e.target.value)}
+              fullWidth
+            />
+            <ProductPicker value={curatedProduct} onChange={setCuratedProduct} hint="Optional product to base the curated deal on. Pick one, or type or paste an id." sx={{ width: "100%" }} />
+            <TipField
+              hint="Optional ceiling in dollars for the CPM, a plain number such as 12.50."
+              size="small"
+              type="number"
+              label="Max CPM (optional)"
+              value={cpm}
+              onChange={(e) => setCpm(e.target.value)}
+              error={!cpmOk}
+              fullWidth
+            />
+            <TipField
+              hint="Optional number of impressions, a whole number above zero."
+              size="small"
+              type="number"
+              label="Impressions (optional)"
+              value={impressions}
+              onChange={(e) => setImpressions(e.target.value)}
+              error={impressions.trim() !== "" && !volumeOk}
+              fullWidth
+            />
+            <Box sx={{ display: "flex", gap: 2, "& > span": { flex: 1 } }}>
+              <TipField
+                hint="First day of the flight. Give both dates or neither."
+                size="small"
+                label="Flight start (optional)"
+                type="date"
+                slotProps={{ inputLabel: { shrink: true } }}
+                value={flightStart}
+                onChange={(e) => setFlightStart(e.target.value)}
+                fullWidth
+              />
+              <TipField
+                hint="Last day of the flight, on or after the start."
+                size="small"
+                label="Flight end (optional)"
+                type="date"
+                slotProps={{ inputLabel: { shrink: true } }}
+                value={flightEnd}
+                onChange={(e) => setFlightEnd(e.target.value)}
+                error={!flightOk && flightEnd !== ""}
+                fullWidth
+              />
+            </Box>
+            {seatList.node}
+            {segmentList.node}
+            {categoryList.node}
+          </>
         )}
       </Box>
     );

@@ -2,7 +2,12 @@ import { z } from "zod";
 import { get, request, type Connection } from "../http";
 import type { Result } from "../errors";
 import type { DealTypeCode, QuoteMediaType } from "../vocabulary";
-import { Money, type BuyerIdentityInput } from "./shared";
+import {
+  Money,
+  type BuyerIdentityFull,
+  type ConsentContextInput,
+  type LinearTvInput,
+} from "./shared";
 
 const PATHS = {
   quotes: "/api/v1/quotes",
@@ -106,7 +111,16 @@ export const createQuote = (
     flight_end?: string;
     /** Advisory: the CPM the buyer would like. The agent prices on its own rate card. */
     target_cpm?: { amount_micros: number; currency: string };
-    buyer_identity?: BuyerIdentityInput;
+    buyer_identity?: BuyerIdentityFull;
+    /** A2A endpoint of the requesting buyer agent, for registry trust verification. */
+    agent_url?: string;
+    /** Seller-issued id of the pair's private rate card to price against. */
+    rate_card_id?: string;
+    /** Required when `media_type` is `linear_tv`, refused otherwise. */
+    linear_tv?: LinearTvInput;
+    /** Open object; the agent pre-flights it against its capabilities. */
+    audience_plan?: Record<string, unknown>;
+    consent_context?: ConsentContextInput;
   },
   signal?: AbortSignal,
 ): Promise<Result<QuoteResponse>> =>

@@ -2,7 +2,13 @@ import { z } from "zod";
 import { get, request, TIMEOUTS, type Connection } from "../http";
 import type { Result } from "../errors";
 import type { BulkDealAction, DealTypeCode } from "../vocabulary";
-import { Money, MutationAck, type BuyerIdentityInput } from "./shared";
+import {
+  Money,
+  MutationAck,
+  type BuyerIdentityFull,
+  type BuyerIdentityInput,
+  type ConsentContextInput,
+} from "./shared";
 
 const PATHS = {
   deals: "/api/v1/deals",
@@ -404,7 +410,10 @@ export const bookDeal = (
     idempotency_key: string;
     notes?: string;
     /** Must match the identity the quote was priced for; the agent re-verifies the tier. */
-    buyer_identity?: BuyerIdentityInput;
+    buyer_identity?: BuyerIdentityFull;
+    /** Open object, frozen with the booking. */
+    audience_plan?: Record<string, unknown>;
+    consent_context?: ConsentContextInput;
   },
   signal?: AbortSignal,
 ): Promise<Result<MutationAck>> =>
@@ -429,6 +438,8 @@ export const dealFromTemplate = (
     flight_end?: string;
     buyer_identity?: BuyerIdentityInput;
     notes?: string;
+    /** A2A endpoint of the requesting buyer agent. */
+    agent_url?: string;
   },
   signal?: AbortSignal,
 ): Promise<Result<MutationAck>> =>
@@ -475,6 +486,7 @@ export const bulkDealOperations = (
       deal_id?: string;
       quote_id?: string;
       notes?: string;
+      buyer_identity?: BuyerIdentityInput;
     }[];
   },
   signal?: AbortSignal,
@@ -488,7 +500,19 @@ export const bulkDealOperations = (
 
 export const pushDeal = (
   c: Connection,
-  body: { deal_id: string; buyer_urls: string[] },
+  body: {
+    deal_id: string;
+    buyer_urls: string[];
+    /** One API key per buyer URL, for buyers that need one. Sent to the agent, which forwards it. */
+    buyer_api_keys?: string[];
+    deal_type?: string;
+    price?: number;
+    name?: string;
+    impressions?: number;
+    flight_start?: string;
+    flight_end?: string;
+    buyer_seat_ids?: string[];
+  },
   signal?: AbortSignal,
 ): Promise<Result<MutationAck>> =>
   request(c, `${PATHS.deals}/push`, {
@@ -500,7 +524,20 @@ export const pushDeal = (
 
 export const distributeDeal = (
   c: Connection,
-  body: { deal_id: string; ssp_name?: string },
+  body: {
+    deal_id: string;
+    ssp_name?: string;
+    deal_type?: string;
+    name?: string;
+    advertiser?: string;
+    cpm?: number;
+    buyer_seat_ids?: string[];
+    start_date?: string;
+    end_date?: string;
+    /** Open object handed to the SSP. */
+    targeting?: Record<string, unknown>;
+    inventory_type?: string;
+  },
   signal?: AbortSignal,
 ): Promise<Result<MutationAck>> =>
   request(c, `${PATHS.deals}/distribute`, {
@@ -512,7 +549,19 @@ export const distributeDeal = (
 
 export const createCuratedDeal = (
   c: Connection,
-  body: { curator_id: string; deal_type?: string },
+  body: {
+    curator_id: string;
+    /** The agent defaults this to "PMP"; it is not the PG/PD/PA code the template route takes. */
+    deal_type?: string;
+    product_id?: string;
+    max_cpm?: number;
+    impressions?: number;
+    flight_start?: string;
+    flight_end?: string;
+    buyer_seat_ids?: string[];
+    audience_segments?: string[];
+    content_categories?: string[];
+  },
   signal?: AbortSignal,
 ): Promise<Result<MutationAck>> =>
   request(c, `${PATHS.deals}/curated`, {
@@ -527,7 +576,19 @@ export const migrateDeal = (
   dealId: string,
   // `DealMigrationRequest` requires `old_deal_id` even though the service
   // reads the deal from the path; without it the body is a 422.
-  body: { old_deal_id: string; reason?: string },
+  body: {
+    old_deal_id: string;
+    reason?: string;
+    // The successor's terms. Left out, the agent carries the old deal's over.
+    deal_type?: string;
+    product_id?: string;
+    max_cpm?: number;
+    impressions?: number;
+    flight_start?: string;
+    flight_end?: string;
+    buyer_seat_ids?: string[];
+    buyer_identity?: BuyerIdentityInput;
+  },
   signal?: AbortSignal,
 ): Promise<Result<MutationAck>> =>
   request(c, `${PATHS.deals}/${encodeURIComponent(dealId)}/migrate`, {

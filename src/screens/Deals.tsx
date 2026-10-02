@@ -2,6 +2,8 @@ import { Fragment, useState } from "react";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import Divider from "@mui/material/Divider";
+import ListSubheader from "@mui/material/ListSubheader";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
@@ -24,7 +26,7 @@ import { Hint } from "../components/Hint";
 import { PageHeader } from "../components/PageHeader";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { StatusChip } from "../components/StatusChip";
-import { DEAL_EXPORT_FORMATS } from "../api/vocabulary";
+import { DEAL_EXPORT_FORMATS, DEAL_EXPORT_STATUSES } from "../api/vocabulary";
 import { day, plural, stamp } from "../lib/time";
 import { useResource } from "../query/useResource";
 import { palette } from "../theme/palette";
@@ -65,6 +67,8 @@ function ExportMenu() {
   const { connection } = useCredential();
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [busy, setBusy] = useState(false);
+  // Held across opens: the filter is a setting of the export, not of one click.
+  const [exportStatus, setExportStatus] = useState("");
   const [failure, setFailure] = useState<string | undefined>();
 
   async function run(format: string) {
@@ -72,7 +76,7 @@ function ExportMenu() {
     if (!connection) return;
     setBusy(true);
     setFailure(undefined);
-    const result = await dealsExport(connection, { format });
+    const result = await dealsExport(connection, { format, ...(exportStatus ? { status: exportStatus } : {}) });
     setBusy(false);
     if (result.kind !== "ok") {
       setFailure(describe(result));
@@ -83,7 +87,7 @@ function ExportMenu() {
     );
     const link = document.createElement("a");
     link.href = url;
-    link.download = `deals-${format}-${new Date().toISOString().slice(0, 10)}.json`;
+    link.download = `deals-${format}${exportStatus ? `-${exportStatus}` : ""}-${new Date().toISOString().slice(0, 10)}.json`;
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -108,8 +112,22 @@ function ExportMenu() {
         </Button>
       </Hint>
       <Menu anchorEl={anchor} open={anchor !== null} onClose={() => setAnchor(null)}>
+        <ListSubheader sx={{ lineHeight: "28px" }}>Only deals that are</ListSubheader>
+        {[{ value: "", label: "any status" }, ...DEAL_EXPORT_STATUSES].map((st) => (
+          <MenuItem
+            key={st.value || "any"}
+            selected={exportStatus === st.value}
+            onClick={() => setExportStatus(st.value)}
+            data-export-status={st.value || "any"}
+            dense
+          >
+            {st.label}
+          </MenuItem>
+        ))}
+        <Divider />
+        <ListSubheader sx={{ lineHeight: "28px" }}>Download for</ListSubheader>
         {DEAL_EXPORT_FORMATS.map((f) => (
-          <MenuItem key={f.value} onClick={() => void run(f.value)} data-format={f.value}>
+          <MenuItem key={f.value} onClick={() => void run(f.value)} data-format={f.value} dense>
             {f.label}
           </MenuItem>
         ))}

@@ -356,17 +356,19 @@ describe("the deals screen", () => {
 
     try {
       await user.click(await screen.findByRole("button", { name: "Export" }));
+      // The status filter is part of the export and stays set while the menu is open.
+      await user.click(await screen.findByRole("menuitem", { name: "proposed" }));
       await user.click(await screen.findByRole("menuitem", { name: "dv360" }));
 
       await waitFor(() => expect(blobs).toHaveLength(1));
-      expect(asked).toBe("?format=dv360");
+      expect(asked).toBe("?format=dv360&status=proposed");
       const text = await new Promise<string>((resolve) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result as string);
         reader.readAsText(blobs[0]!);
       });
       expect(text).toContain('"x-1"');
-      expect(names[0]).toMatch(/^deals-dv360-\d{4}-\d{2}-\d{2}\.json$/);
+      expect(names[0]).toMatch(/^deals-dv360-proposed-\d{4}-\d{2}-\d{2}\.json$/);
     } finally {
       HTMLAnchorElement.prototype.click = click;
     }
