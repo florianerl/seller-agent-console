@@ -16,6 +16,15 @@ import { palette } from "../theme/palette";
 
 const TRUST = ["unknown", "registered", "approved", "preferred", "blocked"] as const;
 
+/** What each status grants, as the agent's OpenAPI description of the trust route states it. */
+const TIER: Readonly<Record<string, string>> = {
+  unknown: "public tier, price ranges only",
+  registered: "seat tier, exact prices, no negotiation",
+  approved: "advertiser tier, full access",
+  preferred: "advertiser tier plus custom pricing rules",
+  blocked: "refused with 403, no data access",
+};
+
 /** Failure, success and the writes-off notice, shared by both wizards' review step. */
 function Outcome({
   last,
@@ -166,6 +175,8 @@ function DiscoveredAgent({ agent }: { agent: NonNullable<DiscoverAck["agent"]> }
     (v): v is string => typeof v === "string",
   );
   const skills = card?.skills ?? [];
+  // Discover checks the configured registries, so say what it found.
+  const verified = agent.registry_sources.filter((r) => r.verified_at);
   return (
     <Box>
       <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
@@ -188,6 +199,7 @@ function DiscoveredAgent({ agent }: { agent: NonNullable<DiscoverAck["agent"]> }
             ["Agent id", agent.agent_id],
             ["Type", agent.agent_type.replace(/_/g, " ")],
             ["Trust", <StatusChip key="trust" status={agent.trust_status} />],
+            ["Registries", verified.length > 0 ? verified.map((r) => r.registry_name || r.registry_id).join(", ") : "not in any registry"],
             ...(card?.url ? [["Card URL", card.url] as const] : []),
             ...(card?.provider?.name ? [["Provider", card.provider.name] as const] : []),
           ]}
@@ -322,7 +334,7 @@ export function AgentManageWizard({
           >
             {TRUST.map((t) => (
               <MenuItem key={t} value={t}>
-                {t}
+                {t} — {TIER[t]}
               </MenuItem>
             ))}
           </TipField>
@@ -343,6 +355,7 @@ export function AgentManageWizard({
                 rows={[
                   ["Agent id", id],
                   ["Trust", `${agent?.trust_status ?? "?"} → ${newTrust}`],
+                  ["Access", TIER[newTrust] ?? newTrust],
                   ...(notes.trim() ? [["Notes", notes.trim()] as const] : []),
                 ]}
               />
