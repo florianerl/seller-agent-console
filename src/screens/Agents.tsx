@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
 import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
 import Skeleton from "@mui/material/Skeleton";
@@ -18,7 +19,7 @@ import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { useCredential } from "../credentials/context";
 import { FormRow } from "../components/WriteForm";
 import { TipField } from "../components/TipField";
-import { AgentDetailLookup, AgentWrites, Panel } from "./mutations";
+import { AgentDiscoverWizard, AgentManageWizard } from "./AgentWizards";
 import { plural, stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
 import { useResource } from "../query/useResource";
@@ -30,6 +31,9 @@ const TYPES = ["", "buyer", "seller", "tool_provider", "data_provider", "other"]
 export default function AgentsScreen() {
   const [trust, setTrust] = useState("");
   const [type, setType] = useState("");
+  const [discovering, setDiscovering] = useState(false);
+  const [managing, setManaging] = useState<{ agent_id: string; trust_status: string } | undefined>();
+  const [manageOpen, setManageOpen] = useState(false);
   const { writesEnabled } = useCredential();
 
   const list = useResource(
@@ -50,13 +54,26 @@ export default function AgentsScreen() {
       <PageHeader
         title="Agents"
         subtitle="Buyer and partner agents this seller has seen. Trust changes are writes."
+        actions={
+          <Button
+            variant="contained"
+            size="small"
+            onClick={() => setDiscovering(true)}
+            aria-haspopup="dialog"
+            data-action="discover-agent"
+          >
+            Discover agent
+          </Button>
+        }
       >
 
       {!writesEnabled && <ReadOnlyNotice what="Discovering or changing trust" />}
-      <Panel title="Registry writes">
-        <AgentWrites />
-        <AgentDetailLookup />
-      </Panel>
+      <AgentDiscoverWizard open={discovering} onClose={() => setDiscovering(false)} />
+      <AgentManageWizard
+        agent={managing}
+        open={manageOpen}
+        onClose={() => setManageOpen(false)}
+      />
 
       <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }}>
         <FormRow>
@@ -124,6 +141,7 @@ export default function AgentsScreen() {
                 <TableCell sx={{ fontWeight: 600 }}>Trust (set here)</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>Registry (verified elsewhere)</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>Last seen</TableCell>
+                <TableCell />
               </TableRow>
             </TableHead>
             <TableBody>
@@ -178,6 +196,19 @@ export default function AgentsScreen() {
                     <TableCell sx={{ fontSize: 12, color: palette.textSecondary }}>
                       {stamp(agent.last_seen)}
                       {agent.interaction_count > 0 && ` · ${agent.interaction_count} interactions`}
+                    </TableCell>
+                    <TableCell align="right">
+                      <Button
+                        size="small"
+                        aria-haspopup="dialog"
+                        data-action="manage-agent"
+                        onClick={() => {
+                          setManaging(agent);
+                          setManageOpen(true);
+                        }}
+                      >
+                        Manage
+                      </Button>
                     </TableCell>
                   </TableRow>
                 );

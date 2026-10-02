@@ -11,7 +11,6 @@ import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import {
-  agentById,
   applyChangeRequest,
   audienceMatch,
   bulkDealOperations,
@@ -25,20 +24,17 @@ import {
   dealById,
   dealSspTroubleshoot,
   deprecateDeal,
-  discoverAgent,
   distributeDeal,
   eventById,
   migrateDeal,
   negotiationStatus,
   postNegotiationMessage,
   pushDeal,
-  removeRegisteredAgent,
   reviewChangeRequest,
   sendSessionMessage,
   submitProposal,
   transitionOrder,
   triggerInventorySync,
-  updateAgentTrust,
   assentProposal,
   holdLineItem,
   publishProposal,
@@ -74,7 +70,7 @@ import { ConfirmAction } from "../components/ConfirmAction";
 import { EnumSelect } from "../components/EnumSelect";
 import { Hint } from "../components/Hint";
 import { TipField } from "../components/TipField";
-import { AgentPicker, ProductPicker, ProposalPicker } from "./pickers";
+import { ProductPicker, ProposalPicker } from "./pickers";
 import { ApiKeyTable } from "./ApiKeyTable";
 import { JsonView } from "../components/JsonView";
 import { FormFields, FormRow, ReadForm, WriteForm } from "../components/WriteForm";
@@ -1086,77 +1082,6 @@ export function ProposalWrites() {
   );
 }
 
-export function AgentWrites() {
-  const { writesEnabled } = useCredential();
-  const [url, setUrl] = useState("");
-  const [agentId, setAgentId] = useState("");
-  const [trust, setTrust] = useState("approved");
-  const [notes, setNotes] = useState("");
-  const discover = useMutation<{ agent_url: string }, unknown>(
-    (c, a) => discoverAgent(c, a),
-    { invalidates: ["agents:*"] },
-  );
-  const update = useMutation<{ id: string; trust_status: string; notes?: string }, unknown>(
-    (c, a) => updateAgentTrust(c, a.id, { trust_status: a.trust_status, ...(a.notes ? { notes: a.notes } : {}) }),
-    { invalidates: ["agents:*", `agent:${agentId}`] },
-  );
-  const remove = useMutation<{ id: string }, unknown>(
-    (c, a) => removeRegisteredAgent(c, a.id),
-    { invalidates: ["agents:*"] },
-  );
-
-  return (
-    <Stack spacing={2}>
-      <WriteForm
-        title="Discover and register this agent?"
-        confirmLabel="Discover"
-        action="discover-agent"
-        blocked={!writesEnabled || !url.trim()}
-        pending={discover.pending}
-        last={discover.last}
-        onConfirm={() => void discover.run({ agent_url: url.trim() })}
-        consequence="Fetches the remote card and writes a local registry row. Re-discovering the same URL updates that row."
-      >
-        <TipField hint="Full URL of the remote agent to look up, for example https://agent.example. Its card is fetched and stored as a local registry row." size="small" label="Agent URL" value={url} onChange={(e) => setUrl(e.target.value)} disabled={!writesEnabled} sx={{ minWidth: 280 }} />
-      </WriteForm>
-      <WriteForm
-        title="Change this agent's trust status?"
-        confirmLabel="Update trust"
-        action="update-trust"
-        blocked={!writesEnabled || !agentId.trim()}
-        pending={update.pending}
-        last={update.last}
-        onConfirm={() =>
-          void update.run({ id: agentId.trim(), trust_status: trust, ...(notes ? { notes } : {}) })
-        }
-        consequence="Trust is this operator's decision and caps the buyer's access tier. A blocked agent is refused on later calls."
-      >
-        <FormFields>
-          <AgentPicker value={agentId} onChange={setAgentId} disabled={!writesEnabled} />
-          <TipField hint="Trust decision for the agent: unknown, registered, approved, preferred or blocked. It caps the buyer's access tier, and a blocked agent is refused on later calls." select size="small" label="Trust" value={trust} onChange={(e) => setTrust(e.target.value)} disabled={!writesEnabled} sx={{ minWidth: 160 }}>
-            {["unknown", "registered", "approved", "preferred", "blocked"].map((t) => (
-              <MenuItem key={t} value={t}>
-                {t}
-              </MenuItem>
-            ))}
-          </TipField>
-          <TipField hint="Optional note on why the trust status changed. Sent only when filled in." size="small" label="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} disabled={!writesEnabled} />
-        </FormFields>
-      </WriteForm>
-      <WriteForm
-        title="Remove this agent from the local registry?"
-        confirmLabel="Remove agent"
-        action="remove-agent"
-        blocked={!writesEnabled || !agentId.trim()}
-        pending={remove.pending}
-        last={remove.last}
-        onConfirm={() => void remove.run({ id: agentId.trim() })}
-        consequence="Deletes the local row. A second remove 404s. Remote registries are untouched."
-      />
-    </Stack>
-  );
-}
-
 function NegotiationStatus({ proposalId }: { proposalId: string }) {
   const status = useResource(`negotiation:${proposalId}`, (c, signal) =>
     negotiationStatus(c, proposalId, signal),
@@ -1169,35 +1094,6 @@ function NegotiationStatus({ proposalId }: { proposalId: string }) {
         ? describe(status.result)
         : "");
   return <Typography variant="body2">Negotiation: {text}</Typography>;
-}
-
-export function AgentDetailLookup() {
-  const [id, setId] = useState("");
-  const [submitted, setSubmitted] = useState<string | undefined>();
-  return (
-    <Box sx={{ mt: 1 }}>
-      <FormRow>
-        <AgentPicker value={id} onChange={setId} />
-        <ReadForm
-          label="Load agent"
-          action="fetch-agent"
-          disabled={!id.trim()}
-          onRun={() => setSubmitted(id.trim())}
-        />
-      </FormRow>
-      {submitted && <AgentBody agentId={submitted} />}
-    </Box>
-  );
-}
-
-function AgentBody({ agentId }: { agentId: string }) {
-  const detail = useResource(`agent:${agentId}`, (c, signal) => agentById(c, agentId, signal));
-  if (!detail.data) return null;
-  return (
-    <Typography variant="body2" sx={{ mt: 1 }}>
-      {detail.data.trust_status} · {detail.data.agent_type}
-    </Typography>
-  );
 }
 
 /**

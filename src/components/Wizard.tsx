@@ -32,6 +32,8 @@ export function WizardDialog({
   onStep,
   onClose,
   canNext,
+  nextLabel = "Next",
+  onNext,
   finishLabel,
   pendingLabel,
   onFinish,
@@ -50,6 +52,13 @@ export function WizardDialog({
   onClose: () => void;
   /** Whether the current, non-final step is complete enough to move on. */
   canNext: boolean;
+  /**
+   * For a wizard whose last input *is* the action: the Next button reads
+   * `nextLabel` and calls `onNext` (which moves the step itself) instead of
+   * just advancing, so there is no review step to click through.
+   */
+  nextLabel?: string;
+  onNext?: () => void;
   finishLabel: string;
   pendingLabel: string;
   onFinish: () => void;
@@ -98,11 +107,11 @@ export function WizardDialog({
             {step < last ? (
               <Button
                 variant="contained"
-                onClick={() => onStep(step + 1)}
+                onClick={onNext ?? (() => onStep(step + 1))}
                 disabled={!canNext}
                 data-action="wizard-next"
               >
-                Next
+                {nextLabel}
               </Button>
             ) : (
               <Button

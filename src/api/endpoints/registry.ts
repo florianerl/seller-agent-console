@@ -110,12 +110,26 @@ export type AgentCard = z.infer<typeof AgentCard>;
 export const agentCard = (c: Connection, signal?: AbortSignal): Promise<Result<AgentCard>> =>
   get(c, PATHS.agentCard, { schema: AgentCard, signal });
 
+/**
+ * What discover answers with: the row it stored, carrying the full card it
+ * fetched. Optional and caught so a reply of another shape still counts as a
+ * success (the ack used to be `{}`), just without anything to show.
+ */
+export const DiscoverAck = z
+  .object({
+    agent: RegisteredAgent.extend({ agent_card: AgentCard.nullable().catch(null) })
+      .optional()
+      .catch(undefined),
+  })
+  .loose();
+export type DiscoverAck = z.infer<typeof DiscoverAck>;
+
 export const discoverAgent = (
   c: Connection,
   body: { agent_url: string },
   signal?: AbortSignal,
-): Promise<Result<MutationAck>> =>
-  request(c, `${PATHS.agents}/discover`, { schema: MutationAck, method: "POST", body, signal });
+): Promise<Result<DiscoverAck>> =>
+  request(c, `${PATHS.agents}/discover`, { schema: DiscoverAck, method: "POST", body, signal });
 
 export const updateAgentTrust = (
   c: Connection,

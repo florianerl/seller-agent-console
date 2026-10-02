@@ -50,10 +50,9 @@ export const NAV_SCREENS = SCREENS.filter((s) => !s.hidden);
 // order, then read the event log of what happened. Keep it in that order.
 export const NAV_GROUPS: ReadonlyArray<{ label: string; ids: readonly string[] }> = [
   { label: "Overview", ids: ["setup", "inbox"] },
-  { label: "Discover", ids: ["catalog", "media-kit", "curators"] },
+  { label: "Discover", ids: ["catalog", "media-kit", "curators", "agents"] },
   { label: "Pipeline", ids: ["proposals", "negotiation", "deals", "orders"] },
   { label: "Monitor", ids: ["events"] },
-  { label: "Network", ids: ["agents"] },
 ];
 
 export const NAV_GROUP_IDS = NAV_GROUPS.flatMap((group) => group.ids);
