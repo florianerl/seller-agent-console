@@ -67,10 +67,10 @@ function capture(path: string, reply: unknown = {}) {
   return bodies;
 }
 
-const text = async (user: User, label: string, value: string, exact = true) => {
+const text = async (_user: User, label: string, value: string, exact = true) => {
   const field = await screen.findByLabelText(exact ? label : new RegExp(label));
-  await user.clear(field);
-  await user.type(field, value);
+  // A change event, not keystrokes: dozens of long fields typed key by key made this the slowest test in the suite.
+  fireEvent.change(field, { target: { value } });
 };
 /** Date and datetime inputs do not take typed text in jsdom. */
 const setValue = (label: string, value: string) =>
@@ -314,14 +314,15 @@ describe("every field of every deal request is sent from the screen", { timeout:
       }
       // Fields stay disabled until the stored credential has said writes are on.
       await waitFor(() => expect(field).toBeEnabled());
-      await user.clear(field);
-      await user.type(field, value);
+      fireEvent.change(field, { target: { value } });
     };
     const date = (w: ReturnType<typeof scope>, label: string, value: string) =>
       fireEvent.change(w.getByLabelText(label), { target: { value } });
     const run = async (w: ReturnType<typeof scope>, button: string) => {
       await user.click(w.getByRole("button", { name: button }));
       await confirmDialog(user);
+      // While a dialog is closing the page behind it is aria-hidden, and role queries skip it.
+      await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
     };
 
     // Push.
