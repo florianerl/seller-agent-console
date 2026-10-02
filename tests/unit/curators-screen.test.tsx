@@ -192,4 +192,60 @@ describe("the curators screen", () => {
       expect(document.body.textContent).toMatch(/unexpected response shape/i),
     );
   });
+
+  it("registers a curator with every field the agent's request takes", async () => {
+    await saveCredential({
+      baseUrl: API,
+      apiKey: "k",
+      role: "operator",
+      name: "Ad Seller System API",
+      reportedVersion: "2.4.2",
+      writesEnabled: true,
+    });
+    let sent: unknown;
+    server.use(
+      http.post(`${API}/api/v1/curators`, async ({ request }) => {
+        sent = await request.json();
+        return HttpResponse.json({ ...CURATORS[0], curator_id: "acme" });
+      }),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("button", { name: /register curator/i }));
+    const dialog = await screen.findByRole("dialog");
+    await user.type(within(dialog).getByLabelText("Curator id"), "acme");
+    await user.type(within(dialog).getByLabelText("Name"), "Acme");
+    await user.type(within(dialog).getByLabelText("Domain"), "acme.example");
+    await user.type(within(dialog).getByLabelText(/description/i), "Curates things");
+    await user.type(within(dialog).getByLabelText(/contact email/i), "ops@acme.example");
+    await user.type(within(dialog).getByLabelText(/api key/i), "curator-secret");
+    await user.click(within(dialog).getByRole("button", { name: /next/i }));
+
+    await user.clear(within(dialog).getByLabelText("Fee value"));
+    await user.type(within(dialog).getByLabelText("Fee value"), "12.5");
+    await user.type(within(dialog).getByLabelText("Audience segments"), "sports-fans{enter}");
+    await user.type(within(dialog).getByLabelText("Content categories"), "news{enter}");
+    await user.click(within(dialog).getByRole("button", { name: /next/i }));
+
+    // The key is sent but never shown back in the review.
+    expect(within(dialog).queryByText("curator-secret")).toBeNull();
+    await user.click(within(dialog).getByRole("button", { name: /^register curator$/i }));
+
+    await waitFor(() => expect(sent).toBeDefined());
+    expect(sent).toEqual({
+      curator_id: "acme",
+      name: "Acme",
+      domain: "acme.example",
+      curator_type: "full_service",
+      description: "Curates things",
+      fee_type: "percent",
+      fee_value: 12.5,
+      contact_email: "ops@acme.example",
+      api_key: "curator-secret",
+      audience_segments: ["sports-fans"],
+      content_categories: ["news"],
+      supported_deal_types: ["pmp", "preferred", "pg"],
+    });
+  });
 });

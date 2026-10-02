@@ -57,9 +57,32 @@ export const curatorById = (
 ): Promise<Result<Curator>> =>
   get(c, `${PATHS.curators}/${encodeURIComponent(curatorId)}`, { schema: Curator, signal });
 
+/**
+ * `CuratorRegistrationRequest` in openapi.json, every field. Only the first
+ * three are required; the rest have server defaults, but a default is the
+ * agent's choice rather than the operator's, so the console sends what the
+ * form holds. Optional strings are omitted when empty rather than sent as
+ * `""`, which the agent would store as a value. The response does not echo
+ * `contact_email` or `api_key`, so nothing here can show them again.
+ */
+export type CuratorRegistration = {
+  curator_id: string;
+  name: string;
+  domain: string;
+  curator_type?: string;
+  description?: string;
+  fee_type?: string;
+  fee_value?: number;
+  contact_email?: string;
+  api_key?: string;
+  audience_segments?: string[];
+  content_categories?: string[];
+  supported_deal_types?: string[];
+};
+
 export const registerCurator = (
   c: Connection,
-  body: { curator_id: string; name: string; domain: string },
+  body: CuratorRegistration,
   signal?: AbortSignal,
 ): Promise<Result<Curator>> =>
   request(c, PATHS.curators, { schema: Curator, method: "POST", body, signal });
