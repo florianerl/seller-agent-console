@@ -319,6 +319,26 @@ describe("the new-deal wizard", () => {
       expect(await screen.findByText(/All 2 deals were created/)).toBeInTheDocument();
     });
 
+    it("puts a copy button on each quote id, and none on a product that could not be quoted", async () => {
+      respond("/api/v1/quotes", (b) =>
+        b["product_id"] === "bad"
+          ? { status: 422, json: { detail: "no such product" } }
+          : { json: { quote: { quote_id: `qt-${String(b["product_id"])}` } } },
+      );
+      const user = userEvent.setup();
+      mount();
+
+      await next(user);
+      await addProducts(user, ["a", "bad", "b"]);
+      await next(user);
+      await user.click(await screen.findByRole("button", { name: "Get quotes" }));
+
+      expect(await screen.findByRole("button", { name: "Copy qt-a" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Copy qt-b" })).toBeInTheDocument();
+      // A failed quote has no id to copy.
+      expect(document.querySelector('[data-product="bad"]')?.querySelector("[aria-label^='Copy']")).toBeNull();
+    });
+
     it("shows which product could not be quoted, and lets it be removed", async () => {
       respond("/api/v1/quotes", (b) =>
         b["product_id"] === "bad"
