@@ -284,7 +284,7 @@ describe("the catalog screen", () => {
 
     const pricing = document.querySelector('[data-block="pricing"]') as HTMLElement;
     await user.type(within(pricing).getByLabelText("Product id"), "prod-console-demo-1");
-    await user.click(screen.getByRole("button", { name: "Quote" }));
+    await user.click(screen.getByRole("button", { name: "Price check" }));
 
     await waitFor(() =>
       expect(document.querySelector('[data-field="rationale"]')?.textContent).toBe(
@@ -305,7 +305,7 @@ describe("the catalog screen", () => {
 
     const pricing = document.querySelector('[data-block="pricing"]') as HTMLElement;
     await user.type(within(pricing).getByLabelText("Product id"), "no-such");
-    await user.click(screen.getByRole("button", { name: "Quote" }));
+    await user.click(screen.getByRole("button", { name: "Price check" }));
 
     await waitFor(() =>
       expect(document.querySelector('[data-state="unknown-product"]')?.textContent).toMatch(/typo/i),

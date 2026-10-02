@@ -107,7 +107,7 @@ describe("catalog query forms", () => {
     await user.type(within(form).getByLabelText("Agency id"), "a-1");
     await user.type(within(form).getByLabelText("Advertiser id"), "adv-1");
     await user.type(within(form).getByLabelText("Buyer agent URL"), "https://buyer.example");
-    await user.click(within(form).getByRole("button", { name: "Quote" }));
+    await user.click(within(form).getByRole("button", { name: "Price check" }));
 
     await waitFor(() => expect(sent).toHaveLength(1));
     expect(sent[0]).toEqual({
@@ -132,7 +132,7 @@ describe("catalog query forms", () => {
 
     const form = await waitFor(() => block("pricing"));
     await user.type(within(form).getByLabelText("Product id"), "prod-1");
-    await user.click(within(form).getByRole("button", { name: "Quote" }));
+    await user.click(within(form).getByRole("button", { name: "Price check" }));
 
     await waitFor(() => expect(sent).toEqual([{ product_id: "prod-1" }]));
   });

@@ -587,7 +587,7 @@ function Pricing() {
             hint="The product to use. Pick one, or type or paste an id. Required."
           />
           <TipField
-            hint="Optional impressions to price for. The agent applies its volume discounts to this figure; leave blank to quote without one."
+            hint="Optional impressions to price for. The agent applies its volume discounts to this figure; leave blank to price without one."
             size="small"
             label="Volume"
             type="number"
@@ -596,8 +596,10 @@ function Pricing() {
             sx={{ width: 140 }}
           />
           <BuyerIdentityFields value={identity} onChange={setIdentity} advertiser agentUrl />
-          <Button type="submit" variant="outlined" size="small" data-action="quote">
-            Quote
+          {/* "Price check", not "Quote": this calls /pricing, a calculation. It
+              creates no quote and returns no id; a quote is made from New deal. */}
+          <Button type="submit" variant="outlined" size="small" data-action="price-check">
+            Price check
           </Button>
         </FormRow>
       </Box>
@@ -612,7 +614,7 @@ function PricingResult({ query }: { query: PricingQuery }) {
   );
 
   if (quote.freshness === "blocked") {
-    return <GatedNotice what="This price quote" result={quote.result} />;
+    return <GatedNotice what="This price check" result={quote.result} />;
   }
 
   const unknownProduct = quote.result?.kind === "unavailable" && quote.result.status === 404;
