@@ -16,21 +16,35 @@ const PATHS = {
 } as const;
 
 /**
- * The agent validates this in three steps and answers 400 with a different
- * `detail.error` for each: a missing ref, a `type` that is not "agentic", a
- * missing `identifier`. All three are the caller's mistake rather than an
- * outage, so a form collecting this should validate before sending.
+ * `AudienceRef`, models/audience_ref.py — the buyer's wire shape. The agent
+ * validates only two things and answers 400 with `detail.error` for each: a
+ * `type` that is not "agentic", and a missing `identifier`. Those two are all
+ * the match reads today; the rest of the ref is echoed back in the response
+ * unexamined, and so is `package_id`, which the route accepts and ignores.
+ * They are sent anyway so a ref built here is the one a buyer would send.
  */
+export type ComplianceContext = {
+  readonly jurisdiction: string;
+  readonly consent_framework: string;
+  readonly consent_string_ref?: string;
+  readonly attestation?: string;
+  readonly embedding_provenance?: string;
+};
+
 export type AudienceRef = {
   readonly type: "agentic";
   readonly identifier: string;
-  readonly provider?: string;
+  readonly taxonomy?: string;
+  readonly version?: string;
+  readonly source?: string;
+  readonly confidence?: number;
+  readonly compliance_context?: ComplianceContext;
 };
 
 export const AudienceMatch = z
   .object({
     match_confidence: z.number().catch(0),
-    /** POOR | FAIR | GOOD | EXCELLENT, as the agent words it. */
+    /** STRONG | MODERATE | WEAK | POOR, as the agent words it (deal_service.py). */
     match_quality: z.string().catch("POOR"),
     matched_capabilities: z.array(z.string()).catch([]),
     /**
@@ -40,6 +54,8 @@ export const AudienceMatch = z
      */
     agentic_supported_by_seller: z.boolean().catch(false),
     rationale: z.string().nullable().catch(null),
+    /** The ref as the agent received it, echoed back. */
+    audience_ref: z.record(z.string(), z.unknown()).nullable().catch(null),
   })
   .loose();
 export type AudienceMatch = z.infer<typeof AudienceMatch>;

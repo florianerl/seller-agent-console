@@ -15,7 +15,6 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import {
   applyChangeRequest,
-  audienceMatch,
   bulkDealOperations,
   closeSession,
   createBuyerApiKey,
@@ -1513,52 +1512,6 @@ export function EventLookup({ eventId }: { eventId: string }) {
     <Box data-block="event-by-id" sx={{ mt: 1 }}>
       <ReadOutcome name="Event" data={detail.data} result={detail.result} />
     </Box>
-  );
-}
-
-export function AudienceMatchForm() {
-  const [identifier, setIdentifier] = useState("");
-  const [submitted, setSubmitted] = useState<string | undefined>();
-  return (
-    <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }} data-block="audience-match">
-      <Typography variant="h3" sx={{ mb: 0.5 }}>
-        Audience match
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-        A POST that stores nothing, so it runs with writes off.
-      </Typography>
-      <FormRow>
-        <TipField
-          hint="Identifier of the audience to score. Sent as an agentic audience reference; required."
-          size="small"
-          label="Audience identifier"
-          value={identifier}
-          onChange={(e) => setIdentifier(e.target.value)}
-        />
-        <ReadForm
-          label="Match"
-          action="audience-match"
-          disabled={!identifier.trim()}
-          onRun={() => setSubmitted(identifier.trim())}
-        />
-      </FormRow>
-      {submitted && <AudienceMatchBody identifier={submitted} />}
-    </Paper>
-  );
-}
-
-function AudienceMatchBody({ identifier }: { identifier: string }) {
-  const match = useResource(`audience:${identifier}`, (c, signal) =>
-    audienceMatch(c, { audience_ref: { type: "agentic", identifier } }, signal),
-  );
-  return (
-    <Typography variant="body2" sx={{ mt: 1 }}>
-      {match.data
-        ? `${match.data.match_quality} (${match.data.match_confidence})`
-        : match.result
-          ? describe(match.result)
-          : ""}
-    </Typography>
   );
 }
 

@@ -54,6 +54,18 @@ const MEDIA_KIT = {
   all_packages: [PACKAGE_A, PACKAGE_B],
 };
 
+/**
+ * A row of the Packages table by name. The summary card names the featured
+ * packages too, so a bare text lookup would find two.
+ */
+function rowNamed(name: string): HTMLElement {
+  const row = [...document.querySelectorAll('[data-row="media-kit-package"]')].find((el) =>
+    el.textContent?.includes(name),
+  );
+  expect(row, name).toBeTruthy();
+  return row as HTMLElement;
+}
+
 function renderScreen() {
   return render(
     <SWRConfig
@@ -111,9 +123,9 @@ describe("the media kit screen", () => {
 
   it("lists packages with their formats, devices, price, rate and featured state", async () => {
     renderScreen();
-    await waitFor(() => expect(screen.getByText("Homepage Takeover")).toBeInTheDocument());
+    await waitFor(() => rowNamed("Homepage Takeover"));
 
-    const row = screen.getByText("Homepage Takeover").closest("tr")!;
+    const row = rowNamed("Homepage Takeover");
     expect(row.textContent).toContain("display, video");
     expect(row.textContent).toContain("desktop, mobile");
     expect(row.textContent).toContain("$10-$20 CPM");
@@ -127,9 +139,9 @@ describe("the media kit screen", () => {
   it("expands a row into a detail that fetches the single package", async () => {
     const user = userEvent.setup();
     renderScreen();
-    await waitFor(() => expect(screen.getByText("Homepage Takeover")).toBeInTheDocument());
+    await waitFor(() => rowNamed("Homepage Takeover"));
 
-    const row = screen.getByText("Homepage Takeover").closest("tr")!;
+    const row = rowNamed("Homepage Takeover");
     expect(row).toHaveAttribute("data-row", "media-kit-package");
 
     const toggle = within(row).getByRole("button", { name: "Details" });
@@ -157,7 +169,7 @@ describe("the media kit screen", () => {
 
     const user = userEvent.setup();
     renderScreen();
-    await waitFor(() => expect(screen.getByText("Homepage Takeover")).toBeInTheDocument());
+    await waitFor(() => rowNamed("Homepage Takeover"));
 
     const field = screen.getByLabelText("Search the media kit");
     await user.type(field, "homepage");
@@ -178,7 +190,7 @@ describe("the media kit screen", () => {
 
     const user = userEvent.setup();
     renderScreen();
-    await waitFor(() => expect(screen.getByText("Homepage Takeover")).toBeInTheDocument());
+    await waitFor(() => rowNamed("Homepage Takeover"));
 
     await user.type(screen.getByLabelText("Search the media kit"), "interstitial");
     await user.click(screen.getByRole("button", { name: "Search" }));
@@ -206,7 +218,7 @@ describe("the media kit screen", () => {
 
     const user = userEvent.setup();
     renderScreen();
-    await waitFor(() => expect(screen.getByText("Homepage Takeover")).toBeInTheDocument());
+    await waitFor(() => rowNamed("Homepage Takeover"));
 
     const field = screen.getByLabelText("Search the media kit");
     await user.type(field, "homepage");
@@ -234,7 +246,7 @@ describe("the media kit screen", () => {
 
     const user = userEvent.setup();
     renderScreen();
-    await waitFor(() => expect(screen.getByText("Homepage Takeover")).toBeInTheDocument());
+    await waitFor(() => rowNamed("Homepage Takeover"));
 
     await user.type(screen.getByLabelText("Search the media kit"), "nothing");
     await user.click(screen.getByRole("button", { name: "Search" }));
@@ -256,7 +268,7 @@ describe("the media kit screen", () => {
 
     const user = userEvent.setup();
     renderScreen();
-    await waitFor(() => expect(screen.getByText("Homepage Takeover")).toBeInTheDocument());
+    await waitFor(() => rowNamed("Homepage Takeover"));
 
     await user.type(screen.getByLabelText("Search the media kit"), "homepage");
     await user.click(screen.getByRole("button", { name: "Search" }));

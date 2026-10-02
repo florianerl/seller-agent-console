@@ -29,6 +29,8 @@ const PACKAGE = {
   device_types: [2, 4],
   geo_targets: ["US"],
   tags: ["premium"],
+  cat: ["IAB17"],
+  cattax: 2,
   price_range: "$10-$20 CPM",
   rate_type: "cpm",
   is_featured: false,
@@ -94,6 +96,11 @@ describe("media kit writes", () => {
         HttpResponse.json({ total_packages: 1, featured_count: 0, featured: [], all_packages: [PACKAGE] }),
       ),
       http.get(`${API}/media-kit/packages`, () => HttpResponse.json({ packages: [PACKAGE] })),
+      // The audience match's package picker, and the create form's product picker.
+      http.get(`${API}/packages`, () => HttpResponse.json({ packages: [] })),
+      http.get(`${API}/products`, () =>
+        HttpResponse.json({ products: [], total_count: 0, limit: 200, offset: 0 }),
+      ),
     );
   });
 
@@ -161,6 +168,69 @@ describe("media kit writes", () => {
           is_featured: false,
           device_types: [3],
           geo_targets: ["US", "US-NY"],
+        },
+      ]),
+    );
+  });
+
+  it("edits content categories and taxonomy, and sends a seasonal label only when typed", async () => {
+    await credential(true);
+    const sent = capture("put", "/packages/pkg-a", PACKAGE);
+    const user = userEvent.setup();
+    mount();
+
+    await user.click(await enabled("media-kit-edit-package"));
+    const form = document.querySelector('[data-block="media-kit-edit-package"]') as HTMLElement;
+    // Prefilled from the stored values, so an untouched form changes nothing.
+    expect(within(form).getByLabelText("Content taxonomy")).toHaveValue("2");
+    expect(within(form).getByLabelText("Seasonal label")).toHaveValue("");
+    // Audience capabilities and placements are not on the edit form: the PUT
+    // would replace them with what the public view cannot show.
+    expect(within(form).queryByLabelText("Audience capabilities")).toBeNull();
+
+    await user.type(within(form).getByLabelText("Content categories"), "IAB19{Enter}");
+    const cattax = within(form).getByLabelText("Content taxonomy");
+    await user.clear(cattax);
+    await user.type(cattax, "3");
+    await user.type(within(form).getByLabelText("Seasonal label"), "Q4 holiday");
+    await confirm(user, "media-kit-update-package", "Save");
+
+    await waitFor(() =>
+      expect(sent).toEqual([{ cat: ["IAB17", "IAB19"], cattax: 3, seasonal_label: "Q4 holiday" }]),
+    );
+  });
+
+  it("creates with every PackageCreateRequest field the form was given", async () => {
+    await credential(true);
+    const sent = capture("post", "/packages", PACKAGE);
+    const user = userEvent.setup();
+    mount();
+
+    await user.click(await enabled("media-kit-new-package"));
+    const form = document.querySelector('[data-block="media-kit-create-package"]') as HTMLElement;
+    await user.type(within(form).getByLabelText("Name"), "Q4 bundle");
+    await user.type(within(form).getByLabelText("Base price"), "20");
+    await user.type(within(form).getByLabelText("Floor"), "10");
+    await user.type(within(form).getByLabelText("Content categories"), "IAB17{Enter}");
+    await user.type(within(form).getByLabelText("Content taxonomy"), "3");
+    await user.type(within(form).getByLabelText("Seasonal label"), "Q4 holiday");
+    await user.type(within(form).getByLabelText("Audience segment ids"), "3-7{Enter}");
+    await user.click(within(form).getByLabelText("Audience capabilities"));
+    await user.paste('{"supports_standard": true}');
+    await confirm(user, "media-kit-create-package", "Create package");
+
+    await waitFor(() =>
+      expect(sent).toEqual([
+        {
+          name: "Q4 bundle",
+          base_price: 20,
+          floor_price: 10,
+          is_featured: false,
+          cat: ["IAB17"],
+          cattax: 3,
+          audience_capabilities: { supports_standard: true },
+          audience_segment_ids: ["3-7"],
+          seasonal_label: "Q4 holiday",
         },
       ]),
     );

@@ -23,6 +23,21 @@ const AudienceCapabilities = z
     supports_contextual: z.boolean().catch(false),
     supports_agentic: z.boolean().catch(false),
     agentic_spec_version: z.string().nullable().catch(null),
+    // Authenticated view only (a search sent with a key): the full typed
+    // object, which carries segment lists instead of the supports flags.
+    standard_segment_ids: z.array(z.string()).catch([]),
+    contextual_segment_ids: z.array(z.string()).catch([]),
+  })
+  .loose();
+
+/** A product inside a package; authenticated view only. */
+const Placement = z
+  .object({
+    product_id: z.string().catch(""),
+    product_name: z.string().catch(""),
+    ad_formats: z.array(z.string()).catch([]),
+    device_types: z.array(z.union([z.number(), z.string()])).catch([]),
+    weight: z.number().nullable().catch(null),
   })
   .loose();
 
@@ -39,10 +54,21 @@ export const MediaKitPackage = z
     device_types: z.array(z.union([z.number(), z.string()])).catch([]),
     geo_targets: z.array(z.string()).catch([]),
     tags: z.array(z.string()).catch([]),
+    // IAB content categories, read against the AdCOM taxonomy in `cattax`.
+    cat: z.array(z.string()).catch([]),
+    cattax: z.number().nullable().catch(null),
     price_range: z.string().nullable().catch(null),
     rate_type: z.string().nullable().catch(null),
     is_featured: z.boolean().catch(false),
     audience_capabilities: AudienceCapabilities.nullable().catch(null),
+    // Authenticated view only. `/media-kit/search` returns it whenever the
+    // caller has a key or names a tier above public; the GET routes never do.
+    exact_price: z.number().nullable().catch(null),
+    floor_price: z.number().nullable().catch(null),
+    currency: z.string().nullable().catch(null),
+    placements: z.array(Placement).catch([]),
+    negotiation_enabled: z.boolean().nullable().catch(null),
+    volume_discounts_available: z.boolean().nullable().catch(null),
   })
   .loose();
 export type MediaKitPackage = z.infer<typeof MediaKitPackage>;
@@ -65,11 +91,26 @@ export const MediaKitPackageList = z
   .loose();
 export type MediaKitPackageList = z.infer<typeof MediaKitPackageList>;
 
+/**
+ * Every filter the route declares. `layer` is a `PackageLayer` (400 on any
+ * other value); `audience_id` without `audience_type` is a 400, since the
+ * agent cannot tell which corpus to look in. Agentic plus an id currently
+ * collapses upstream to "the package supports agentic".
+ */
+export type MediaKitPackageQuery = {
+  layer?: string;
+  featured_only?: boolean;
+  audience_type?: string;
+  audience_id?: string;
+  audience_taxonomy_version?: string;
+};
+
 export const mediaKitPackages = (
   c: Connection,
+  query: MediaKitPackageQuery = {},
   signal?: AbortSignal,
 ): Promise<Result<MediaKitPackageList>> =>
-  get(c, PATHS.mediaKitPackages, { schema: MediaKitPackageList, signal });
+  get(c, PATHS.mediaKitPackages, { schema: MediaKitPackageList, query, signal });
 
 /** Returns one `MediaKitPackage`, same shape as an entry in the list above. */
 export const mediaKitPackage = (
@@ -77,7 +118,10 @@ export const mediaKitPackage = (
   packageId: string,
   signal?: AbortSignal,
 ): Promise<Result<MediaKitPackage>> =>
-  get(c, `${PATHS.mediaKitPackages}/${encodeURIComponent(packageId)}`, { schema: MediaKitPackage, signal });
+  get(c, `${PATHS.mediaKitPackages}/${encodeURIComponent(packageId)}`, {
+    schema: MediaKitPackage,
+    signal,
+  });
 
 // --- search --------------------------------------------------------------------
 

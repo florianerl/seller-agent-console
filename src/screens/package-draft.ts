@@ -68,6 +68,8 @@ export function draftOf(pkg: MediaKitPackage): PackageDraft {
     geoTargets: [...pkg.geo_targets],
     tags: [...pkg.tags],
     featured: pkg.is_featured,
+    cat: [...pkg.cat],
+    cattax: pkg.cattax == null ? "" : String(pkg.cattax),
   };
 }
 
@@ -81,9 +83,15 @@ function sameList<T>(a: readonly T[], b: readonly T[]): boolean {
 
 /**
  * Only what changed goes on the wire: the PUT is a partial update upstream,
- * so an untouched field — prices, placements, the seasonal label — keeps
+ * so an untouched field — prices, placements, audience capabilities — keeps
  * whatever it holds. A cleared description is sent as null, not "", so it
  * reads as absent the way a never-set one does.
+ *
+ * The seasonal label is the one field sent without a stored value to compare
+ * against, because no view returns it: blank means "leave it", and anything
+ * typed is sent. Audience capabilities are not editable here at all — the
+ * public view carries only a summary, and the PUT replaces the whole object,
+ * so saving it would drop the segment lists.
  */
 export function packageChanges(pkg: MediaKitPackage, draft: PackageDraft): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -96,7 +104,27 @@ export function packageChanges(pkg: MediaKitPackage, draft: PackageDraft): Recor
   if (!sameList(draft.geoTargets, pkg.geo_targets)) out.geo_targets = draft.geoTargets;
   if (!sameList(draft.tags, pkg.tags)) out.tags = draft.tags;
   if (draft.featured !== pkg.is_featured) out.is_featured = draft.featured;
+  if (!sameList(draft.cat, pkg.cat)) out.cat = draft.cat;
+  if (draft.cattax.trim() !== "" && Number(draft.cattax) !== pkg.cattax) {
+    out.cattax = Number(draft.cattax);
+  }
+  if (draft.seasonalLabel.trim()) out.seasonal_label = draft.seasonalLabel.trim();
   return out;
+}
+
+/** Why an edit cannot be saved yet, or undefined when it can. */
+export function editProblem(pkg: MediaKitPackage, draft: PackageDraft): string | undefined {
+  return (
+    (draft.name.trim() ? undefined : "A package needs a name.") ??
+    cattaxProblem(draft.cattax) ??
+    (Object.keys(packageChanges(pkg, draft)).length > 0 ? undefined : "Nothing has changed.")
+  );
+}
+
+function cattaxProblem(raw: string): string | undefined {
+  return raw.trim() === "" || Number.isInteger(Number(raw))
+    ? undefined
+    : "The content taxonomy is a whole number.";
 }
 
 /** Blank is "not sent"; anything else must be a JSON object. */
@@ -118,9 +146,7 @@ export function createProblem(draft: PackageDraft): string | undefined {
     (draft.name.trim() ? undefined : "Name the package.") ??
     priceProblem(draft.base) ??
     priceProblem(draft.floor) ??
-    (draft.cattax.trim() === "" || Number.isInteger(Number(draft.cattax))
-      ? undefined
-      : "The content taxonomy is a whole number.") ??
+    cattaxProblem(draft.cattax) ??
     capabilitiesProblem(draft.audienceCapabilities)
   );
 }

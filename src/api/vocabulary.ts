@@ -204,3 +204,16 @@ export function deviceLabel(value: number | string): string {
  * suggestions, not a closed set.
  */
 export const AD_FORMATS = ["banner", "video", "native", "audio"] as const;
+
+/** `PackageLayer`, models/media_kit.py: how a package came to exist. */
+export const PACKAGE_LAYERS = spelled(["synced", "curated", "dynamic"] as const);
+
+/**
+ * `_VALID_AUDIENCE_TYPES`, interfaces/api/routers/media_kit.py. Any other
+ * value is a 400 on the media-kit list, search and `/packages` filters.
+ */
+export const AUDIENCE_TYPES = spelled(["standard", "contextual", "agentic"] as const);
+export type AudienceType = (typeof AUDIENCE_TYPES)[number]["value"];
+
+/** `AudienceSource`, models/audience_ref.py. */
+export const AUDIENCE_SOURCES = spelled(["explicit", "resolved", "inferred"] as const);

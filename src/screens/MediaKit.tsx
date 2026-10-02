@@ -1,7 +1,9 @@
 import { Fragment, useState, type FormEvent } from "react";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import Checkbox from "@mui/material/Checkbox";
 import Chip from "@mui/material/Chip";
+import FormControlLabel from "@mui/material/FormControlLabel";
 import Paper from "@mui/material/Paper";
 import Skeleton from "@mui/material/Skeleton";
 import Stack from "@mui/material/Stack";
@@ -17,9 +19,14 @@ import {
   mediaKitPackage,
   mediaKitPackages,
   searchMediaKit,
+  type MediaKitPackage,
+  type MediaKitPackageQuery,
+  type MediaKitSearchQuery,
 } from "../api/endpoints";
 import { describe } from "../api/errors";
-import { deviceLabel } from "../api/vocabulary";
+import { AUDIENCE_TYPES, PACKAGE_LAYERS, deviceLabel, type AudienceType } from "../api/vocabulary";
+import { EnumSelect } from "../components/EnumSelect";
+import { plain } from "../lib/money";
 import { ConfirmButton, WRITES_OFF_HINT } from "../components/ConfirmButton";
 import { Hint } from "../components/Hint";
 import { useCredential } from "../credentials/context";
@@ -35,9 +42,11 @@ import { CADENCE } from "../query/cadence";
 import { useResource } from "../query/useResource";
 import { FormRow } from "../components/WriteForm";
 import { TipField } from "../components/TipField";
-import { AudienceMatchForm } from "./mutations";
+import { AudienceMatchForm } from "./AudienceMatch";
 import { CreatePackageForm, EditPackageForm, Failure } from "./MediaKitPackageForm";
 import { PACKAGE_VIEWS } from "./package-draft";
+import { BuyerIdentityFields } from "./BuyerIdentityFields";
+import { NO_IDENTITY, identityBody, identityLabel, type BuyerIdentity } from "./buyer-identity";
 import { palette } from "../theme/palette";
 
 /**
@@ -85,6 +94,12 @@ function Summary() {
         <FieldGrid min={110}>
           <Field label="Packages">{data.total_packages.toLocaleString()}</Field>
           <Field label="Featured">{data.featured_count.toLocaleString()}</Field>
+          {/* `all_packages` is the same list the Packages table reads, so it
+              is not repeated here; the featured ones are named because
+              nothing else on the screen picks them out at a glance. */}
+          <Field label="Featured packages">
+            {data.featured.map((p) => p.name || p.package_id).join(", ") || "—"}
+          </Field>
         </FieldGrid>
       )}
     </StatusCard>
@@ -120,6 +135,11 @@ function PackageDetail({ packageId }: { packageId: string }) {
         <Field label="Device types">{pkg.device_types.map(deviceLabel).join(", ") || "—"}</Field>
         <Field label="Geo targets">{pkg.geo_targets.join(", ") || "—"}</Field>
         <Field label="Tags">{pkg.tags.join(", ") || "—"}</Field>
+        <Field label="Content categories">
+          {pkg.cat.length
+            ? `${pkg.cat.join(", ")}${pkg.cattax != null ? ` (cattax ${pkg.cattax})` : ""}`
+            : "—"}
+        </Field>
         <Field label="Standard taxonomy">
           {caps?.supports_standard ? (caps.standard_taxonomy_version ?? "yes") : "no"}
         </Field>
@@ -130,7 +150,11 @@ function PackageDetail({ packageId }: { packageId: string }) {
           {caps?.supports_agentic ? (caps.agentic_spec_version ?? "yes") : "no"}
         </Field>
       </FieldGrid>
-      <Typography variant="caption" data-freshness={detail.freshness} sx={{ color: palette.textSecondary }}>
+      <Typography
+        variant="caption"
+        data-freshness={detail.freshness}
+        sx={{ color: palette.textSecondary }}
+      >
         {detail.freshness === "live" &&
           detail.asOf !== undefined &&
           `as of ${asOfStamp(detail.asOf)}`}
@@ -139,6 +163,123 @@ function PackageDetail({ packageId }: { packageId: string }) {
           `couldn't refresh — showing ${asOfStamp(detail.asOf)}`}
       </Typography>
     </Stack>
+  );
+}
+
+/**
+ * The type/id/version audience triple the list and search filters share. The
+ * list takes it as `audience_*` query params, search as `audience_filter`;
+ * the rules are the same (`_build_audience_filter` upstream).
+ */
+type AudienceDraft = { type: AudienceType | ""; id: string; version: string };
+const NO_AUDIENCE: AudienceDraft = { type: "", id: "", version: "" };
+
+function audienceProblem(a: AudienceDraft): string | undefined {
+  return a.id.trim() && !a.type
+    ? "An audience id needs a type: the agent cannot tell which taxonomy to look it up in (400)."
+    : undefined;
+}
+
+function AudienceFields({
+  value,
+  onChange,
+}: {
+  value: AudienceDraft;
+  onChange: (value: AudienceDraft) => void;
+}) {
+  return (
+    <>
+      <EnumSelect
+        label="Audience type"
+        hint="Only packages that declare this kind of audience. Agentic with an id currently means only 'supports agentic' upstream."
+        value={value.type}
+        options={AUDIENCE_TYPES}
+        any="Any audience"
+        onChange={(type) => onChange({ ...value, type })}
+        sx={{ minWidth: 160 }}
+      />
+      <TipField
+        hint="A segment id within that type, for example 3-7 for the standard taxonomy. Needs a type."
+        size="small"
+        label="Audience id"
+        value={value.id}
+        onChange={(e) => onChange({ ...value, id: e.target.value })}
+        sx={{ width: 140 }}
+      />
+      <TipField
+        hint="Taxonomy version to match, for example 1.1. Blank matches any."
+        size="small"
+        label="Taxonomy version"
+        value={value.version}
+        onChange={(e) => onChange({ ...value, version: e.target.value })}
+        sx={{ width: 140 }}
+      />
+    </>
+  );
+}
+
+type ListFilters = { layer: string; featuredOnly: boolean; audience: AudienceDraft };
+const NO_FILTERS: ListFilters = { layer: "", featuredOnly: false, audience: NO_AUDIENCE };
+
+/** Blank filters are left off the URL rather than sent empty. */
+function listQuery(f: ListFilters): MediaKitPackageQuery {
+  const q: MediaKitPackageQuery = {};
+  if (f.layer) q.layer = f.layer;
+  if (f.featuredOnly) q.featured_only = true;
+  if (f.audience.type) q.audience_type = f.audience.type;
+  if (f.audience.id.trim()) q.audience_id = f.audience.id.trim();
+  if (f.audience.version.trim()) q.audience_taxonomy_version = f.audience.version.trim();
+  return q;
+}
+
+function ListFilterForm({ onApply }: { onApply: (query: MediaKitPackageQuery) => void }) {
+  const [draft, setDraft] = useState<ListFilters>(NO_FILTERS);
+  const problem = audienceProblem(draft.audience);
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!problem) onApply(listQuery(draft));
+  }
+
+  return (
+    <Box component="form" onSubmit={handleSubmit} sx={{ mb: 1.5 }} data-block="media-kit-filters">
+      <FormRow>
+        <EnumSelect
+          label="Layer"
+          hint="How the package came to exist: synced from the ad server, curated by the seller, or assembled by the agent."
+          value={draft.layer}
+          options={PACKAGE_LAYERS}
+          any="Any layer"
+          onChange={(layer) => setDraft({ ...draft, layer })}
+          sx={{ minWidth: 140 }}
+        />
+        <AudienceFields
+          value={draft.audience}
+          onChange={(audience) => setDraft({ ...draft, audience })}
+        />
+        <FormControlLabel
+          control={
+            <Checkbox
+              size="small"
+              checked={draft.featuredOnly}
+              onChange={(e) => setDraft({ ...draft, featuredOnly: e.target.checked })}
+            />
+          }
+          label={<Typography sx={{ fontSize: 13 }}>Featured only</Typography>}
+        />
+        <Hint hint={problem}>
+          <Button
+            type="submit"
+            size="small"
+            variant="outlined"
+            disabled={problem !== undefined}
+            data-action="media-kit-filter"
+          >
+            Filter
+          </Button>
+        </Hint>
+      </FormRow>
+    </Box>
   );
 }
 
@@ -166,9 +307,18 @@ function PackagesTable() {
     );
   }
 
-  const list = useResource("media-kit-packages", mediaKitPackages, {
-    refreshInterval: CADENCE.mediaKit,
-  });
+  // Keyed on the applied filters, so each filter set is its own SWR entry;
+  // every key still starts "media-kit", which is what a package write
+  // invalidates (PACKAGE_VIEWS).
+  const [query, setQuery] = useState<MediaKitPackageQuery>({});
+  const filtered = Object.keys(query).length > 0;
+  const list = useResource(
+    `media-kit-packages:${JSON.stringify(query)}`,
+    (c, signal) => mediaKitPackages(c, query, signal),
+    {
+      refreshInterval: CADENCE.mediaKit,
+    },
+  );
   const rows = list.data?.packages ?? [];
 
   if (list.freshness === "blocked") {
@@ -190,6 +340,7 @@ function PackagesTable() {
           </Button>
         </Hint>
       </Stack>
+      <ListFilterForm onApply={setQuery} />
       {open?.kind === "create" && (
         <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
           <CreatePackageForm onClose={() => setOpen(undefined)} />
@@ -198,7 +349,7 @@ function PackagesTable() {
 
       <FreshnessNote freshness={list.freshness}>
         {list.freshness === "live" &&
-          `${plural(rows.length, "package")} · as of ${asOfStamp(list.asOf!)}`}
+          `${plural(rows.length, "package")}${filtered ? " matching the filters" : ""} · as of ${asOfStamp(list.asOf!)}`}
         {list.freshness === "stale" && "couldn't refresh — showing the last packages received"}
         {list.freshness === "empty" &&
           (list.loading ? "loading…" : list.result ? describe(list.result) : "")}
@@ -215,7 +366,9 @@ function PackagesTable() {
             <Typography variant="body2" color="text.secondary">
               {list.freshness === "empty" && list.result?.kind === "unavailable"
                 ? describe(list.result)
-                : "No packages yet."}
+                : filtered
+                  ? "No packages match these filters."
+                  : "No packages yet."}
             </Typography>
           </Box>
         ) : (
@@ -310,17 +463,33 @@ function isOpen(open: Open | undefined, kind: "detail" | "edit", id: string): bo
   return open?.kind === kind && open.id === id;
 }
 
-function SearchResults({ query }: { query: string }) {
-  // Keyed on the submitted query string, exactly like Agents.tsx keys its
+/**
+ * What a search result costs. The agent answers with the authenticated view —
+ * exact, tier-adjusted price and floor — whenever the caller has a key or
+ * names a tier above public, and with the public band otherwise.
+ */
+function priceCell(pkg: MediaKitPackage): string {
+  if (pkg.exact_price == null) return pkg.price_range ?? "—";
+  const floor = pkg.floor_price == null ? "" : ` · floor ${plain(pkg.floor_price, pkg.currency)}`;
+  return `${plain(pkg.exact_price, pkg.currency)}${floor}`;
+}
+
+function SearchResults({ body }: { body: MediaKitSearchQuery }) {
+  // Keyed on the whole submitted body, exactly like Agents.tsx keys its
   // resource on the active filters — a new key is a new SWR entry, so
-  // changing the query re-fetches without ever needing a mutation seam. This
+  // changing any field re-fetches without ever needing a mutation seam. This
   // is a POST, but it answers a question and stores nothing (see
   // searchMediaKit's comment and QUERY_SHAPED_PATHS in policy.ts), so it goes
   // through useResource, not useMutation, and runs even with writes off.
-  const results = useResource(`media-kit-search:${query}`, (c, signal) =>
-    searchMediaKit(c, { query }, signal),
+  const results = useResource(`media-kit-search:${JSON.stringify(body)}`, (c, signal) =>
+    searchMediaKit(c, body, signal),
   );
   const rows = results.data?.results ?? [];
+  const query = body.query;
+  const asWho = identityLabel(body);
+  const scope = [asWho && `as ${asWho}`, body.audience_filter && "audience-filtered"]
+    .filter(Boolean)
+    .join(", ");
 
   if (results.freshness === "blocked") {
     return <GatedNotice what="Media kit search" result={results.result} />;
@@ -337,7 +506,7 @@ function SearchResults({ query }: { query: string }) {
         }}
       >
         {results.freshness === "live" &&
-          `${plural(rows.length, "match", "matches")} for "${query}" · as of ${asOfStamp(results.asOf!)}`}
+          `${plural(rows.length, "match", "matches")} for "${query}"${scope ? ` (${scope})` : ""} · as of ${asOfStamp(results.asOf!)}`}
         {results.freshness === "stale" &&
           `couldn't refresh — showing the last results for "${query}"`}
         {results.freshness === "empty" &&
@@ -361,6 +530,7 @@ function SearchResults({ query }: { query: string }) {
               <TableCell sx={{ fontWeight: 600 }}>Device types</TableCell>
               <TableCell sx={{ fontWeight: 600 }}>Price</TableCell>
               <TableCell sx={{ fontWeight: 600 }}>Rate</TableCell>
+              <TableCell sx={{ fontWeight: 600 }}>Products</TableCell>
               <TableCell sx={{ fontWeight: 600 }}>Featured</TableCell>
             </TableRow>
           </TableHead>
@@ -369,10 +539,23 @@ function SearchResults({ query }: { query: string }) {
               <TableRow key={pkg.package_id} hover data-row="media-kit-search-result">
                 <TableCell sx={{ fontSize: 13 }}>{pkg.name || pkg.package_id}</TableCell>
                 <TableCell sx={{ fontSize: 12 }}>{pkg.ad_formats.join(", ") || "—"}</TableCell>
-                <TableCell sx={{ fontSize: 12 }}>{pkg.device_types.map(deviceLabel).join(", ") || "—"}</TableCell>
-                <TableCell sx={{ fontSize: 12 }}>{pkg.price_range ?? "—"}</TableCell>
+                <TableCell sx={{ fontSize: 12 }}>
+                  {pkg.device_types.map(deviceLabel).join(", ") || "—"}
+                </TableCell>
+                <TableCell sx={{ fontSize: 12 }}>{priceCell(pkg)}</TableCell>
                 <TableCell sx={{ fontSize: 12, color: palette.textSecondary }}>
                   {pkg.rate_type ?? "—"}
+                  {pkg.negotiation_enabled && " · negotiable"}
+                  {pkg.volume_discounts_available && " · volume discounts"}
+                </TableCell>
+                {/* Placements come only with the authenticated view; the
+                    public one has none to show, which is not the same as
+                    a package with no products. */}
+                <TableCell sx={{ fontSize: 12 }}>
+                  {pkg.exact_price == null
+                    ? "—"
+                    : pkg.placements.map((p) => p.product_name || p.product_id).join(", ") ||
+                      "none"}
                 </TableCell>
                 <TableCell sx={{ fontSize: 12 }}>{featuredCell(pkg.is_featured)}</TableCell>
               </TableRow>
@@ -384,38 +567,76 @@ function SearchResults({ query }: { query: string }) {
   );
 }
 
+/** Every field of `MediaKitSearchRequest`; blanks are left out, so the agent's defaults apply. */
+function searchBody(
+  query: string,
+  identity: BuyerIdentity,
+  audience: AudienceDraft,
+): MediaKitSearchQuery {
+  const body: MediaKitSearchQuery = { query, ...identityBody(identity, { advertiser: true }) };
+  if (audience.type || audience.id.trim() || audience.version.trim()) {
+    body.audience_filter = {
+      ...(audience.type && { audience_type: audience.type }),
+      ...(audience.id.trim() && { audience_id: audience.id.trim() }),
+      ...(audience.version.trim() && { taxonomy_version: audience.version.trim() }),
+    };
+  }
+  return body;
+}
+
 function Search() {
   const [queryInput, setQueryInput] = useState("");
+  const [identity, setIdentity] = useState<BuyerIdentity>(NO_IDENTITY);
+  const [audience, setAudience] = useState<AudienceDraft>(NO_AUDIENCE);
   // undefined means "nothing submitted yet" — kept distinct from "" so
   // <SearchResults> mounts (and therefore fetches) only once the operator has
   // actually submitted, never on the keystrokes that fill the field.
-  const [submittedQuery, setSubmittedQuery] = useState<string | undefined>(undefined);
+  const [submitted, setSubmitted] = useState<MediaKitSearchQuery | undefined>(undefined);
+  const problem = audienceProblem(audience);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (problem) return;
     const trimmed = queryInput.trim();
-    setSubmittedQuery(trimmed || undefined);
+    setSubmitted(trimmed ? searchBody(trimmed, identity, audience) : undefined);
   }
 
   return (
     <Paper variant="outlined" sx={{ p: 2.5, mb: 3 }}>
       <Box component="form" onSubmit={handleSubmit}>
-        <FormRow>
-          <TipField
-            hint="Words to look for in the media kit's packages. Searching happens only when you submit; a blank search submits nothing."
-            size="small"
-            label="Search the media kit"
-            value={queryInput}
-            onChange={(e) => setQueryInput(e.target.value)}
-            sx={{ minWidth: 280 }}
-          />
-          <Button type="submit" variant="outlined" size="small" data-action="search">
-            Search
-          </Button>
-        </FormRow>
+        <Stack spacing={1.5}>
+          <FormRow>
+            <TipField
+              hint="Words to look for in the media kit's packages — names, descriptions, tags, content categories and audience segment ids. Searching happens only when you submit; a blank search submits nothing."
+              size="small"
+              label="Search the media kit"
+              value={queryInput}
+              onChange={(e) => setQueryInput(e.target.value)}
+              sx={{ minWidth: 280 }}
+            />
+            <Hint hint={problem}>
+              <Button
+                type="submit"
+                variant="outlined"
+                size="small"
+                data-action="search"
+                disabled={problem !== undefined}
+              >
+                Search
+              </Button>
+            </Hint>
+          </FormRow>
+          {/* This console always sends its key, so results come back in the
+              authenticated view whatever the tier says; the tier and ids
+              choose which buyer's prices that view shows. */}
+          <FormRow>
+            <BuyerIdentityFields value={identity} onChange={setIdentity} advertiser />
+            <AudienceFields value={audience} onChange={setAudience} />
+          </FormRow>
+        </Stack>
       </Box>
 
-      {submittedQuery !== undefined && <SearchResults query={submittedQuery} />}
+      {submitted !== undefined && <SearchResults body={submitted} />}
     </Paper>
   );
 }
@@ -427,24 +648,23 @@ export default function MediaKitScreen() {
         title="Media kit"
         subtitle="The packages this agent publishes to buyers, with full-text search over them. Packages can be created, edited and archived here; prices are edited on the Catalog."
       >
+        <ScreenSection title="Summary">
+          <Box sx={{ mb: 0, maxWidth: 360 }}>
+            <Summary />
+          </Box>
+        </ScreenSection>
 
-      <ScreenSection title="Summary">
-        <Box sx={{ mb: 0, maxWidth: 360 }}>
-          <Summary />
-        </Box>
-      </ScreenSection>
+        <ScreenSection title="Search" caption="A query-shaped POST — it runs with writes off.">
+          <Search />
+        </ScreenSection>
 
-      <ScreenSection title="Search" caption="A query-shaped POST — it runs with writes off.">
-        <Search />
-      </ScreenSection>
+        <ScreenSection title="Audience">
+          <AudienceMatchForm />
+        </ScreenSection>
 
-      <ScreenSection title="Audience">
-        <AudienceMatchForm />
-      </ScreenSection>
-
-      <ScreenSection title="Packages">
-        <PackagesTable />
-      </ScreenSection>
+        <ScreenSection title="Packages">
+          <PackagesTable />
+        </ScreenSection>
       </PageHeader>
     </section>
   );

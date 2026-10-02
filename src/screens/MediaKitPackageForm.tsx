@@ -28,6 +28,7 @@ import {
   createBody,
   createProblem,
   draftOf,
+  editProblem,
   packageChanges,
   type PackageDraft,
 } from "./package-draft";
@@ -83,12 +84,20 @@ export function Fields({
   onChange,
   withPrices,
   full = false,
+  classification = full,
 }: {
   draft: PackageDraft;
   onChange: (draft: PackageDraft) => void;
   withPrices: boolean;
   /** Also the create-only fields: placements, content categories, audience, season. */
   full?: boolean;
+  /**
+   * Content categories, their taxonomy and the seasonal label, without the
+   * rest of `full`. The edit form wants these: the PUT takes them, and unlike
+   * placements and audience capabilities, sending them replaces nothing the
+   * form cannot show.
+   */
+  classification?: boolean;
 }) {
   const set = <K extends keyof PackageDraft>(key: K, value: PackageDraft[K]) =>
     onChange({ ...draft, [key]: value });
@@ -198,60 +207,62 @@ export function Fields({
         />
       </Stack>
       {full && (
-        <>
-          <ProductMultiPicker
-            hint="Products the package is built from — its placements. Pick as many as you need, or type or paste ids. Blank creates a package with none."
-            value={draft.productIds}
-            onChange={(v) => set("productIds", v)}
+        <ProductMultiPicker
+          hint="Products the package is built from — its placements. Pick as many as you need, or type or paste ids. Blank creates a package with none."
+          value={draft.productIds}
+          onChange={(v) => set("productIds", v)}
+        />
+      )}
+      {classification && (
+        <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
+          <ListField
+            label="Content categories"
+            hint="IAB content category ids, for example IAB1, read against the taxonomy below."
+            value={draft.cat}
+            onChange={(v) => set("cat", v)}
           />
-          <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
-            <ListField
-              label="Content categories"
-              hint="IAB content category ids, for example IAB1, read against the taxonomy below."
-              value={draft.cat}
-              onChange={(v) => set("cat", v)}
-            />
-            <TipField
-              hint="AdCOM number of the taxonomy the categories come from. Blank takes the agent's default, 2 (IAB Content Category Taxonomy 2.0)."
-              size="small"
-              label="Content taxonomy"
-              placeholder="2"
-              value={draft.cattax}
-              onChange={(e) => set("cattax", e.target.value)}
-              slotProps={{ htmlInput: { inputMode: "numeric" } }}
-              sx={{ width: 150 }}
-            />
-            <TipField
-              hint="A label for seasonal packages, such as Q4 holiday. No view returns it, so it can be set here but not read back."
-              size="small"
-              label="Seasonal label"
-              value={draft.seasonalLabel}
-              onChange={(e) => set("seasonalLabel", e.target.value)}
-              sx={{ minWidth: 180 }}
-            />
-          </Stack>
-          <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
-            <ListField
-              label="Audience segment ids"
-              hint="Audience segment ids the package targets. Stored as typed; the agent does not check them."
-              value={draft.audienceSegmentIds}
-              onChange={(v) => set("audienceSegmentIds", v)}
-            />
-            <TipField
-              hint='Which audience taxonomies the package supports, as a JSON object, for example {"standard_taxonomy_version": "1.1", "supports_standard": true}. Blank sends none.'
-              size="small"
-              label="Audience capabilities"
-              multiline
-              minRows={2}
-              value={draft.audienceCapabilities}
-              onChange={(e) => set("audienceCapabilities", e.target.value)}
-              slotProps={{
-                htmlInput: { spellCheck: false, style: { fontFamily: "monospace", fontSize: 12 } },
-              }}
-              sx={{ minWidth: 280, flex: 1 }}
-            />
-          </Stack>
-        </>
+          <TipField
+            hint="AdCOM number of the taxonomy the categories come from. Blank leaves the agent's value; a new package then gets the default, 2 (IAB Content Category Taxonomy 2.0)."
+            size="small"
+            label="Content taxonomy"
+            placeholder="2"
+            value={draft.cattax}
+            onChange={(e) => set("cattax", e.target.value)}
+            slotProps={{ htmlInput: { inputMode: "numeric" } }}
+            sx={{ width: 150 }}
+          />
+          <TipField
+            hint="A label for seasonal packages, such as Q4 holiday. No view returns it, so the current one cannot be shown: blank leaves it as stored, and anything typed replaces it."
+            size="small"
+            label="Seasonal label"
+            value={draft.seasonalLabel}
+            onChange={(e) => set("seasonalLabel", e.target.value)}
+            sx={{ minWidth: 180 }}
+          />
+        </Stack>
+      )}
+      {full && (
+        <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
+          <ListField
+            label="Audience segment ids"
+            hint="Audience segment ids the package targets. Stored as typed; the agent does not check them."
+            value={draft.audienceSegmentIds}
+            onChange={(v) => set("audienceSegmentIds", v)}
+          />
+          <TipField
+            hint='Which audience taxonomies the package supports, as a JSON object, for example {"standard_taxonomy_version": "1.1", "supports_standard": true}. Blank sends none.'
+            size="small"
+            label="Audience capabilities"
+            multiline
+            minRows={2}
+            value={draft.audienceCapabilities}
+            onChange={(e) => set("audienceCapabilities", e.target.value)}
+            slotProps={{
+              htmlInput: { spellCheck: false, style: { fontFamily: "monospace", fontSize: 12 } },
+            }}
+            sx={{ minWidth: 280, flex: 1 }}
+          />
+        </Stack>
       )}
     </Stack>
   );
@@ -283,7 +294,7 @@ export function CreatePackageForm({ onClose }: { onClose: () => void }) {
 
   return (
     <Box data-block="media-kit-create-package">
-      <Fields draft={draft} onChange={setDraft} withPrices />
+      <Fields draft={draft} onChange={setDraft} withPrices full />
       <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
         <ConfirmButton
           label="Create"
@@ -302,9 +313,12 @@ export function CreatePackageForm({ onClose }: { onClose: () => void }) {
           }
           consequence={
             <>
-              The package is created active, with no products behind it — use Assemble on the
-              Catalog to build one from products. {PUBLIC} Not idempotent: each call mints a new
-              package id, so a retry after an unclear failure may leave two.
+              The package is created active, curated
+              {draft.productIds.length > 0
+                ? ", with a placement for each product that resolves; an id that does not is reported back, and if none resolve nothing is created (422)."
+                : ", with no products behind it."}{" "}
+              {PUBLIC} Not idempotent: each call mints a new package id, so a retry after an unclear
+              failure may leave two.
             </>
           }
         />
@@ -325,13 +339,11 @@ export function EditPackageForm({ pkg, onClose }: { pkg: MediaKitPackage; onClos
     { invalidates: (args) => [...PACKAGE_VIEWS, `package:${args.id}`] },
   );
   const body = packageChanges(pkg, draft);
-  const problem =
-    (draft.name.trim() ? undefined : "A package needs a name.") ??
-    (Object.keys(body).length > 0 ? undefined : "Nothing has changed.");
+  const problem = editProblem(pkg, draft);
 
   return (
     <Box data-block="media-kit-edit-package" sx={{ py: 1 }}>
-      <Fields draft={draft} onChange={setDraft} withPrices={false} />
+      <Fields draft={draft} onChange={setDraft} withPrices={false} classification />
       <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
         <ConfirmButton
           label="Save"
@@ -350,8 +362,8 @@ export function EditPackageForm({ pkg, onClose }: { pkg: MediaKitPackage; onClos
           consequence={
             <>
               Sends {Object.keys(body).join(", ") || "nothing"} and leaves every other field —
-              prices and placements included — as stored. {PUBLIC} Saving the same values twice is
-              harmless. A package archived meanwhile 404s.
+              prices, placements and audience capabilities included — as stored. {PUBLIC} Saving the
+              same values twice is harmless. A package archived meanwhile 404s.
             </>
           }
         />
