@@ -503,7 +503,7 @@ export function OrderTransitionWrites({
   >(
     (c, args) => transitionOrder(c, orderId, args),
     // The trailing `*` entry covers the row's filtered timeline reads too.
-    { invalidates: ["orders:*", `order-audit:${orderId}`, `order-audit:${orderId}:*`, "orders-report", "orders-report:*"] },
+    { invalidates: ["orders:*", `order-audit:${orderId}`, `order-audit:${orderId}:*`, "orders-report"] },
   );
 
   if (steps.length === 0) {

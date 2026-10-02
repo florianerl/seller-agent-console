@@ -140,7 +140,7 @@ export function OrderWizard({
   const create = useMutation<
     { deal_id?: string; quote_id?: string; metadata: Record<string, unknown> },
     Order
-  >((c, a) => createOrder(c, a), { invalidates: ["orders:*", "orders-report", "orders-report:*"] });
+  >((c, a) => createOrder(c, a), { invalidates: ["orders:*", "orders-report"] });
 
   const deal = start === "none" ? "" : dealId.trim();
   const quote = start === "none" ? "" : quoteId.trim();

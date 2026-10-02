@@ -18,8 +18,8 @@ import { resetWritePolicy } from "../../src/api/policy";
  * makes, checked on the wire. These were the ones the screen left out until
  * they were compared against openapi.json: transition and creation
  * `metadata`, change-request `old_value` and multiple diffs, the audit's
- * `actor` / `from_date` / `to_date`, the report's date range, and the GAM
- * delivery window.
+ * `actor` / `from_date` / `to_date`, and the GAM delivery window. The
+ * report's date range is the one left out on purpose (see OrdersReporting).
  */
 
 const ORDER = {
@@ -216,22 +216,14 @@ describe("the Orders screen sends every field the spec offers", () => {
     expect(detail.querySelector('[data-action="transition-order:completed"]')).toBeTruthy();
   });
 
-  it("asks the report for a date range", async () => {
-    const user = userEvent.setup();
+  // The spec offers from_date / to_date, but upstream ranges only the
+  // orders and never the change requests, so the card does not offer them.
+  it("reads the totals over every order, unranged", async () => {
     renderScreen();
-    const card = await waitFor(() => {
-      const el = document.querySelector('[data-card="orders-report"]');
-      expect(el).toBeTruthy();
-      return el as HTMLElement;
-    });
-    await user.type(within(card).getByLabelText("Created from"), "2026-09-01");
-    await user.type(within(card).getByLabelText("Created to"), "2026-09-30");
-
-    await waitFor(() => {
-      const q = seen.filter((u) => u.pathname.endsWith("/orders/report")).at(-1)!.searchParams;
-      expect(q.get("from_date")).toBe("2026-09-01");
-      expect(q.get("to_date")).toBe("2026-09-30");
-    });
+    await waitFor(() => expect(seen.some((u) => u.pathname.endsWith("/orders/report"))).toBe(true));
+    const q = seen.find((u) => u.pathname.endsWith("/orders/report"))!.searchParams;
+    expect(q.has("from_date") || q.has("to_date")).toBe(false);
+    expect(document.querySelector('[data-card="orders-report"] input[type="date"]')).toBeNull();
   });
 
   it("asks GAM for the delivery window chosen", async () => {

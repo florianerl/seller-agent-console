@@ -14,7 +14,6 @@ import { Field, FieldGrid } from "../components/Field";
 import { GatedNotice } from "../components/GatedNotice";
 import { JsonView } from "../components/JsonView";
 import { EnumSelect } from "../components/EnumSelect";
-import { TipField } from "../components/TipField";
 import { plural, stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
 import { useResource, type ResourceHandle } from "../query/useResource";
@@ -93,16 +92,17 @@ function RawPayload({ data, testId }: { data: unknown; testId: string }) {
  * state in the Result taxonomy that means "we did not ask" — which is not a
  * thing that can happen to a request.
  */
-function AgentTotalsPanel({ listed, from, to }: { listed: number | undefined; from: string; to: string }) {
-  const ranged = from !== "" || to !== "";
-  // Unranged under the key writes already invalidate; a range has a key of
-  // its own under that prefix, so a write drops it too.
-  const report = useResource(
-    ranged ? `orders-report:range:${from}|${to}` : "orders-report",
-    (c, signal) =>
-      ordersReport(c, { ...(from ? { from_date: from } : {}), ...(to ? { to_date: to } : {}) }, signal),
-    { refreshInterval: CADENCE.reporting },
-  );
+/**
+ * The report's `from_date` / `to_date` are deliberately not offered. Upstream
+ * applies them to orders only (by `created_at`) and still counts every change
+ * request, so a ranged card mixes two scopes beside a list that is not ranged
+ * at all — a summary that misleads more than it narrows. They were added once,
+ * from the OpenAPI spec, and removed for that reason.
+ */
+function AgentTotalsPanel({ listed }: { listed: number | undefined }) {
+  const report = useResource("orders-report", (c, signal) => ordersReport(c, {}, signal), {
+    refreshInterval: CADENCE.reporting,
+  });
 
   if (report.result?.kind === "rejected") {
     return <GatedNotice what="The order summary" result={report.result} />;
@@ -111,9 +111,8 @@ function AgentTotalsPanel({ listed, from, to }: { listed: number | undefined; fr
   // Two reads, made at different moments, of the same store. A difference is
   // usually an order created between them, but it is the agent's number and
   // the list's number, and neither is quietly preferred.
-  // Only comparable when the report covers every order, as the list does.
   const differs =
-    !ranged && report.data !== undefined && listed !== undefined && report.data.total_orders !== listed;
+    report.data !== undefined && listed !== undefined && report.data.total_orders !== listed;
 
   return (
     <>
@@ -150,38 +149,13 @@ function AgentTotalsPanel({ listed, from, to }: { listed: number | undefined; fr
 }
 
 export function AgentTotals({ listed }: { listed: number | undefined }) {
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
   return (
     <Paper variant="outlined" sx={{ p: 2.5, mb: 2 }} data-card="orders-report">
-      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }}>
-        {/* Directly under the page's h2, unlike the Reporting cards below the list. */}
-        <Typography variant="h3" component="h3" sx={{ mr: 1 }}>
-          Totals, as the agent counts them
-        </Typography>
-        <Box sx={{ flex: 1 }} />
-        <TipField
-          hint="Count only orders created on or after this day (from_date). Change requests are not filtered by date upstream."
-          size="small"
-          type="date"
-          label="Created from"
-          value={from}
-          onChange={(e) => setFrom(e.target.value)}
-          slotProps={{ inputLabel: { shrink: true } }}
-          sx={{ width: 160 }}
-        />
-        <TipField
-          hint="Count only orders created on or before this day (to_date)."
-          size="small"
-          type="date"
-          label="Created to"
-          value={to}
-          onChange={(e) => setTo(e.target.value)}
-          slotProps={{ inputLabel: { shrink: true } }}
-          sx={{ width: 160 }}
-        />
-      </Stack>
-      <AgentTotalsPanel listed={listed} from={from} to={to} />
+      {/* Directly under the page's h2, unlike the Reporting cards below the list. */}
+      <Typography variant="h3" component="h3" sx={{ mb: 1.5 }}>
+        Totals, as the agent counts them
+      </Typography>
+      <AgentTotalsPanel listed={listed} />
     </Paper>
   );
 }
