@@ -40,7 +40,12 @@ const PACKAGE = {
 function mount() {
   return render(
     <SWRConfig
-      value={{ provider: () => new Map(), dedupingInterval: 0, shouldRetryOnError: false, compare: sameResult }}
+      value={{
+        provider: () => new Map(),
+        dedupingInterval: 0,
+        shouldRetryOnError: false,
+        compare: sameResult,
+      }}
     >
       <ThemeProvider theme={theme}>
         <CredentialProvider>
@@ -86,6 +91,24 @@ async function confirm(user: ReturnType<typeof userEvent.setup>, action: string,
   await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: label }));
 }
 
+/**
+ * Pasted rather than typed, the way catalog-writes does it: these tests are
+ * about what reaches the wire, and typing every value a keystroke at a time
+ * is what pushed the Catalog's equivalent past CI's 15s budget. Chip fields
+ * still get their Enter.
+ */
+async function fill(
+  user: ReturnType<typeof userEvent.setup>,
+  form: HTMLElement,
+  label: string,
+  text: string,
+  enter = false,
+) {
+  await user.click(within(form).getByLabelText(label));
+  await user.paste(text);
+  if (enter) await user.keyboard("{Enter}");
+}
+
 describe("media kit writes", () => {
   beforeEach(async () => {
     resetReachability();
@@ -93,7 +116,12 @@ describe("media kit writes", () => {
     resetWritePolicy();
     server.use(
       http.get(`${API}/media-kit`, () =>
-        HttpResponse.json({ total_packages: 1, featured_count: 0, featured: [], all_packages: [PACKAGE] }),
+        HttpResponse.json({
+          total_packages: 1,
+          featured_count: 0,
+          featured: [],
+          all_packages: [PACKAGE],
+        }),
       ),
       http.get(`${API}/media-kit/packages`, () => HttpResponse.json({ packages: [PACKAGE] })),
       // The audience match's package picker, and the create form's product picker.
@@ -125,11 +153,11 @@ describe("media kit writes", () => {
     expect(document.querySelector('[data-action="media-kit-update-package"]')).toBeDisabled();
     expect(screen.queryByLabelText("Base price")).toBeNull();
 
-    const description = screen.getByLabelText("Description");
-    await user.clear(description);
-    await user.type(description, "Above the fold.");
-    await user.type(screen.getByLabelText("Tags"), "sports{Enter}");
-    await user.click(screen.getByLabelText("Featured"));
+    const form = document.querySelector('[data-block="media-kit-edit-package"]') as HTMLElement;
+    await user.clear(within(form).getByLabelText("Description"));
+    await fill(user, form, "Description", "Above the fold.");
+    await fill(user, form, "Tags", "sports", true);
+    await user.click(within(form).getByLabelText("Featured"));
     await confirm(user, "media-kit-update-package", "Save");
 
     await waitFor(() =>
@@ -137,7 +165,9 @@ describe("media kit writes", () => {
         { description: "Above the fold.", tags: ["premium", "sports"], is_featured: true },
       ]),
     );
-    await waitFor(() => expect(document.querySelector('[data-block="media-kit-edit-package"]')).toBeNull());
+    await waitFor(() =>
+      expect(document.querySelector('[data-block="media-kit-edit-package"]')).toBeNull(),
+    );
   });
 
   it("creates a package with its lists and prices, device types as integers", async () => {
@@ -150,10 +180,10 @@ describe("media kit writes", () => {
     expect(document.querySelector('[data-action="media-kit-create-package"]')).toBeDisabled();
 
     const form = document.querySelector('[data-block="media-kit-create-package"]') as HTMLElement;
-    await user.type(within(form).getByLabelText("Name"), "Sports bundle");
-    await user.type(within(form).getByLabelText("Base price"), "12");
-    await user.type(within(form).getByLabelText("Floor"), "6");
-    await user.type(within(form).getByLabelText("Geo targets"), "US, US-NY{Enter}");
+    await fill(user, form, "Name", "Sports bundle");
+    await fill(user, form, "Base price", "12");
+    await fill(user, form, "Floor", "6");
+    await fill(user, form, "Geo targets", "US, US-NY", true);
     await user.click(within(form).getByRole("combobox", { name: "Device types" }));
     await user.click(await screen.findByRole("option", { name: "connected TV" }));
     await user.keyboard("{Escape}");
@@ -188,11 +218,11 @@ describe("media kit writes", () => {
     // would replace them with what the public view cannot show.
     expect(within(form).queryByLabelText("Audience capabilities")).toBeNull();
 
-    await user.type(within(form).getByLabelText("Content categories"), "IAB19{Enter}");
+    await fill(user, form, "Content categories", "IAB19", true);
     const cattax = within(form).getByLabelText("Content taxonomy");
     await user.clear(cattax);
-    await user.type(cattax, "3");
-    await user.type(within(form).getByLabelText("Seasonal label"), "Q4 holiday");
+    await user.paste("3");
+    await fill(user, form, "Seasonal label", "Q4 holiday");
     await confirm(user, "media-kit-update-package", "Save");
 
     await waitFor(() =>
@@ -208,15 +238,14 @@ describe("media kit writes", () => {
 
     await user.click(await enabled("media-kit-new-package"));
     const form = document.querySelector('[data-block="media-kit-create-package"]') as HTMLElement;
-    await user.type(within(form).getByLabelText("Name"), "Q4 bundle");
-    await user.type(within(form).getByLabelText("Base price"), "20");
-    await user.type(within(form).getByLabelText("Floor"), "10");
-    await user.type(within(form).getByLabelText("Content categories"), "IAB17{Enter}");
-    await user.type(within(form).getByLabelText("Content taxonomy"), "3");
-    await user.type(within(form).getByLabelText("Seasonal label"), "Q4 holiday");
-    await user.type(within(form).getByLabelText("Audience segment ids"), "3-7{Enter}");
-    await user.click(within(form).getByLabelText("Audience capabilities"));
-    await user.paste('{"supports_standard": true}');
+    await fill(user, form, "Name", "Q4 bundle");
+    await fill(user, form, "Base price", "20");
+    await fill(user, form, "Floor", "10");
+    await fill(user, form, "Content categories", "IAB17", true);
+    await fill(user, form, "Content taxonomy", "3");
+    await fill(user, form, "Seasonal label", "Q4 holiday");
+    await fill(user, form, "Audience segment ids", "3-7", true);
+    await fill(user, form, "Audience capabilities", '{"supports_standard": true}');
     await confirm(user, "media-kit-create-package", "Create package");
 
     await waitFor(() =>
@@ -249,7 +278,9 @@ describe("media kit writes", () => {
   it("leaves every write control disabled while writes are off", async () => {
     await credential(false);
     mount();
-    await waitFor(() => expect(document.querySelector('[data-row="media-kit-package"]')).toBeTruthy());
+    await waitFor(() =>
+      expect(document.querySelector('[data-row="media-kit-package"]')).toBeTruthy(),
+    );
     for (const action of [
       "media-kit-new-package",
       "media-kit-edit-package",
