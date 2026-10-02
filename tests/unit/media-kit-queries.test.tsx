@@ -155,13 +155,19 @@ describe("media kit queries", () => {
     mount();
 
     await user.type(screen.getByLabelText("Search the media kit"), "sports");
-    await user.type(screen.getByLabelText("Buyer tier"), "agency");
-    await user.type(screen.getByLabelText("Agency id"), "ag-1");
-    await user.type(screen.getByLabelText("Advertiser id"), "adv-1");
     const search = screen.getByLabelText("Search the media kit").closest("form") as HTMLElement;
+    await user.click(within(search).getByRole("button", { name: "More options" }));
+    await user.type(within(search).getByLabelText("Buyer tier"), "agency");
+    await user.type(within(search).getByLabelText("Agency id"), "ag-1");
+    await user.type(within(search).getByLabelText("Advertiser id"), "adv-1");
     await user.click(within(search).getByRole("combobox", { name: "Audience type" }));
     await user.click(await screen.findByRole("option", { name: "contextual" }));
     await user.type(within(search).getByLabelText("Audience id"), "IAB1-2");
+    // Folded away, the options still say they are in play.
+    await user.click(within(search).getByRole("button", { name: "Fewer options" }));
+    expect(
+      within(search).getByRole("button", { name: "More options (5 set)" }),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Search" }));
 
     await waitFor(() =>
@@ -204,6 +210,7 @@ describe("media kit queries", () => {
 
     const block = document.querySelector('[data-block="audience-match"]') as HTMLElement;
     await user.type(within(block).getByLabelText("Audience identifier"), "emb://b/x");
+    await user.click(within(block).getByRole("button", { name: "More options" }));
     await user.type(within(block).getByLabelText("Package"), "pkg-a{Enter}");
     await user.type(within(block).getByLabelText("Taxonomy"), "agentic-audiences");
     await user.type(within(block).getByLabelText("Version"), "draft-2026-01");
