@@ -62,12 +62,12 @@ function DecisionControls({
 
   const decide = useMutation<{ id: string; body: ApprovalDecisionInput }, unknown>(
     (c, args) => decideApproval(c, args.id, args.body),
-    // The queue and this gate's own detail both describe a decided approval
+    // The queue and this approval's own detail both describe a decided approval
     // wrongly the moment it is decided.
     { invalidates: ["approvals", `approval:${approvalId}`] },
   );
 
-  // A gate the agent has already answered, or let expire, is not ours to
+  // An approval the agent has already answered, or let expire, is not ours to
   // decide. The control stays visible so the row does not change shape.
   const decidable = status === "pending";
   const busy = decide.pending;
@@ -77,7 +77,7 @@ function DecisionControls({
 
   return (
     <Box sx={{ mt: 2 }} data-block="approval-controls">
-      <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 1 }}>Decide this gate</Typography>
+      <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 1 }}>Decide this approval</Typography>
 
       <FormRow>
         <TipField
@@ -98,7 +98,7 @@ function DecisionControls({
           disabled={blocked || busy}
           sx={{ minWidth: 200 }}
         />
-        <Hint hint="Approve this gate. You confirm first; the decision is recorded but the proposal flow is not resumed until you do that separately.">
+        <Hint hint="Approve this approval. You confirm first; the decision is recorded but the proposal flow is not resumed until you do that separately.">
         <Button
           size="small"
           variant="contained"
@@ -109,7 +109,7 @@ function DecisionControls({
           Approve
         </Button>
         </Hint>
-        <Hint hint="Reject this gate. You confirm first; the decision is recorded but the proposal flow is not resumed until you do that separately.">
+        <Hint hint="Reject this approval. You confirm first; the decision is recorded but the proposal flow is not resumed until you do that separately.">
         <Button
           size="small"
           variant="outlined"
@@ -130,7 +130,7 @@ function DecisionControls({
 
       {!decidable && writesEnabled && (
         <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }} data-state="not-pending">
-          This gate is {status.replace(/_/g, " ")} — only a pending gate can be decided.
+          This approval is {status.replace(/_/g, " ")} — only a pending approval can be decided.
         </Typography>
       )}
 
@@ -142,7 +142,7 @@ function DecisionControls({
 
       <ConfirmAction
         open={pendingDecision !== undefined}
-        title={pendingDecision === "reject" ? "Reject this gate?" : "Approve this gate?"}
+        title={pendingDecision === "reject" ? "Reject this approval?" : "Approve this approval?"}
         confirmLabel={pendingDecision === "reject" ? "Reject" : "Approve"}
         pending={decide.pending}
         onCancel={() => setPendingDecision(undefined)}
@@ -152,9 +152,9 @@ function DecisionControls({
                 records the first decision and refuses a second: a retry after
                 an unclear failure may answer about the earlier attempt. */}
             The agent records this decision. It does not act on it yet: the
-            gated flow picks it up only when it is resumed, which you can do
+            flow it blocks picks it up only when it is resumed, which you can do
             here next. It keeps the first decision it receives and refuses later
-            ones, so if this fails without a clear answer, re-read the gate
+            ones, so if this fails without a clear answer, re-read the approval
             before trying again rather than deciding twice.
           </>
         }
@@ -187,7 +187,7 @@ function DecisionControls({
  * the proposal flow from its snapshot and emitting proposal.accepted,
  * .rejected or .countered. It stores nothing else, and it is not idempotent:
  * each call emits the event again. Deciding over MCP (`approve_or_reject`)
- * never resumes at all, which is why a gate decided elsewhere can be opened
+ * never resumes at all, which is why an approval decided elsewhere can be opened
  * here by id.
  */
 function ResumeControls({
@@ -208,7 +208,7 @@ function ResumeControls({
   if (flowType !== "proposal_handling" || gateName !== "proposal_decision") {
     return (
       <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }} data-state="not-resumable">
-        The agent can only resume proposal decisions. This gate is {flowType || "an unnamed flow"}
+        The agent can only resume proposal decisions. This approval is {flowType || "an unnamed flow"}
         {gateName ? ` / ${gateName}` : ""}, so there is no flow to hand the decision back to.
       </Typography>
     );
@@ -302,7 +302,7 @@ function Decision({
           </Typography>
         ) : !response && locked ? (
           <Typography variant="body2" color="text.secondary" data-state="decision-sent">
-            Decision sent. Re-reading the gate…
+            Decision sent. Re-reading the approval…
           </Typography>
         ) : response ? (
           <FieldGrid data-block="approval-decision">
@@ -350,7 +350,7 @@ function Decision({
 export default function InboxScreen() {
   const [open, setOpen] = useState<string | undefined>();
   const [locked, setLocked] = useState<Readonly<Record<string, true>>>({});
-  // Gates decided on this screen. The agent lists only pending gates, so a
+  // Approvals decided on this screen. The agent lists only pending approvals, so a
   // decided one leaves the queue on the next read — and with it the only
   // place its Resume control could appear. They stay here, marked, until the
   // screen is left.
@@ -376,17 +376,60 @@ export default function InboxScreen() {
           coming. */}
       <PageHeader
         title="Inbox"
-        subtitle="Pending approval gates, and the controls to decide them."
+        subtitle="Pending approvals, and the controls to decide them."
       >
       {list.freshness === "blocked" ? (
         <GatedNotice what="The approvals queue" result={list.result} />
       ) : (
         <>
-          <WritesNotice what="Listing approvals marks any gate past its expiry as timed out and saves that." />
-          {!writesEnabled && <ReadOnlyNotice what="Deciding a gate" />}
+          <WritesNotice what="Listing approvals marks any approval past its expiry as timed out and saves that.">
+            <br />
+            The approvals API returns pending approvals only, so a decided one is not listed here. Its
+            id is in the <code>approval.granted</code> or <code>approval.denied</code> event on the
+            Events screen; paste it into “Open an approval by id” below.
+          </WritesNotice>
+          {!writesEnabled && <ReadOnlyNotice what="Deciding an approval" />}
+
+          {/* An approval decided anywhere else — Claude Code's approve_or_reject,
+              another console, a previous visit — is out of the queue and
+              was never resumed. The agent can still read it by id. */}
+          <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }} data-block="gate-lookup">
+            <Typography variant="h3" sx={{ mb: 1.5 }}>
+              Open an approval by id
+            </Typography>
+            <FormRow>
+              <GatePicker
+                value={lookupId}
+                onChange={setLookupId}
+                hint="The id of a pending or decided approval."
+                sx={{ minWidth: 320 }}
+              />
+              <Hint hint="Reads this approval from the agent so you can see its decision and resume it.">
+              <Button
+                size="small"
+                variant="outlined"
+                data-action="open-gate"
+                disabled={!lookupId.trim()}
+                onClick={() => setOpened(lookupId.trim())}
+              >
+                Open
+              </Button>
+              </Hint>
+            </FormRow>
+            {opened && (
+              <Box sx={{ mt: 1.5 }} data-block="opened-gate">
+                <Decision
+                  key={opened}
+                  approvalId={opened}
+                  locked={locked[opened] === true}
+                  onLocked={() => setLocked((current) => ({ ...current, [opened]: true }))}
+                />
+              </Box>
+            )}
+          </Paper>
 
           <FreshnessNote freshness={list.freshness}>
-            {list.freshness === "live" && plural(queued.length, "approval")}
+            {list.freshness === "live" && plural(queued.length, "pending approval")}
             {list.freshness === "stale" && "couldn't refresh — showing the last queue received"}
             {list.freshness === "empty" &&
               (list.loading ? "loading…" : list.result ? describe(list.result) : "")}
@@ -409,7 +452,7 @@ export default function InboxScreen() {
               <Table size="small" data-state="rows">
                 <TableHead>
                   <TableRow>
-                    <TableCell sx={{ fontWeight: 600 }}>Gate</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>Kind</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Flow</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Raised</TableCell>
@@ -466,50 +509,6 @@ export default function InboxScreen() {
               </Table>
             )}
           </DataPanel>
-
-          {/* A gate decided anywhere else — Claude Code's approve_or_reject,
-              another console, a previous visit — is out of the queue and
-              was never resumed. The agent can still read it by id. */}
-          <Paper variant="outlined" sx={{ p: 2.5, mt: 2.5 }} data-block="gate-lookup">
-            <Typography variant="h3" sx={{ mb: 0.5 }}>
-              Open a gate by id
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-              The queue lists pending gates only. A gate decided elsewhere — including with the MCP
-              tool <code>approve_or_reject</code>, which never resumes the flow — can be opened here
-              to read its decision and resume it. Its id is in the <code>approval.granted</code> or{" "}
-              <code>approval.denied</code> event.
-            </Typography>
-            <FormRow>
-              <GatePicker
-                value={lookupId}
-                onChange={setLookupId}
-                hint="A gate still waiting, or paste the approval id of a decided one from its approval.granted or approval.denied event."
-                sx={{ minWidth: 320 }}
-              />
-              <Hint hint="Reads this gate from the agent so you can see its decision and resume it.">
-              <Button
-                size="small"
-                variant="outlined"
-                data-action="open-gate"
-                disabled={!lookupId.trim()}
-                onClick={() => setOpened(lookupId.trim())}
-              >
-                Open
-              </Button>
-              </Hint>
-            </FormRow>
-            {opened && (
-              <Box sx={{ mt: 1.5 }} data-block="opened-gate">
-                <Decision
-                  key={opened}
-                  approvalId={opened}
-                  locked={locked[opened] === true}
-                  onLocked={() => setLocked((current) => ({ ...current, [opened]: true }))}
-                />
-              </Box>
-            )}
-          </Paper>
         </>
       )}
       </PageHeader>

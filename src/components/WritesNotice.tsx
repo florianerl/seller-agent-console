@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import Alert from "@mui/material/Alert";
 
 /**
@@ -6,11 +7,12 @@ import Alert from "@mui/material/Alert";
  * Several of the agent's GET routes still write — lazy expiry, mostly. An
  * operator watching records change while they browse deserves to know why.
  */
-export function WritesNotice({ what }: { what: string }) {
+export function WritesNotice({ what, children }: { what: string; children?: ReactNode }) {
   return (
     <Alert severity="info" variant="outlined" sx={{ mb: 2.5 }} data-note="writes">
       Opening this screen makes the agent write. {what} That GET is not
       read-only on the server, even when this console's write switch is off.
+      {children}
     </Alert>
   );
 }

@@ -309,8 +309,8 @@ export function CuratorPicker({ label = "Curator", hint, ...rest }: PickerProps)
   );
 }
 
-/** Gates still waiting. A decided gate is not in the queue — type its id from the event. */
-export function GatePicker({ label = "Gate id", hint, ...rest }: PickerProps) {
+/** Approvals still waiting. A decided one is not in the queue — type its id from the event. */
+export function GatePicker({ label = "Approval id", hint, ...rest }: PickerProps) {
   const list = useResource("approvals", approvals, { refreshInterval: CADENCE.orders });
   return (
     <EntityPicker
@@ -320,7 +320,7 @@ export function GatePicker({ label = "Gate id", hint, ...rest }: PickerProps) {
       options={(list.data?.approvals ?? []).map((a) => ({ id: a.approval_id }))}
       loading={list.loading}
       result={list.result}
-      empty="No gates are waiting. Paste the id of a decided one instead."
+      empty="No approvals are waiting. Paste the id of a decided one instead."
     />
   );
 }

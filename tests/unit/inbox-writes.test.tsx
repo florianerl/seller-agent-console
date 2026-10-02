@@ -66,7 +66,7 @@ async function connect(writesEnabled: boolean) {
 /** Opens the one gate's detail, which is where the controls live. */
 async function openGate(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole("button", { name: "Details" }));
-  await screen.findByText("Decide this gate");
+  await screen.findByText("Decide this approval");
 }
 
 describe("deciding an approval", () => {
@@ -332,7 +332,7 @@ describe("deciding an approval", () => {
     );
     const user = userEvent.setup();
     renderScreen();
-    await user.type(await screen.findByLabelText("Gate id"), "appr-9");
+    await user.type(await screen.findByLabelText("Approval id"), "appr-9");
     await user.click(document.querySelector('[data-action="open-gate"]') as HTMLElement);
 
     await waitFor(() =>
