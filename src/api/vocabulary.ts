@@ -24,6 +24,10 @@ function spelled<const V extends string>(values: readonly V[]): readonly Option<
   return values.map((value) => ({ value, label: words(value) }));
 }
 
+/** `NegotiationAction`, `POST /api/v1/negotiations/messages`. Priced actions are counter and final_offer. */
+export const NEGOTIATION_ACTIONS = spelled(["counter", "accept", "reject", "final_offer"] as const);
+export type NegotiationAction = (typeof NEGOTIATION_ACTIONS)[number]["value"];
+
 /**
  * `OrderStatus`, models/order_state_machine.py. Listed in lifecycle order, not
  * declaration order, so a filter reads top to bottom the way an order moves.

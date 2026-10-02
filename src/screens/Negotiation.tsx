@@ -112,12 +112,18 @@ function Conversation({ sessionId }: { sessionId: string }) {
 
 export default function NegotiationScreen() {
   const [status, setStatus] = useState("");
+  const [buyerKey, setBuyerKey] = useState("");
   const [open, setOpen] = useState<string | undefined>();
   const { writesEnabled } = useCredential();
 
   const list = useResource(
-    `sessions:${status}`,
-    (c, signal) => sessions(c, status ? { status } : {}, signal),
+    `sessions:${status}:${buyerKey.trim()}`,
+    (c, signal) =>
+      sessions(
+        c,
+        { ...(status ? { status } : {}), ...(buyerKey.trim() ? { buyer_key: buyerKey.trim() } : {}) },
+        signal,
+      ),
     { refreshInterval: CADENCE.orders },
   );
 
@@ -132,9 +138,6 @@ export default function NegotiationScreen() {
 
       <WritesNotice what="Listing sessions marks any session past its expiry as expired and saves that." />
       {!writesEnabled && <ReadOnlyNotice what="Creating a session or sending a message" />}
-      <Panel title="Open a session">
-        <CreateSessionWrite />
-      </Panel>
       <Panel title="Proposals">
         <ProposalWrites />
       </Panel>
@@ -166,6 +169,14 @@ export default function NegotiationScreen() {
             </MenuItem>
           ))}
         </TipField>
+        <TipField
+          hint="Only sessions opened with this buyer pricing key."
+          size="small"
+          label="Buyer key"
+          value={buyerKey}
+          onChange={(e) => setBuyerKey(e.target.value)}
+          sx={{ minWidth: 240, ml: 2 }}
+        />
       </Paper>
 
       <FreshnessNote freshness={list.freshness}>
@@ -175,35 +186,43 @@ export default function NegotiationScreen() {
           (list.loading ? "loading…" : list.result ? describe(list.result) : "")}
       </FreshnessNote>
 
+      {/* The create button sits in the table's own header: it adds a row to
+          this list, and the header stays put when the list is loading or empty. */}
       <DataPanel>
-        {list.loading && rows.length === 0 ? (
-          <Box sx={{ p: 2 }}>
-            <Skeleton height={28} />
-          </Box>
-        ) : rows.length === 0 ? (
-          <Box sx={{ p: 3 }} data-state="empty">
-            <Typography variant="body2" color="text.secondary">
-              {list.freshness === "empty" && list.result?.kind === "unavailable"
-                ? describe(list.result)
-                : status
-                  ? `No ${status} sessions.`
-                  : "No sessions yet."}
-            </Typography>
-          </Box>
-        ) : (
-          <Table size="small" data-state="rows">
-            <TableHead>
+        <Table size="small" data-state={rows.length === 0 ? undefined : "rows"}>
+          <TableHead>
+            <TableRow>
+              <TableCell sx={{ fontWeight: 600 }}>Session</TableCell>
+              <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
+              <TableCell sx={{ fontWeight: 600 }}>Stage</TableCell>
+              <TableCell sx={{ fontWeight: 600 }}>Messages</TableCell>
+              <TableCell sx={{ fontWeight: 600 }}>Updated</TableCell>
+              <TableCell align="right" data-block="session-create">
+                <CreateSessionWrite />
+              </TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {list.loading && rows.length === 0 ? (
               <TableRow>
-                <TableCell sx={{ fontWeight: 600 }}>Session</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Stage</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Messages</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Updated</TableCell>
-                <TableCell />
+                <TableCell colSpan={6}>
+                  <Skeleton height={28} />
+                </TableCell>
               </TableRow>
-            </TableHead>
-            <TableBody>
-              {rows.map((row) => (
+            ) : rows.length === 0 ? (
+              <TableRow data-state="empty">
+                <TableCell colSpan={6} sx={{ p: 3 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    {list.freshness === "empty" && list.result?.kind === "unavailable"
+                      ? describe(list.result)
+                      : status
+                        ? `No ${status} sessions.`
+                        : "No sessions yet."}
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            ) : (
+              rows.map((row) => (
                 <Fragment key={row.session_id}>
                   <TableRow hover data-row="session">
                     <TableCell sx={{ fontFamily: "monospace", fontSize: 12 }}>
@@ -221,15 +240,15 @@ export default function NegotiationScreen() {
                     </TableCell>
                     <TableCell align="right">
                       <Hint hint="Show or hide the message history of this session.">
-                      <Button
-                        size="small"
-                        onClick={() =>
-                          setOpen((c) => (c === row.session_id ? undefined : row.session_id))
-                        }
-                        aria-expanded={open === row.session_id}
-                      >
-                        {open === row.session_id ? "Hide" : "Messages"}
-                      </Button>
+                        <Button
+                          size="small"
+                          onClick={() =>
+                            setOpen((c) => (c === row.session_id ? undefined : row.session_id))
+                          }
+                          aria-expanded={open === row.session_id}
+                        >
+                          {open === row.session_id ? "Hide" : "Messages"}
+                        </Button>
                       </Hint>
                     </TableCell>
                   </TableRow>
@@ -241,10 +260,10 @@ export default function NegotiationScreen() {
                     </TableRow>
                   )}
                 </Fragment>
-              ))}
-            </TableBody>
-          </Table>
-        )}
+              ))
+            )}
+          </TableBody>
+        </Table>
       </DataPanel>
       </PageHeader>
     </section>

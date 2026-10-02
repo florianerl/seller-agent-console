@@ -13,6 +13,7 @@ import { sameResult } from "../../src/query/freshness";
 import { resetWritePolicy } from "../../src/api/policy";
 import { resetReachability } from "../../src/query/reachability";
 import {
+  CreateSessionWrite,
   DealLookups,
   DealWrites,
   ProposalWrites,
@@ -57,15 +58,6 @@ async function confirm(user: ReturnType<typeof userEvent.setup>, action: string,
   });
   await user.click(button);
   await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: label }));
-}
-
-/** Fields stay disabled until the stored credential has loaded and said writes are on. */
-function enabled(label: string, index = 0) {
-  return waitFor(() => {
-    const el = screen.getAllByLabelText(label)[index];
-    expect(el).toBeEnabled();
-    return el!;
-  });
 }
 
 async function choose(user: ReturnType<typeof userEvent.setup>, label: string, option: string) {
@@ -156,15 +148,122 @@ describe("forms that send an enum", () => {
     expect(screen.getByLabelText("SSP")).toHaveValue("");
   });
 
-  it("submits a legacy proposal with a deal type the flow compares against", async () => {
+  it("submits a legacy proposal through the wizard with every field the agent takes", async () => {
+    const sent = capture("post", "/proposals", { proposal_id: "P-9" });
+    const user = userEvent.setup();
+    mount(<ProposalWrites />);
+
+    await waitFor(() => expect(document.querySelector('[data-action="submit-proposal"]')).toBeEnabled());
+    await user.click(document.querySelector('[data-action="submit-proposal"]') as HTMLElement);
+    const dialog = await screen.findByRole("dialog");
+
+    await user.type(await within(dialog).findByLabelText("Product id"), "prod-1");
+    await user.click(within(dialog).getByRole("button", { name: "Next" }));
+    await user.type(within(dialog).getByLabelText("Price"), "12.5");
+    await user.type(within(dialog).getByLabelText("Impressions"), "250000");
+    await user.type(within(dialog).getByLabelText("Start date"), "2026-11-01");
+    await user.type(within(dialog).getByLabelText("End date"), "2026-11-30");
+    await user.click(within(dialog).getByRole("button", { name: "Next" }));
+    await user.type(within(dialog).getByLabelText("Buyer id (optional)"), "buyer-1");
+    await user.type(within(dialog).getByLabelText("Agency id (optional)"), "agency-1");
+    await user.type(within(dialog).getByLabelText("Advertiser id (optional)"), "adv-1");
+    await user.type(within(dialog).getByLabelText("Agent URL (optional)"), "https://buyer.example");
+    await user.click(within(dialog).getByRole("button", { name: "Next" }));
+    await user.click(within(dialog).getByRole("button", { name: "Submit proposal" }));
+
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0]).toEqual({
+      product_id: "prod-1",
+      deal_type: "preferreddeal",
+      price: 12.5,
+      impressions: 250000,
+      start_date: "2026-11-01",
+      end_date: "2026-11-30",
+      buyer_id: "buyer-1",
+      agency_id: "agency-1",
+      advertiser_id: "adv-1",
+      agent_url: "https://buyer.example",
+    });
+    await user.click(await within(dialog).findByRole("button", { name: "Done" }));
+    await waitFor(() => expect(screen.getByLabelText("Proposal id")).toHaveValue("P-9"));
+  });
+
+  it("leaves blank buyer fields off the wire", async () => {
     const sent = capture("post", "/proposals");
     const user = userEvent.setup();
     mount(<ProposalWrites />);
 
-    await user.type(await enabled("Product id"), "prod-1");
-    await confirm(user, "submit-proposal", "Submit proposal");
+    await waitFor(() => expect(document.querySelector('[data-action="submit-proposal"]')).toBeEnabled());
+    await user.click(document.querySelector('[data-action="submit-proposal"]') as HTMLElement);
+    const dialog = await screen.findByRole("dialog");
+    await user.type(await within(dialog).findByLabelText("Product id"), "prod-1");
+    await user.click(within(dialog).getByRole("button", { name: "Next" }));
+    await user.type(within(dialog).getByLabelText("Price"), "10");
+    await user.type(within(dialog).getByLabelText("Impressions"), "1000");
+    await user.type(within(dialog).getByLabelText("Start date"), "2026-11-01");
+    await user.type(within(dialog).getByLabelText("End date"), "2026-11-30");
+    await user.click(within(dialog).getByRole("button", { name: "Next" }));
+    await user.click(within(dialog).getByRole("button", { name: "Next" }));
+    await user.click(within(dialog).getByRole("button", { name: "Submit proposal" }));
 
     await waitFor(() => expect(sent).toHaveLength(1));
-    expect(sent[0]).toMatchObject({ deal_type: "preferreddeal" });
+    expect(Object.keys(sent[0]!).sort()).toEqual(
+      ["deal_type", "end_date", "impressions", "price", "product_id", "start_date"],
+    );
+  });
+
+
+  it("sends every field of a negotiation message, with one key kept for a retry", async () => {
+    const sent = capture("post", "/api/v1/negotiations/messages");
+    const user = userEvent.setup();
+    mount(<ProposalWrites />);
+
+    await user.type(await screen.findByLabelText("Proposal id"), "P-1");
+    await waitFor(() => expect(document.querySelector('[data-action="negotiation-message"]')).toBeEnabled());
+    await user.click(document.querySelector('[data-action="negotiation-message"]') as HTMLElement);
+    const dialog = await screen.findByRole("dialog");
+
+    await user.type(within(dialog).getByLabelText("Price"), "12.5");
+    await user.type(within(dialog).getByLabelText("Rationale (optional)"), "fair");
+    await user.click(within(dialog).getByRole("button", { name: "Next" }));
+    await user.type(within(dialog).getByLabelText("Negotiation id (optional)"), "N-1");
+    await user.type(within(dialog).getByLabelText("Quote id (optional)"), "Q-1");
+    await user.type(within(dialog).getByLabelText("Round number (optional)"), "2");
+    await user.click(within(dialog).getByRole("button", { name: "Next" }));
+    await user.type(within(dialog).getByLabelText("Seat id (optional)"), "seat-1");
+    await user.type(within(dialog).getByLabelText("Campaign name (optional)"), "Fall");
+    await user.click(within(dialog).getByRole("button", { name: "Next" }));
+    await user.click(within(dialog).getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(typeof sent[0]!["idempotency_key"]).toBe("string");
+    expect({ ...sent[0], idempotency_key: undefined }).toEqual({
+      action: "counter",
+      proposal_id: "P-1",
+      negotiation_id: "N-1",
+      quote_id: "Q-1",
+      round_number: 2,
+      buyer_price: { amount_micros: 12_500_000, currency: "USD" },
+      buyer_identity: { seat_id: "seat-1", campaign_name: "Fall" },
+      rationale: "fair",
+    });
+  });
+
+  it("opens a session with the buyer fields it was given", async () => {
+    const sent = capture("post", "/sessions", { session_id: "S-1" });
+    const user = userEvent.setup();
+    mount(<CreateSessionWrite />);
+
+    await waitFor(() => expect(document.querySelector('[data-action="create-session"]')).toBeEnabled());
+    await user.click(document.querySelector('[data-action="create-session"]') as HTMLElement);
+    const dialog = await screen.findByRole("dialog");
+    await user.type(within(dialog).getByLabelText("Seat id (optional)"), "seat-1");
+    await user.type(within(dialog).getByLabelText("Agent URL (optional)"), "https://buyer.example");
+    await user.click(within(dialog).getByLabelText("Authenticated session"));
+    await user.click(within(dialog).getByRole("button", { name: "Next" }));
+    await user.click(within(dialog).getByRole("button", { name: "Create session" }));
+
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0]).toEqual({ seat_id: "seat-1", agent_url: "https://buyer.example", is_authenticated: true });
   });
 });

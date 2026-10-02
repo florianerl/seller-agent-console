@@ -67,7 +67,13 @@ export const sessionById = (
 
 export const createSession = (
   c: Connection,
-  body: { seat_id?: string; agent_url?: string } = {},
+  body: {
+    seat_id?: string;
+    agency_id?: string;
+    advertiser_id?: string;
+    is_authenticated?: boolean;
+    agent_url?: string;
+  } = {},
   signal?: AbortSignal,
 ): Promise<Result<SessionDetail>> =>
   request(c, PATHS.sessions, { schema: SessionDetail, method: "POST", body, signal });

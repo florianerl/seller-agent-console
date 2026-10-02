@@ -15,11 +15,9 @@ import {
   audienceMatch,
   bulkDealOperations,
   closeSession,
-  counterProposal,
   createBuyerApiKey,
   createChangeRequest,
   createOperatorApiKey,
-  createSession,
   dealBuyerStatus,
   dealById,
   dealSspTroubleshoot,
@@ -28,11 +26,9 @@ import {
   eventById,
   migrateDeal,
   negotiationStatus,
-  postNegotiationMessage,
   pushDeal,
   reviewChangeRequest,
   sendSessionMessage,
-  submitProposal,
   transitionOrder,
   triggerInventorySync,
   assentProposal,
@@ -61,7 +57,6 @@ import {
   ACTOR_KINDS,
   BULK_DEAL_ACTIONS,
   CHANGE_TYPES,
-  LEGACY_DEAL_TYPES,
   SSP_NAMES,
   words,
   type BulkDealAction,
@@ -70,7 +65,10 @@ import { ConfirmAction } from "../components/ConfirmAction";
 import { EnumSelect } from "../components/EnumSelect";
 import { Hint } from "../components/Hint";
 import { TipField } from "../components/TipField";
-import { ProductPicker, ProposalPicker } from "./pickers";
+import { ProposalPicker } from "./pickers";
+import { ProposalWizard } from "./ProposalWizard";
+import { NegotiationMessageWizard } from "./NegotiationMessageWizard";
+import { SessionWizard } from "./SessionWizard";
 import { ApiKeyTable } from "./ApiKeyTable";
 import { JsonView } from "../components/JsonView";
 import { FormFields, FormRow, ReadForm, WriteForm } from "../components/WriteForm";
@@ -967,116 +965,83 @@ export function SessionWrites({ sessionId }: { sessionId: string }) {
 
 export function CreateSessionWrite() {
   const { writesEnabled } = useCredential();
-  const create = useMutation<Record<string, never>, unknown>((c) => createSession(c, {}), {
-    invalidates: ["sessions:*"],
-  });
+  const [open, setOpen] = useState(false);
   return (
-    <WriteForm
-      title="Open a new buyer session?"
-      confirmLabel="Create session"
-      action="create-session"
-      blocked={!writesEnabled}
-      pending={create.pending}
-      last={create.last}
-      onConfirm={() => void create.run({})}
-      consequence="Not idempotent: each call mints a session. These routes declare no authentication upstream."
-    />
+    <>
+      <Button
+        variant="contained"
+        size="small"
+        disabled={!writesEnabled}
+        onClick={() => setOpen(true)}
+        aria-haspopup="dialog"
+        data-action="create-session"
+      >
+        Create session
+      </Button>
+      <SessionWizard open={open} onClose={() => setOpen(false)} />
+    </>
   );
 }
 
 export function ProposalWrites() {
   const { writesEnabled } = useCredential();
-  const [productId, setProductId] = useState("");
   const [proposalId, setProposalId] = useState("");
-  const [price, setPrice] = useState("10");
-  // The legacy flow checks this against the product's core DealType values
-  // (long form, no underscores). "preferred_deal" matched none of them.
-  const [proposalDealType, setProposalDealType] = useState("preferreddeal");
-  const submit = useMutation<
-    { product_id: string; deal_type: string; price: number; impressions: number; start_date: string; end_date: string },
-    unknown
-  >((c, a) => submitProposal(c, a));
-  // The submit ack is loose; offer its id if it carries one, since no list
-  // of legacy proposals exists to find it again.
-  const ack = submit.last?.kind === "ok" ? (submit.last.data as { proposal_id?: unknown; id?: unknown }) : undefined;
-  const submitted = ack?.proposal_id ?? ack?.id;
-  const submittedId = typeof submitted === "string" ? submitted : undefined;
-  const counter = useMutation<{ id: string; buyer_price: number }, unknown>(
-    (c, a) => counterProposal(c, a.id, { buyer_price: a.buyer_price }),
-  );
-  const message = useMutation<
-    { idempotency_key: string; action: string; proposal_id: string; buyer_price: { amount_micros: number; currency: string } },
-    unknown
-  >((c, a) => postNegotiationMessage(c, a));
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [messageOpen, setMessageOpen] = useState(false);
 
   return (
     <Stack spacing={2}>
-      <WriteForm
-        title="Submit a proposal?"
-        confirmLabel="Submit proposal"
-        action="submit-proposal"
-        blocked={!writesEnabled || !productId.trim()}
-        pending={submit.pending}
-        last={submit.last}
-        onConfirm={() =>
-          void submit.run({
-            product_id: productId.trim(),
-            deal_type: proposalDealType,
-            price: Number(price),
-            impressions: 100_000,
-            start_date: "2026-10-01",
-            end_date: "2026-10-31",
-          })
-        }
-        consequence="Not idempotent. A retry after an unclear failure may create a second proposal."
-      >
-        <FormFields>
-          <ProductPicker value={productId} onChange={setProductId} disabled={!writesEnabled} />
-          <EnumSelect
-            hint="Legacy deal type the proposal is checked against; the agent rejects values it does not recognise."
-            label="Deal type"
-            value={proposalDealType}
-            options={LEGACY_DEAL_TYPES}
-            onChange={(v) => v && setProposalDealType(v)}
-            disabled={!writesEnabled}
-            sx={{ minWidth: 200 }}
-          />
-          <TipField hint="Price as a plain number in dollars, for example 10. Used as the proposal price, the counter price, and the negotiation message price (sent as USD micros, times 1,000,000)." size="small" label="Price" value={price} onChange={(e) => setPrice(e.target.value)} disabled={!writesEnabled} />
-        </FormFields>
-      </WriteForm>
+      {/* The legacy flow has no list of proposals, so say where a result can
+          turn up instead of leaving the operator to look for it. */}
+      <Typography variant="body2" color="text.secondary" data-note="proposal-results">
+        This acts as a buyer: it submits and responds from here. The agent has no
+        endpoint to list or look up proposals (only submit, counter and negotiation
+        status by id), so the id of a submitted proposal is filled in below but is
+        not kept: after a reload, note it down or paste it back. If the agent holds
+        a proposal for a human decision, it shows up in the Inbox. OpenProposal 3.0
+        proposals are on the Proposals screen.
+      </Typography>
+      <Box>
+        <Button
+          variant="contained"
+          size="small"
+          disabled={!writesEnabled}
+          onClick={() => setWizardOpen(true)}
+          aria-haspopup="dialog"
+          data-action="submit-proposal"
+        >
+          Submit a proposal
+        </Button>
+      </Box>
+      <ProposalWizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        onSubmitted={(id) => id && setProposalId(id)}
+      />
       <ProposalPicker
         value={proposalId}
         onChange={setProposalId}
-        known={submittedId ? [submittedId] : []}
+        known={proposalId.trim() ? [proposalId.trim()] : []}
         hint="Id of the proposal to counter or check negotiation status for. Pick one, or type or paste an id."
       />
       {proposalId.trim() ? <NegotiationStatus proposalId={proposalId.trim()} /> : null}
-      <WriteForm
-        title="Send a legacy counter-offer?"
-        confirmLabel="Counter"
-        action="counter-proposal"
-        blocked={!writesEnabled || !proposalId.trim()}
-        pending={counter.pending}
-        last={counter.last}
-        onConfirm={() => void counter.run({ id: proposalId.trim(), buyer_price: Number(price) })}
-        consequence="Consumes a negotiation round. A retry spends another round unless you use the idempotent messages route."
-      />
-      <WriteForm
-        title="Post a canonical negotiation message?"
-        confirmLabel="Post message"
-        action="negotiation-message"
-        blocked={!writesEnabled || !proposalId.trim()}
-        pending={message.pending}
-        last={message.last}
-        onConfirm={() =>
-          void message.run({
-            idempotency_key: newKey(),
-            action: "counter",
-            proposal_id: proposalId.trim(),
-            buyer_price: { amount_micros: Math.round(Number(price) * 1_000_000), currency: "USD" },
-          })
-        }
-        consequence="Idempotent on idempotency_key per buyer. Same key + different body is 409."
+      <Box>
+        <Button
+          variant="outlined"
+          size="small"
+          disabled={!writesEnabled || !proposalId.trim()}
+          onClick={() => setMessageOpen(true)}
+          aria-haspopup="dialog"
+          data-action="negotiation-message"
+        >
+          Respond to proposal
+        </Button>
+      </Box>
+      <NegotiationMessageWizard
+        key={proposalId.trim()}
+        open={messageOpen}
+        proposalId={proposalId.trim()}
+        onClose={() => setMessageOpen(false)}
       />
     </Stack>
   );

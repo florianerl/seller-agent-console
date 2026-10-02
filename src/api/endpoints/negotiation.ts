@@ -71,6 +71,11 @@ export const submitProposal = (
     impressions: number;
     start_date: string;
     end_date: string;
+    /** Optional: who is asking, as the agent's ProposalRequest names them. */
+    buyer_id?: string;
+    agency_id?: string;
+    advertiser_id?: string;
+    agent_url?: string;
   },
   signal?: AbortSignal,
 ): Promise<Result<MutationAck>> =>
@@ -97,7 +102,11 @@ export const postNegotiationMessage = (
     proposal_id?: string;
     negotiation_id?: string;
     quote_id?: string;
+    /** The round the sender believes it is answering; a mismatch is a 'contention' error. */
+    round_number?: number;
     buyer_price?: { amount_micros: number; currency: string };
+    buyer_identity?: Record<string, string>;
+    rationale?: string;
   },
   signal?: AbortSignal,
 ): Promise<Result<MutationAck>> =>
