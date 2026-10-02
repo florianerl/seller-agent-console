@@ -70,6 +70,11 @@ function Detail({ curatorId }: { curatorId: string }) {
 
   return (
     <Stack spacing={1.5} sx={{ py: 1 }}>
+      {c.description && (
+        <Typography variant="body2" data-field="curator-description">
+          {c.description}
+        </Typography>
+      )}
       <FieldGrid data-block="curator-detail">
         <Field label="Audience segments">
           {c.audience_segments.length === 0 ? "—" : c.audience_segments.join(", ")}

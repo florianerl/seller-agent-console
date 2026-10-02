@@ -5,6 +5,7 @@ import AccordionDetails from "@mui/material/AccordionDetails";
 import AccordionSummary from "@mui/material/AccordionSummary";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import IconButton from "@mui/material/IconButton";
 import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
@@ -64,6 +65,8 @@ import {
 } from "../api/vocabulary";
 import { ConfirmAction } from "../components/ConfirmAction";
 import { EnumSelect } from "../components/EnumSelect";
+import { KeyValueFields } from "../components/KeyValueFields";
+import { rowsToRecord, type KeyValueRow } from "../lib/key-values";
 import { Hint } from "../components/Hint";
 import { TipField } from "../components/TipField";
 import { DealPicker, ProductPicker, ProposalPicker } from "./pickers";
@@ -459,6 +462,7 @@ export function OrderTransitionWrites({
   accepted,
   onAccepted,
   adServer,
+  adServerOrderIds = [],
 }: {
   orderId: string;
   status: string;
@@ -479,16 +483,27 @@ export function OrderTransitionWrites({
    * about the ad server and this is the only evidence the console has.
    */
   adServer?: string;
+  /**
+   * The GAM order ids that check found for this order's deal. A record-only
+   * move stores them in the transition's metadata as `gam_order_id`, so the
+   * timeline keeps the evidence the move was made on.
+   */
+  adServerOrderIds?: readonly string[];
 }) {
   const { writesEnabled, credential, setActorName } = useCredential();
   const [reason, setReason] = useState("");
+  const [details, setDetails] = useState<KeyValueRow[]>([]);
   const [chosen, setChosen] = useState<string | undefined>();
   const steps = nextSteps(status);
   const claim = actorClaim(actor);
 
-  const transition = useMutation<{ to_status: string; actor: string; reason?: string }, unknown>(
+  const transition = useMutation<
+    { to_status: string; actor: string; reason?: string; metadata?: Record<string, unknown> },
+    unknown
+  >(
     (c, args) => transitionOrder(c, orderId, args),
-    { invalidates: ["orders:*", `order-audit:${orderId}`, "orders-report"] },
+    // The trailing `*` entry covers the row's filtered timeline reads too.
+    { invalidates: ["orders:*", `order-audit:${orderId}`, `order-audit:${orderId}:*`, "orders-report", "orders-report:*"] },
   );
 
   if (steps.length === 0) {
@@ -519,16 +534,29 @@ export function OrderTransitionWrites({
   // may be the thing that is out of date.
   const allowedNow = problemList(transition.last, "allowed_transitions");
 
+  /** What the move stores as metadata: the GAM evidence for a record-only move, then anything typed. */
+  const metadataFor = (to: string): Record<string, unknown> => ({
+    ...(RECORD_ONLY.has(to) && adServerOrderIds.length > 0 ? { gam_order_id: adServerOrderIds.join(",") } : {}),
+    ...rowsToRecord(details),
+  });
+
   const go = (to: string) => {
     if (!claim) return;
     setChosen(to);
     // A new attempt supersedes whatever the last one said.
     onAccepted(undefined);
+    const metadata = metadataFor(to);
     void transition
-      .run({ to_status: to, actor: claim, ...(reason.trim() ? { reason: reason.trim() } : {}) })
+      .run({
+        to_status: to,
+        actor: claim,
+        ...(reason.trim() ? { reason: reason.trim() } : {}),
+        ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+      })
       .then((result) => {
         if (result.kind === "ok") {
           setReason("");
+          setDetails([]);
           onAccepted(to);
         }
         if (result.kind === "unavailable" && result.reason === "http" && result.status === 409) {
@@ -569,6 +597,16 @@ export function OrderTransitionWrites({
               <strong>Nothing is sent to the ad server</strong>: the agent has no ad-server sync, so
               this only records the status on the order.{" "}
               {adServer ? `GAM, when checked: ${adServer}` : "The ad server has not been checked from here."}
+            </>
+          )}
+          {Object.keys(metadataFor(step.to)).length > 0 && (
+            <>
+              {" "}
+              It stores these details with the move:{" "}
+              {Object.entries(metadataFor(step.to))
+                .map(([k, v]) => `${k} = ${String(v)}`)
+                .join(", ")}
+              .
             </>
           )}{" "}
           Not idempotent: re-read the order before retrying after a timeout.
@@ -618,6 +656,13 @@ export function OrderTransitionWrites({
           sx={{ flex: "1 1 200px" }}
         />
       </FormRow>
+      <KeyValueFields
+        rows={details}
+        onChange={setDetails}
+        disabled={!writesEnabled}
+        addLabel="Add a detail to the move"
+        hint="A name for a detail stored with this move, such as ticket or gam_order_id. It shows on the timeline; the agent does not read it."
+      />
       {/* Who and why come first so the buttons read as the last step; the
           fields' own hints say the agent verifies neither. */}
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap alignItems="center">
@@ -1167,24 +1212,71 @@ function problemList(result: Result<unknown> | undefined, key: string): string[]
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
 }
 
+/** Fields the agent compares as numbers: impressions must be a positive integer, CPMs feed the pricing check. */
+const NUMERIC_FIELDS = new Set(["impressions", "final_cpm", "base_cpm"]);
+
+function typed(field: string, raw: string): unknown {
+  const text = raw.trim();
+  if (NUMERIC_FIELDS.has(field) && text !== "" && Number.isFinite(Number(text))) return Number(text);
+  return text;
+}
+
+function shown(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  return typeof value === "string" ? value : JSON.stringify(value);
+}
+
+type ChangeRow = {
+  readonly field: string;
+  readonly oldValue: string;
+  readonly newValue: string;
+  /** Once the operator types a current value, the form stops filling it in. */
+  readonly oldTouched: boolean;
+};
+
 /**
  * Raised from an order's row, so the order is fixed, and `order` lets the form
- * say up front what the agent would refuse.
+ * say up front what the agent would refuse. `current` is what the console
+ * knows each field to hold now — the order's metadata over its deal's terms —
+ * and fills each row's current value from it. That value is `old_value` on
+ * the wire, and it matters more than it looks: the agent classifies a flight
+ * change as minor, and auto-approves it, only by comparing old and new dates,
+ * and its pricing check compares the two CPMs.
  */
 export function ChangeRequestCreate({
   orderId,
   order,
-}: { orderId: string; order: { status: string; deal_id: string | null } }) {
+  current = {},
+}: {
+  orderId: string;
+  order: { status: string; deal_id: string | null };
+  current?: Readonly<Record<string, unknown>>;
+}) {
   const { writesEnabled, actorName } = useCredential();
   // `flight_extension` was the default here once; it is not a ChangeType, so
   // every request sent with it was a 400.
   const [changeType, setChangeType] = useState<string>("flight_dates");
-  const [field, setField] = useState<string | undefined>();
-  const [newValue, setNewValue] = useState("");
+  const rowFor = (field: string): ChangeRow => ({
+    field,
+    oldValue: shown(current[field]),
+    newValue: "",
+    oldTouched: false,
+  });
+  const [rows, setRows] = useState<ChangeRow[]>(() => [rowFor(CHANGE_FIELD["flight_dates"] ?? "")]);
   const [reason, setReason] = useState("");
-  const fieldName = (field ?? CHANGE_FIELD[changeType] ?? "").trim();
   const refusal = refuseChange(order, changeType);
   const { severity, note } = predictSeverity(changeType);
+
+  const setRow = (i: number, patch: Partial<ChangeRow>) =>
+    setRows((all) =>
+      all.map((r, j) => {
+        if (j !== i) return r;
+        const next = { ...r, ...patch };
+        // A new field name brings its own current value, unless one was typed.
+        if (patch.field !== undefined && !next.oldTouched) next.oldValue = shown(current[next.field.trim()]);
+        return next;
+      }),
+    );
 
   const create = useMutation<
     {
@@ -1193,7 +1285,7 @@ export function ChangeRequestCreate({
       change_type: string;
       reason?: string;
       requested_by?: string;
-      diffs?: { field: string; new_value: unknown }[];
+      diffs?: { field: string; old_value?: unknown; new_value: unknown }[];
       proposed_values?: Record<string, unknown>;
     },
     ChangeRequestAck
@@ -1202,9 +1294,15 @@ export function ChangeRequestCreate({
     invalidates: ["change-requests:*", `order-audit:${orderId.trim()}`],
   });
 
-  const value: unknown =
-    changeType === "impressions" && newValue.trim() !== "" ? Number(newValue) : newValue.trim();
-  const change = fieldName && newValue.trim() ? { [fieldName]: value } : undefined;
+  const changes = rows
+    .map((r) => ({ field: r.field.trim(), old: r.oldValue.trim(), next: r.newValue.trim() }))
+    .filter((r) => r.field && r.next);
+  const diffs = changes.map((r) => ({
+    field: r.field,
+    ...(r.old ? { old_value: typed(r.field, r.old) } : {}),
+    new_value: typed(r.field, r.next),
+  }));
+  const proposed = Object.fromEntries(changes.map((r) => [r.field, typed(r.field, r.next)]));
   const created = create.last?.kind === "ok" ? create.last.data : undefined;
   const createdStatus = typeof created?.["status"] === "string" ? created["status"] : undefined;
   const refused = problemList(create.last, "validation_errors");
@@ -1216,43 +1314,8 @@ export function ChangeRequestCreate({
           {refusal}
         </Typography>
       ) : (
-        <WriteForm
-          title="Submit a change request?"
-          confirmLabel="Create request"
-          action="create-change-request"
-          blocked={!writesEnabled || !orderId.trim()}
-          pending={create.pending}
-          last={create.last?.kind === "ok" || refused.length > 0 ? undefined : create.last}
-          onConfirm={() =>
-            void create.run({
-              idempotency_key: newKey(),
-              order_id: orderId.trim(),
-              change_type: changeType,
-              ...(reason ? { reason } : {}),
-              ...(actorName ? { requested_by: `human:${actorName}` } : {}),
-              ...(change
-                ? { diffs: [{ field: fieldName, new_value: value }], proposed_values: change }
-                : {}),
-            })
-          }
-          consequence={
-            <>
-              Raises a <strong>{words(changeType)}</strong> change request against{" "}
-              {orderId.trim()}
-              {change ? (
-                <>
-                  , setting <strong>{fieldName}</strong> to <strong>{String(value)}</strong>
-                </>
-              ) : (
-                <> with no field change, so applying it will write nothing</>
-              )}
-              . {note} Nothing on the order changes until it is applied, and applying writes into
-              the order&apos;s metadata, never its status. Idempotent per order and key for 24
-              hours.
-            </>
-          }
-        >
-          <FormFields>
+        <Stack spacing={1.5}>
+          <FormRow>
             <EnumSelect
               hint="What kind of change is being requested. It decides the usual field and how severe the agent treats the request."
               label="Change type"
@@ -1261,43 +1324,133 @@ export function ChangeRequestCreate({
               onChange={(v) => {
                 if (!v) return;
                 setChangeType(v);
-                setField(undefined);
+                // A new type starts from its usual field; rows already
+                // filled in beyond the first are kept.
+                setRows((all) => [rowFor(CHANGE_FIELD[v] ?? ""), ...all.slice(1)]);
               }}
               disabled={!writesEnabled}
               sx={{ minWidth: 180 }}
             />
-            <Autocomplete
-              freeSolo
-              size="small"
-              options={SUGGESTED_FIELDS[changeType] ?? []}
-              // The field starts filled in, and the default text filter would
-              // then hide every suggestion but that one.
-              filterOptions={(all) => all}
-              openOnFocus
-              inputValue={fieldName}
-              onInputChange={(_, next) => setField(next)}
-              disabled={!writesEnabled}
-              sx={{ minWidth: 180 }}
-              renderInput={(params) => (
-                <TipField
-                  {...params}
-                  hint="Name of the order field to change. Pick a suggestion for the change type, or type another; it starts from the usual field."
-                  label="Field"
-                />
-              )}
-            />
             <TipField
-              hint="The value to set the field to. A whole number for an impressions change, otherwise text. With no value the request changes nothing when applied."
+              hint="Optional reason for the request, shown to whoever reviews it."
               size="small"
-              label="New value"
-              type={changeType === "impressions" ? "number" : "text"}
-              value={newValue}
-              onChange={(e) => setNewValue(e.target.value)}
+              label="Request reason"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
               disabled={!writesEnabled}
+              sx={{ flex: "1 1 220px" }}
             />
-            <TipField hint="Optional reason for the request, shown to whoever reviews it." size="small" label="Request reason" value={reason} onChange={(e) => setReason(e.target.value)} disabled={!writesEnabled} />
-          </FormFields>
-        </WriteForm>
+          </FormRow>
+          <Stack spacing={1} data-list="change-rows">
+            {rows.map((r, i) => (
+              <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap key={i} data-row="change">
+                <Autocomplete
+                  freeSolo
+                  size="small"
+                  options={SUGGESTED_FIELDS[changeType] ?? []}
+                  // The field starts filled in, and the default text filter would
+                  // then hide every suggestion but that one.
+                  filterOptions={(all) => all}
+                  openOnFocus
+                  inputValue={r.field}
+                  onInputChange={(_, next) => setRow(i, { field: next })}
+                  disabled={!writesEnabled}
+                  sx={{ flex: "1 1 170px" }}
+                  renderInput={(params) => (
+                    <TipField
+                      {...params}
+                      hint="Name of the order field to change. Pick a suggestion for the change type, or type another; it starts from the usual field."
+                      label="Field"
+                    />
+                  )}
+                />
+                <TipField
+                  hint="What the field holds now, sent as old_value. Filled in from the order and its deal when the console knows it. The agent compares it with the new value: a flight shift of 3 days or less is minor and auto-approved."
+                  size="small"
+                  label="Current value"
+                  value={r.oldValue}
+                  onChange={(e) => setRow(i, { oldValue: e.target.value, oldTouched: true })}
+                  disabled={!writesEnabled}
+                  sx={{ flex: "1 1 150px" }}
+                />
+                <TipField
+                  hint="The value to set the field to, sent as new_value and proposed_values. A whole number for impressions, a number for a CPM, otherwise text. A row with no new value is left out."
+                  size="small"
+                  label="New value"
+                  type={NUMERIC_FIELDS.has(r.field.trim()) ? "number" : "text"}
+                  value={r.newValue}
+                  onChange={(e) => setRow(i, { newValue: e.target.value })}
+                  disabled={!writesEnabled}
+                  sx={{ flex: "1 1 150px" }}
+                />
+                {rows.length > 1 && (
+                  <IconButton
+                    size="small"
+                    aria-label={`Remove the ${r.field.trim() || "empty"} change`}
+                    onClick={() => setRows((all) => all.filter((_, j) => j !== i))}
+                    disabled={!writesEnabled}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" focusable="false">
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                    </svg>
+                  </IconButton>
+                )}
+              </Stack>
+            ))}
+          </Stack>
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+            <Button
+              size="small"
+              onClick={() => setRows((all) => [...all, rowFor("")])}
+              disabled={!writesEnabled}
+              data-action="add-change-row"
+            >
+              Add another field
+            </Button>
+            <Box sx={{ flex: 1 }} />
+            <WriteForm
+              title="Submit a change request?"
+              confirmLabel="Create request"
+              action="create-change-request"
+              blocked={!writesEnabled || !orderId.trim()}
+              pending={create.pending}
+              last={create.last?.kind === "ok" || refused.length > 0 ? undefined : create.last}
+              onConfirm={() =>
+                void create.run({
+                  idempotency_key: newKey(),
+                  order_id: orderId.trim(),
+                  change_type: changeType,
+                  ...(reason ? { reason } : {}),
+                  ...(actorName ? { requested_by: `human:${actorName}` } : {}),
+                  ...(diffs.length > 0 ? { diffs, proposed_values: proposed } : {}),
+                })
+              }
+              consequence={
+                <>
+                  Raises a <strong>{words(changeType)}</strong> change request against{" "}
+                  {orderId.trim()}
+                  {changes.length > 0 ? (
+                    <>
+                      , changing{" "}
+                      {changes.map((c, i) => (
+                        <span key={c.field}>
+                          {i > 0 ? ", " : ""}
+                          <strong>{c.field}</strong> {c.old ? <>from {c.old} </> : null}to <strong>{c.next}</strong>
+                        </span>
+                      ))}
+                    </>
+                  ) : (
+                    <> with no field change, so applying it will write nothing</>
+                  )}
+                  . {note} Nothing on the order changes until it is applied, and applying writes into
+                  the order&apos;s metadata, never its status. Idempotent per order and key for 24
+                  hours.
+                </>
+              }
+            />
+          </Stack>
+        </Stack>
       )}
       {!refusal && (
         <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 0.5 }} data-note="severity">

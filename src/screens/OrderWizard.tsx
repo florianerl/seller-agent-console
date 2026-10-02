@@ -5,7 +5,9 @@ import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
 import { createOrder, deals, type Deal, type Order } from "../api/endpoints";
 import { describe } from "../api/errors";
+import { KeyValueFields } from "../components/KeyValueFields";
 import { TipField } from "../components/TipField";
+import { rowsToRecord, type KeyValueRow } from "../lib/key-values";
 import { ChoiceCards, ReviewList, WizardDialog } from "../components/Wizard";
 import { useCredential } from "../credentials/context";
 import { useMutation } from "../query/useMutation";
@@ -133,11 +135,12 @@ export function OrderWizard({
   const [quoteFromDeal, setQuoteFromDeal] = useState(false);
   const [chosenDeal, setChosenDeal] = useState<Deal | undefined>();
   const [note, setNote] = useState("");
+  const [details, setDetails] = useState<KeyValueRow[]>([]);
 
   const create = useMutation<
     { deal_id?: string; quote_id?: string; metadata: Record<string, unknown> },
     Order
-  >((c, a) => createOrder(c, a), { invalidates: ["orders:*", "orders-report"] });
+  >((c, a) => createOrder(c, a), { invalidates: ["orders:*", "orders-report", "orders-report:*"] });
 
   const deal = start === "none" ? "" : dealId.trim();
   const quote = start === "none" ? "" : quoteId.trim();
@@ -157,6 +160,7 @@ export function OrderWizard({
       setQuoteFromDeal(false);
       setChosenDeal(undefined);
       setNote("");
+      setDetails([]);
       create.reset();
     }, 200);
   }
@@ -167,19 +171,33 @@ export function OrderWizard({
       ...(quote ? { quote_id: quote } : {}),
       // Buyer agents tag their orders with a source; so does the console,
       // or its orders would read as "source not recorded".
-      metadata: { source: "seller-console", ...(note.trim() ? { note: note.trim() } : {}) },
+      // `metadata` is an open object in CreateOrderRequest; whatever the
+      // operator adds goes beside the console's own source tag, never over it.
+      metadata: {
+        ...rowsToRecord(details),
+        ...(note.trim() ? { note: note.trim() } : {}),
+        source: "seller-console",
+      },
     });
   }
 
   const noteField = (
-    <TipField
-      hint="Optional note stored with the order, shown on its record. The agent does not read it."
-      size="small"
-      label="Note (optional)"
-      value={note}
-      onChange={(e) => setNote(e.target.value)}
-      fullWidth
-    />
+    <>
+      <TipField
+        hint="Optional note stored with the order, shown on its record. The agent does not read it."
+        size="small"
+        label="Note (optional)"
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        fullWidth
+      />
+      <KeyValueFields
+        rows={details}
+        onChange={setDetails}
+        addLabel="Add a detail"
+        hint="A name for a detail stored in the order's metadata, such as io_number or campaign. It shows on the order's record; the agent does not read it."
+      />
+    </>
   );
 
   let body: ReactNode;
@@ -227,6 +245,7 @@ export function OrderWizard({
             ["Quote", quote ? `${quote}${quoteFromDeal ? " (from the deal)" : ""}` : "none"],
             ["Source", "seller-console"],
             ...(note.trim() ? ([["Note", note.trim()]] as const) : []),
+            ...Object.entries(rowsToRecord(details)).map(([k, v]) => [k, v] as const),
           ]}
         />
         {start === "deal" && deal && (

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useState, type ReactNode } from "react";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
@@ -20,9 +20,11 @@ import Typography from "@mui/material/Typography";
 import {
   changeRequests,
   GamOrderRows,
+  deals,
   orderAudit,
   orders,
   type ChangeRequest,
+  type Deal,
   type ChangeRequestList,
   type Order,
   type OrderAudit,
@@ -49,6 +51,7 @@ import { EnumSelect } from "../components/EnumSelect";
 import { Field, FieldGrid } from "../components/Field";
 import { GatedNotice } from "../components/GatedNotice";
 import { InfoTip } from "../components/InfoTip";
+import { TipField } from "../components/TipField";
 import { PageHeader } from "../components/PageHeader";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { OrderWizard } from "./OrderWizard";
@@ -573,6 +576,85 @@ function Timeline({ audit }: { audit: ResourceHandle<OrderAudit> }) {
   );
 }
 
+type TimelineFilter = { readonly actor: "" | "human" | "agent" | "system"; readonly from: string; readonly to: string };
+
+const ACTOR_FILTERS = [
+  { value: "human" as const, label: "people (human:…)" },
+  { value: "agent" as const, label: "agents (agent:…)" },
+  { value: "system" as const, label: "system" },
+];
+
+/**
+ * The timeline with the audit route's own filters: `actor` (a prefix match,
+ * so "human" finds every human:<name>) and `from_date` / `to_date` (compared
+ * as ISO strings upstream). Unfiltered, it reads under the row's own audit
+ * key, so opening a row still costs one request; filtered, it reads under a
+ * key of its own and leaves the row's status and next steps on the full
+ * audit, which a filter must never narrow.
+ */
+function FilteredTimeline({ orderId, audit }: { orderId: string; audit: ResourceHandle<OrderAudit> }) {
+  const [filter, setFilter] = useState<TimelineFilter>({ actor: "", from: "", to: "" });
+  const active = filter.actor !== "" || filter.from !== "" || filter.to !== "";
+  const query = {
+    ...(filter.actor ? { actor: filter.actor } : {}),
+    ...(filter.from ? { from_date: filter.from } : {}),
+    ...(filter.to ? { to_date: filter.to } : {}),
+  };
+  const filtered = useResource(
+    active ? `order-audit:${orderId}:filter:${filter.actor}|${filter.from}|${filter.to}` : `order-audit:${orderId}`,
+    (c, signal) => orderAudit(c, orderId, query, signal),
+  );
+  const shownAudit = active ? filtered : audit;
+  const total = audit.data?.transitions.length;
+
+  return (
+    <Stack spacing={1.5}>
+      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap alignItems="center" data-block="timeline-filter">
+        <EnumSelect
+          label="Moved by"
+          value={filter.actor}
+          options={ACTOR_FILTERS}
+          onChange={(actor) => setFilter((f) => ({ ...f, actor }))}
+          any="Anyone"
+          hint="Show only moves recorded under this kind of actor. The agent matches the actor's prefix, so people covers every human:<name>."
+          sx={{ minWidth: 150 }}
+        />
+        <TipField
+          hint="Show only moves on or after this day."
+          size="small"
+          type="date"
+          label="From"
+          value={filter.from}
+          onChange={(e) => setFilter((f) => ({ ...f, from: e.target.value }))}
+          slotProps={{ inputLabel: { shrink: true } }}
+          sx={{ width: 160 }}
+        />
+        <TipField
+          hint="Show only moves on or before this day."
+          size="small"
+          type="date"
+          label="To"
+          value={filter.to}
+          onChange={(e) => setFilter((f) => ({ ...f, to: e.target.value }))}
+          slotProps={{ inputLabel: { shrink: true } }}
+          sx={{ width: 160 }}
+        />
+        {active && (
+          <Button size="small" onClick={() => setFilter({ actor: "", from: "", to: "" })} data-action="clear-timeline-filter">
+            Show all
+          </Button>
+        )}
+      </Stack>
+      {active && filtered.data && total !== undefined && (
+        <Typography variant="caption" color="text.secondary" data-state="timeline-filtered">
+          {plural(filtered.data.transitions.length, "move")} of {total} match.
+        </Typography>
+      )}
+      <Timeline audit={shownAudit} />
+    </Stack>
+  );
+}
+
 function show(value: unknown): string {
   if (value === null || value === undefined) return "—";
   return typeof value === "string" ? value : JSON.stringify(value);
@@ -695,6 +777,50 @@ function ChangeRequestEntry({ cr, onChanged }: { cr: ChangeRequest; onChanged: (
 }
 
 /**
+ * What each field holds now, as far as the console can tell: the deal's terms,
+ * overlaid with the order's metadata, where an applied change request writes
+ * its values. `_changed_*` keys are the agent's bookkeeping, not fields.
+ */
+function currentValues(order: Order, deal: Deal | undefined): Record<string, unknown> {
+  const micros = (m: { amount_micros: number } | null | undefined) =>
+    m ? m.amount_micros / 1_000_000 : undefined;
+  const fromDeal: Record<string, unknown> = deal
+    ? {
+        flight_start: deal.terms?.flight_start,
+        flight_end: deal.terms?.flight_end,
+        impressions: deal.terms?.impressions,
+        final_cpm: micros(deal.pricing?.final_cpm),
+        base_cpm: micros(deal.pricing?.base_cpm),
+        deal_type: deal.deal_type,
+      }
+    : {};
+  const merged = {
+    ...fromDeal,
+    ...Object.fromEntries(Object.entries(order.metadata).filter(([k]) => !k.startsWith("_changed_"))),
+  };
+  return Object.fromEntries(Object.entries(merged).filter(([, v]) => v !== undefined && v !== null && v !== ""));
+}
+
+/**
+ * The change form with current values filled in. Reads the deal list under
+ * the key the row's Price and terms card already read, so it costs no second
+ * scan; `manual`, so it never reruns on focus.
+ */
+function ChangeRequestWithCurrent({ order, dealId, status }: { order: Order; dealId: string; status: string }) {
+  const list = useResource("deals:", (c, signal) => deals(c, {}, signal), { manual: true });
+  const deal = list.data?.deals.find((e) => e.deal.deal_id === dealId)?.deal;
+  return (
+    <ChangeRequestCreate
+      // Remount once the deal arrives, so the first row picks its value up.
+      key={deal ? "with-deal" : "no-deal"}
+      orderId={order.order_id}
+      order={{ status, deal_id: order.deal_id }}
+      current={currentValues(order, deal)}
+    />
+  );
+}
+
+/**
  * The order's change requests, read from the screen's one list of them. A
  * pending request reaches no approval queue and has no MCP tool, so this row
  * is the only place it gets decided.
@@ -764,7 +890,12 @@ function OrderChangeRequests({
       )}
       <Collapse in={raising} unmountOnExit>
         <Box sx={{ mt: 1.5, pt: 1.5, borderTop: `1px solid ${palette.line}` }}>
-          <ChangeRequestCreate orderId={order.order_id} order={{ status, deal_id: order.deal_id }} />
+          {order.deal_id ? (
+            <ChangeRequestWithCurrent order={order} dealId={order.deal_id} status={status} />
+          ) : (
+            // No deal: the agent refuses the request, and the form says so.
+            <ChangeRequestCreate orderId={order.order_id} order={{ status, deal_id: order.deal_id }} />
+          )}
         </Box>
       </Collapse>
       <Box sx={{ mt: 1.5 }}>
@@ -801,11 +932,23 @@ function gamFinding(dealId: string, result: Result<unknown> | undefined): string
  * agent's credentials and spends its quota. It shares its cache entry with
  * the row's delivery card, so the two make one request between them.
  */
-function GamCheck({ dealId, onFinding }: { dealId: string; onFinding: (finding: string | undefined) => void }) {
+function GamCheck({
+  dealId,
+  onFinding,
+}: {
+  dealId: string;
+  /** The sentence, and the GAM order ids it found (empty when none). */
+  onFinding: (finding: string | undefined, orderIds: readonly string[]) => void;
+}) {
   const scan = useGamScan();
   const finding = gamFinding(dealId, scan.result);
-  // Lifted so the Record … confirmations can quote it.
-  useEffect(() => onFinding(finding), [finding, onFinding]);
+  const ids = gamMatches(dealId, scan.result)
+    .map((o) => o.id)
+    .filter(Boolean)
+    .join(",");
+  // Lifted so the Record … confirmations can quote it, and the move can
+  // store the GAM order id it was checked against.
+  useEffect(() => onFinding(finding, ids ? ids.split(",") : []), [finding, ids, onFinding]);
 
   return (
     <Box data-block="gam-check" sx={{ fontSize: 13 }}>
@@ -865,6 +1008,12 @@ function OrderDetail({
     (cr) => cr.order_id === order.order_id && cr.status === "applied",
   );
   const [gam, setGam] = useState<string | undefined>();
+  const [gamIds, setGamIds] = useState<readonly string[]>([]);
+  // Stable, so GamCheck's effect runs when the finding changes, not every render.
+  const onGamFinding = useCallback((finding: string | undefined, ids: readonly string[]) => {
+    setGam(finding);
+    setGamIds(ids);
+  }, []);
 
   if (audit.freshness === "blocked") {
     return <GatedNotice what="Order audit trail" result={audit.result} />;
@@ -917,7 +1066,10 @@ function OrderDetail({
             >
               {CHECKABLE.has(status) && order.deal_id && (
                 <Stack direction="row" spacing={0.5} alignItems="flex-start" sx={{ mb: 2 }}>
-                  <GamCheck dealId={order.deal_id} onFinding={setGam} />
+                  <GamCheck
+                    dealId={order.deal_id}
+                    onFinding={onGamFinding}
+                  />
                   <InfoTip
                     title={`Whether GAM has an order for deal ${order.deal_id}. The steps below only record a status; this is how to see whether the ad server agrees. Each check spends GAM API quota.`}
                   />
@@ -936,6 +1088,7 @@ function OrderDetail({
                   accepted={accepted}
                   onAccepted={onAccepted}
                   {...(gam ? { adServer: gam } : {})}
+                  adServerOrderIds={gamIds}
                 />
               ) : (
                 <Skeleton height={32} />
@@ -953,7 +1106,7 @@ function OrderDetail({
               infoNote="system-actor"
               meta={<Freshness resource={audit} what="audit" />}
             >
-              <Timeline audit={audit} />
+              <FilteredTimeline orderId={order.order_id} audit={audit} />
             </DetailCard>
           </Stack>
 

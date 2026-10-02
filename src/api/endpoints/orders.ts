@@ -163,7 +163,9 @@ export const createOrder = (
 export const transitionOrder = (
   c: Connection,
   orderId: string,
-  body: { to_status: string; actor?: string; reason?: string },
+  // `metadata` is stored on the transition record and shown on the
+  // order's timeline; nothing upstream reads its keys.
+  body: { to_status: string; actor?: string; reason?: string; metadata?: Record<string, unknown> },
   signal?: AbortSignal,
 ): Promise<Result<MutationAck>> =>
   request(c, `${PATHS.orders}/${encodeURIComponent(orderId)}/transition`, {
