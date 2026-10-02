@@ -1,8 +1,9 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Paper from "@mui/material/Paper";
 import Skeleton from "@mui/material/Skeleton";
+import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { gamDeliveryReport, ordersReport } from "../api/endpoints";
 import { describe } from "../api/errors";
@@ -12,6 +13,8 @@ import { ReloadButton } from "../components/ReloadButton";
 import { Field, FieldGrid } from "../components/Field";
 import { GatedNotice } from "../components/GatedNotice";
 import { JsonView } from "../components/JsonView";
+import { EnumSelect } from "../components/EnumSelect";
+import { TipField } from "../components/TipField";
 import { plural, stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
 import { useResource, type ResourceHandle } from "../query/useResource";
@@ -90,10 +93,16 @@ function RawPayload({ data, testId }: { data: unknown; testId: string }) {
  * state in the Result taxonomy that means "we did not ask" — which is not a
  * thing that can happen to a request.
  */
-function AgentTotalsPanel({ listed }: { listed: number | undefined }) {
-  const report = useResource("orders-report", (c, signal) => ordersReport(c, {}, signal), {
-    refreshInterval: CADENCE.reporting,
-  });
+function AgentTotalsPanel({ listed, from, to }: { listed: number | undefined; from: string; to: string }) {
+  const ranged = from !== "" || to !== "";
+  // Unranged under the key writes already invalidate; a range has a key of
+  // its own under that prefix, so a write drops it too.
+  const report = useResource(
+    ranged ? `orders-report:range:${from}|${to}` : "orders-report",
+    (c, signal) =>
+      ordersReport(c, { ...(from ? { from_date: from } : {}), ...(to ? { to_date: to } : {}) }, signal),
+    { refreshInterval: CADENCE.reporting },
+  );
 
   if (report.result?.kind === "rejected") {
     return <GatedNotice what="The order summary" result={report.result} />;
@@ -102,8 +111,9 @@ function AgentTotalsPanel({ listed }: { listed: number | undefined }) {
   // Two reads, made at different moments, of the same store. A difference is
   // usually an order created between them, but it is the agent's number and
   // the list's number, and neither is quietly preferred.
+  // Only comparable when the report covers every order, as the list does.
   const differs =
-    report.data !== undefined && listed !== undefined && report.data.total_orders !== listed;
+    !ranged && report.data !== undefined && listed !== undefined && report.data.total_orders !== listed;
 
   return (
     <>
@@ -140,26 +150,61 @@ function AgentTotalsPanel({ listed }: { listed: number | undefined }) {
 }
 
 export function AgentTotals({ listed }: { listed: number | undefined }) {
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
   return (
     <Paper variant="outlined" sx={{ p: 2.5, mb: 2 }} data-card="orders-report">
-      {/* Directly under the page's h2, unlike the Reporting cards below the list. */}
-      <Typography variant="h3" component="h3" sx={{ mb: 1.5 }}>
-        Totals, as the agent counts them
-      </Typography>
-      <AgentTotalsPanel listed={listed} />
+      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }}>
+        {/* Directly under the page's h2, unlike the Reporting cards below the list. */}
+        <Typography variant="h3" component="h3" sx={{ mr: 1 }}>
+          Totals, as the agent counts them
+        </Typography>
+        <Box sx={{ flex: 1 }} />
+        <TipField
+          hint="Count only orders created on or after this day (from_date). Change requests are not filtered by date upstream."
+          size="small"
+          type="date"
+          label="Created from"
+          value={from}
+          onChange={(e) => setFrom(e.target.value)}
+          slotProps={{ inputLabel: { shrink: true } }}
+          sx={{ width: 160 }}
+        />
+        <TipField
+          hint="Count only orders created on or before this day (to_date)."
+          size="small"
+          type="date"
+          label="Created to"
+          value={to}
+          onChange={(e) => setTo(e.target.value)}
+          slotProps={{ inputLabel: { shrink: true } }}
+          sx={{ width: 160 }}
+        />
+      </Stack>
+      <AgentTotalsPanel listed={listed} from={from} to={to} />
     </Paper>
   );
 }
 
-/** Delivery is reported over the agent's default window; the card has no field for it. */
-const DELIVERY_DAYS = 30;
+/** The report's window, as `days`. 30 is the agent's own default. */
+const DELIVERY_WINDOWS = [7, 14, 30, 90] as const;
 
-function DeliveryFrame({ reload, busy, children }: { reload: () => void; busy: boolean; children: ReactNode }) {
+function DeliveryFrame({
+  reload,
+  busy,
+  days,
+  children,
+}: {
+  reload: () => void;
+  busy: boolean;
+  days: number;
+  children: ReactNode;
+}) {
   return (
     <DetailCard
       block="delivery"
       title="Ad server delivery"
-      info={`What GAM delivered over the last ${DELIVERY_DAYS} days for the GAM orders that name this deal. The agent keeps a deal's GAM order id out of its responses, so the orders are found by reading up to ${GAM_SCAN} of GAM's. Both reads spend GAM API quota: they run when the row opens and when you reload, never on a timer.`}
+      info={`What GAM delivered over the last ${days} days for the GAM orders that name this deal. The agent keeps a deal's GAM order id out of its responses, so the orders are found by reading up to ${GAM_SCAN} of GAM's. Both reads spend GAM API quota: they run when the row opens and when you reload, never on a timer.`}
       meta={<ReloadButton onClick={reload} busy={busy} what="delivery" />}
     >
       {children}
@@ -168,9 +213,10 @@ function DeliveryFrame({ reload, busy, children }: { reload: () => void; busy: b
 }
 
 function DeliveryReport({ ids, scan }: { ids: string; scan: ResourceHandle<unknown> }) {
+  const [days, setDays] = useState<number>(30);
   const report = useResource(
-    `gam-report:${ids}:${DELIVERY_DAYS}`,
-    (c, signal) => gamDeliveryReport(c, { order_ids: ids, days: DELIVERY_DAYS }, signal),
+    `gam-report:${ids}:${days}`,
+    (c, signal) => gamDeliveryReport(c, { order_ids: ids, days }, signal),
     { refreshInterval: CADENCE.reporting, manual: true },
   );
 
@@ -181,10 +227,22 @@ function DeliveryReport({ ids, scan }: { ids: string; scan: ResourceHandle<unkno
         report.refresh();
       }}
       busy={scan.validating || report.validating}
+      days={days}
     >
-      <Typography variant="body2" sx={{ mb: 1 }} data-state="gam-ids">
-        GAM {ids.includes(",") ? "orders" : "order"} {ids.split(",").join(", ")}
-      </Typography>
+      <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
+        <Typography variant="body2" data-state="gam-ids">
+          GAM {ids.includes(",") ? "orders" : "order"} {ids.split(",").join(", ")}
+        </Typography>
+        <Box sx={{ flex: 1 }} />
+        <EnumSelect
+          label="Window"
+          value={String(days)}
+          options={DELIVERY_WINDOWS.map((d) => ({ value: String(d), label: `last ${d} days` }))}
+          onChange={(v) => v && setDays(Number(v))}
+          hint="How many days of delivery to report (days). Each change is a new read of GAM, spending its API quota."
+          sx={{ minWidth: 150 }}
+        />
+      </Stack>
       {report.result?.kind === "rejected" ? (
         <GatedNotice what="Delivery reporting" result={report.result} />
       ) : (
@@ -219,7 +277,7 @@ export function OrderDeliveryCard({ dealId }: { dealId: string }) {
   if (ids) return <DeliveryReport ids={ids} scan={scan} />;
 
   return (
-    <DeliveryFrame reload={scan.refresh} busy={scan.validating}>
+    <DeliveryFrame reload={scan.refresh} busy={scan.validating} days={30}>
       {scan.result?.kind === "rejected" ? (
         <GatedNotice what="Ad server orders" result={scan.result} />
       ) : scan.loading && !scan.result ? (
