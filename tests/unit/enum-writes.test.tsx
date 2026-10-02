@@ -8,7 +8,8 @@ import { SWRConfig } from "swr";
 import { API, server } from "../setup/msw";
 import { theme } from "../../src/theme/theme";
 import { CredentialProvider } from "../../src/credentials/context";
-import { clearCredential, saveCredential } from "../../src/credentials/store";
+import { clearCredential, loadCredential, saveCredential } from "../../src/credentials/store";
+import { recordQuote } from "../../src/credentials/recentQuotes";
 import { sameResult } from "../../src/query/freshness";
 import { resetWritePolicy } from "../../src/api/policy";
 import { resetReachability } from "../../src/query/reachability";
@@ -247,6 +248,39 @@ describe("forms that send an enum", () => {
       buyer_identity: { seat_id: "seat-1", campaign_name: "Fall" },
       rationale: "fair",
     });
+  });
+
+  it("offers the quotes made here when negotiating on a quote, and sends the one picked", async () => {
+    const credential = await loadCredential();
+    await recordQuote(credential!.credId, {
+      quote_id: "qt-made-here",
+      product_id: "prod-1",
+      product_name: "Premium Display",
+      deal_type: "PD",
+      final_cpm_micros: 6_800_000,
+      currency: "USD",
+      expires_at: new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString(),
+      created_at: Date.now(),
+    });
+    const sent = capture("post", "/api/v1/negotiations/messages");
+    const user = userEvent.setup();
+    mount(<ProposalWrites />);
+
+    await user.type(await screen.findByLabelText("Proposal id"), "P-1");
+    await waitFor(() => expect(document.querySelector('[data-action="negotiation-message"]')).toBeEnabled());
+    await user.click(document.querySelector('[data-action="negotiation-message"]') as HTMLElement);
+    const dialog = await screen.findByRole("dialog");
+    await user.type(within(dialog).getByLabelText("Price"), "12.5");
+    await user.click(within(dialog).getByRole("button", { name: "Next" }));
+
+    await user.click(within(dialog).getByRole("combobox", { name: "Quote id (optional)" }));
+    await user.click(await screen.findByRole("option", { name: /qt-made-here/ }));
+    await user.click(within(dialog).getByRole("button", { name: "Next" }));
+    await user.click(within(dialog).getByRole("button", { name: "Next" }));
+    await user.click(within(dialog).getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0]).toMatchObject({ quote_id: "qt-made-here" });
   });
 
   it("opens a session with the buyer fields it was given", async () => {

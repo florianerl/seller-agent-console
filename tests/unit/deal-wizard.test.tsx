@@ -12,6 +12,8 @@ import { sameResult } from "../../src/query/freshness";
 import { resetWritePolicy } from "../../src/api/policy";
 import { resetReachability } from "../../src/query/reachability";
 import { DealWizard } from "../../src/screens/DealWizard";
+import { loadCredential } from "../../src/credentials/store";
+import { readQuotes } from "../../src/credentials/recentQuotes";
 import { OPENPROPOSAL_PROTOCOL } from "../../src/api/capabilities";
 import { card, WHOLE } from "../fixtures/proposals-harness";
 
@@ -401,6 +403,99 @@ describe("the new-deal wizard", () => {
       await user.click(await createButton("Create deal"));
       await waitFor(() => expect(sent.map((x) => x["product_id"])).toEqual(["a", "b", "c", "b"]));
       expect(await screen.findByText(/All 3 deals were created/)).toBeInTheDocument();
+    });
+  });
+
+  describe("keeping a quote id", () => {
+    const answer = {
+      quote: {
+        quote_id: "qt-keep",
+        deal_type: "PD",
+        product: { product_id: "prod-1", name: "Premium Display" },
+        pricing: { final_cpm: { amount_micros: 6_800_000, currency: "USD" } },
+        expires_at: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(),
+      },
+    };
+
+    async function quoteOnce(user: ReturnType<typeof userEvent.setup>) {
+      await next(user);
+      await user.type(screen.getByRole("combobox", { name: "Products" }), "prod-1{Enter}");
+      await next(user);
+      await user.click(await screen.findByRole("button", { name: "Get quote" }));
+      await screen.findByRole("button", { name: "Book deal" });
+    }
+
+    it("remembers the quote it created, per credential, so it can be found again", async () => {
+      capture("/api/v1/quotes", answer);
+      const user = userEvent.setup();
+      mount();
+
+      await quoteOnce(user);
+
+      const credential = await loadCredential();
+      const kept = await readQuotes(credential!.credId);
+      expect(kept).toHaveLength(1);
+      expect(kept[0]).toMatchObject({
+        quote_id: "qt-keep",
+        product_id: "prod-1",
+        product_name: "Premium Display",
+        deal_type: "PD",
+        final_cpm_micros: 6_800_000,
+        currency: "USD",
+      });
+      expect(kept[0]!.expires_at).toBe(answer.quote.expires_at);
+    });
+
+    it("puts a copy button on the id and copies it", async () => {
+      capture("/api/v1/quotes", answer);
+      const written: string[] = [];
+      const user = userEvent.setup();
+      // After setup: user-event installs a clipboard of its own, and ours must replace it.
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: { writeText: (t: string) => (written.push(t), Promise.resolve()) },
+      });
+      mount();
+
+      await quoteOnce(user);
+      await user.click(screen.getByRole("button", { name: "Copy qt-keep" }));
+
+      expect(written).toEqual(["qt-keep"]);
+      expect(await screen.findByText("Copied")).toBeInTheDocument();
+    });
+
+    it("says so when the clipboard refuses, rather than doing nothing", async () => {
+      capture("/api/v1/quotes", answer);
+      const user = userEvent.setup();
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: { writeText: () => Promise.reject(new Error("denied")) },
+      });
+      mount();
+
+      await quoteOnce(user);
+      await user.click(screen.getByRole("button", { name: "Copy qt-keep" }));
+
+      expect(await screen.findByText(/Copy failed/)).toBeInTheDocument();
+      // The id is still there to select by hand.
+      expect(screen.getAllByText(/qt-keep/).length).toBeGreaterThan(0);
+    });
+
+    it("offers that quote when booking an existing one, in a later visit", async () => {
+      capture("/api/v1/quotes", answer);
+      const user = userEvent.setup();
+      const first = mount();
+      await quoteOnce(user);
+      first.unmount();
+
+      mount();
+      await next(user);
+      await user.click(await screen.findByRole("button", { name: "I have a quote id" }));
+      await user.click(await screen.findByRole("combobox", { name: "Quote id" }));
+
+      const option = await screen.findByRole("option", { name: /qt-keep/ });
+      expect(option.textContent).toMatch(/Premium Display/);
+      expect(option.textContent).toMatch(/expires in/);
     });
   });
 

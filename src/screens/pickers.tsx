@@ -6,6 +6,9 @@ import type { SxProps, Theme } from "@mui/material/styles";
 import { agents, approvals, curators, deals, openProposals, packages, products } from "../api/endpoints";
 import { describe, type Result } from "../api/errors";
 import { TipField } from "../components/TipField";
+import { describeExpiry } from "../credentials/recentQuotes";
+import { timeOfDay } from "../lib/time";
+import { useRecentQuotes } from "../query/useRecentQuotes";
 import { CADENCE } from "../query/cadence";
 import { useOpenProposalSupport } from "../query/useOpenProposalSupport";
 import { useResource } from "../query/useResource";
@@ -35,6 +38,7 @@ function EntityPicker({
   loading,
   result,
   empty,
+  helper,
   disabled,
   sx,
 }: {
@@ -42,6 +46,8 @@ function EntityPicker({
   hint: ReactNode;
   value: string;
   onChange: (value: string) => void;
+  /** Said under the field, for what the list is *not* (where it came from, what it leaves out). */
+  helper?: ReactNode;
   options: readonly PickerOption[];
   loading: boolean;
   result: Result<unknown> | undefined;
@@ -89,7 +95,7 @@ function EntityPicker({
           </li>
         );
       }}
-      renderInput={(params) => <TipField {...params} hint={hint} label={label} />}
+      renderInput={(params) => <TipField {...params} hint={hint} label={label} helperText={helper} />}
     />
   );
 }
@@ -398,6 +404,44 @@ export function ProposalPicker({ known = [], label = "Proposal id", hint, ...res
       loading={false}
       result={undefined}
       empty="This agent lists no proposals. Submit one above, or paste an id."
+    />
+  );
+}
+
+/**
+ * Quotes this browser made with this key. The agent has no route that lists
+ * them, so this is a note-to-self and the field says so: it holds neither a
+ * quote a buyer made nor one made from another browser or key, and an entry
+ * marked expired is expired by this browser's clock, not known to be so
+ * upstream. Free text stays allowed for exactly those quotes.
+ */
+export function QuotePicker({ label = "Quote id", hint, ...rest }: PickerProps) {
+  const { quotes, asOf } = useRecentQuotes();
+  // Expiry is worded as of when the list was read, so the line and its "as of" agree.
+  const now = asOf ?? 0;
+  return (
+    <EntityPicker
+      {...rest}
+      label={label}
+      hint={hint ?? "A quote you made here, or paste any quote id. Quotes expire 24 hours after they are made."}
+      helper={`Quotes created from this browser with this key${asOf ? `, as of ${timeOfDay(new Date(asOf).toISOString())}` : ""}. Not the agent's list: quotes from a buyer or another browser are not here, so paste those.`}
+      options={quotes.map((q) => ({
+        id: q.quote_id,
+        title: q.product_name || q.product_id,
+        detail: [
+          q.final_cpm_micros === null
+            ? ""
+            : `${new Intl.NumberFormat(undefined, { style: "currency", currency: q.currency || "USD" }).format(q.final_cpm_micros / 1_000_000)} CPM`,
+          q.deal_type,
+          describeExpiry(q, now),
+          `made ${timeOfDay(new Date(q.created_at).toISOString())}`,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      }))}
+      loading={false}
+      result={undefined}
+      empty="No quotes made here yet. Paste a quote id, or request one from New deal."
     />
   );
 }

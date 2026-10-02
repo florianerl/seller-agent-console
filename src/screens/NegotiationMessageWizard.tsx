@@ -11,6 +11,7 @@ import { ReviewList, WizardDialog } from "../components/Wizard";
 import { useCredential } from "../credentials/context";
 import { useMutation } from "../query/useMutation";
 import { palette } from "../theme/palette";
+import { QuotePicker } from "./pickers";
 
 const STEPS = ["Action", "Context", "Buyer", "Review"] as const;
 
@@ -199,7 +200,13 @@ export function NegotiationMessageWizard({
             </Typography>
             <TipField hint="The proposal being negotiated." size="small" label="Proposal id" value={draft.proposalId} onChange={(e) => set("proposalId")(e.target.value)} fullWidth />
             <TipField hint="An existing negotiation, if you have its id." size="small" label="Negotiation id (optional)" value={draft.negotiationId} onChange={(e) => set("negotiationId")(e.target.value)} fullWidth />
-            <TipField hint="The quote being negotiated, if any." size="small" label="Quote id (optional)" value={draft.quoteId} onChange={(e) => set("quoteId")(e.target.value)} fullWidth />
+            <QuotePicker
+              label="Quote id (optional)"
+              value={draft.quoteId}
+              onChange={set("quoteId")}
+              hint="The quote being negotiated, if any. Pick one you made here, or paste its id."
+              sx={{ width: "100%" }}
+            />
             <TipField
               hint="The round you believe you are answering, for optimistic concurrency. A mismatch is refused as contention; the seller's numbering is authoritative."
               size="small"

@@ -9,10 +9,20 @@
  */
 
 export const DB_NAME = "seller-console";
-const DB_VERSION = 1;
+// 2: added the recent-quotes store. `onupgradeneeded` creates any store that is
+// missing, so a database from version 1 gains it without losing the credential.
+const DB_VERSION = 2;
 
-/** Object stores created on upgrade. The cache store is used by the query layer. */
-export const STORES = { credentials: "credentials", queryCache: "queryCache" } as const;
+/**
+ * Object stores created on upgrade. The cache store is used by the query layer.
+ * They all live in this one database so that sign-out, which deletes it, takes
+ * every one of them.
+ */
+export const STORES = {
+  credentials: "credentials",
+  queryCache: "queryCache",
+  recentQuotes: "recentQuotes",
+} as const;
 
 let connection: Promise<IDBDatabase> | undefined;
 

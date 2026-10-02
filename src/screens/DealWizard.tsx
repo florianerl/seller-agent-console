@@ -27,17 +27,19 @@ import {
   type DealTypeCode,
   type QuoteMediaType,
 } from "../api/vocabulary";
+import { CopyButton } from "../components/CopyButton";
 import { EnumSelect } from "../components/EnumSelect";
 import { TipField } from "../components/TipField";
 import { ChoiceCards, ReviewList, WizardDialog } from "../components/Wizard";
 import { useCredential } from "../credentials/context";
 import { stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
+import { recordQuote } from "../credentials/recentQuotes";
 import { useMutation } from "../query/useMutation";
 import { useOpenProposalSupport } from "../query/useOpenProposalSupport";
 import { useResource } from "../query/useResource";
 import { palette } from "../theme/palette";
-import { CuratorPicker, ProductMultiPicker, ProductPicker } from "./pickers";
+import { CuratorPicker, ProductMultiPicker, ProductPicker, QuotePicker } from "./pickers";
 import { Optional } from "./dealFields";
 import { useConsent, useJsonObject, useLinearTv, useListField } from "./dealHooks";
 import { DistributeForm, PushForm } from "./DealSend";
@@ -91,6 +93,9 @@ const CONSEQUENCE: Record<Exclude<Method, "new-quote">, string> = {
     "Prices the product and books the deal immediately. Refused with a 422 if the maximum CPM is below the floor. A retry after an unclear failure may create a second deal.",
   curated: "Not idempotent: each call creates another curated deal.",
 };
+
+/** The clock, behind a name: it is read when a quote lands, never while rendering. */
+const now = (): number => Date.now();
 
 function newKey(): string {
   return crypto.randomUUID();
@@ -155,7 +160,7 @@ function ProductRows({
   onRemove,
   removable,
 }: {
-  rows: readonly { id: string; text: string; bad?: boolean }[];
+  rows: readonly { id: string; text: string; bad?: boolean; copy?: string }[];
   onRemove: (id: string) => void;
   removable: (id: string) => boolean;
 }) {
@@ -176,6 +181,7 @@ function ProductRows({
           >
             {r.text}
           </Typography>
+          {r.copy && <CopyButton value={r.copy} />}
           {removable(r.id) && (
             <Button size="small" onClick={() => onRemove(r.id)} aria-label={`Remove ${r.id}`}>
               Remove
@@ -205,7 +211,7 @@ function ProposalProbe({ onCount }: { onCount: (n: number) => void }) {
 }
 
 export function DealWizard({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { writesEnabled } = useCredential();
+  const { writesEnabled, credential } = useCredential();
   const [step, setStep] = useState(0);
   const [chosen, setMethod] = useState<Method>("new-quote");
   const { support } = useOpenProposalSupport();
@@ -513,6 +519,22 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
       });
       current = { ...current, [id]: r };
       setQuotes(current);
+      // The id comes back once. Keep it, so the negotiation and the booking
+      // that follow can find it again.
+      if (r.kind === "ok" && credential) {
+        const made = r.data.quote;
+        const cpm = made.pricing?.final_cpm;
+        void recordQuote(credential.credId, {
+          quote_id: made.quote_id,
+          product_id: id,
+          product_name: made.product?.name || null,
+          deal_type: made.deal_type || dealType,
+          final_cpm_micros: cpm ? cpm.amount_micros : null,
+          currency: cpm?.currency || "USD",
+          expires_at: made.expires_at,
+          created_at: now(),
+        });
+      }
     }
     setRunning(false);
   }
@@ -843,14 +865,11 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
           </>
         )}
         {method === "quote" && (
-          <TipField
-            hint="Id of the quote to book. It is shown on an order that came from it. Quotes expire after 24 hours."
-            size="small"
-            label="Quote id"
+          <QuotePicker
             value={quoteId}
-            onChange={(e) => setQuoteId(e.target.value)}
-            autoFocus
-            fullWidth
+            onChange={setQuoteId}
+            hint="Id of the quote to book. Pick one you made here, or paste one; an order that came from a quote shows its id. Quotes expire after 24 hours."
+            sx={{ width: "100%" }}
           />
         )}
         {method === "quote" && notesField}
@@ -988,6 +1007,7 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
                     return {
                       id,
                       text: `quoted · ${money(held.pricing?.final_cpm)} CPM · ${held.quote_id}${held.expires_at ? ` · expires ${stamp(held.expires_at)}` : ""}`,
+                      copy: held.quote_id,
                     };
                   if (asked) return { id, text: describe(asked), bad: true };
                   return { id, text: "not asked yet" };
@@ -1008,7 +1028,12 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
               </Typography>
               <ReviewList
                 rows={[
-                  ["Quote", firstQuoteHeld.quote_id],
+                  [
+                    "Quote",
+                    <>
+                      {firstQuoteHeld.quote_id} <CopyButton value={firstQuoteHeld.quote_id} />
+                    </>,
+                  ],
                   ["Rate", `${money(firstQuoteHeld.pricing?.final_cpm)} CPM`],
                   ...(firstQuoteHeld.expires_at ? [["Expires", stamp(firstQuoteHeld.expires_at)] as const] : []),
                 ]}
