@@ -287,17 +287,31 @@ describe("catalog inline writes", () => {
         return el as HTMLElement;
       }),
     );
-    await user.type(screen.getByLabelText("Name"), "Holiday");
-    await user.type(screen.getByLabelText("Base price"), "10");
-    await user.type(screen.getByLabelText("Floor"), "5");
-    await user.type(screen.getByLabelText("Description"), "Seasonal bundle");
-    await user.type(screen.getByLabelText("Products"), "prod-1, prod-2{Enter}");
-    await user.type(screen.getByLabelText("Content categories"), "IAB1, IAB2{Enter}");
-    await user.type(screen.getByLabelText("Content taxonomy"), "6");
-    await user.type(screen.getByLabelText("Seasonal label"), "Q4");
-    await user.type(screen.getByLabelText("Audience segment ids"), "seg-1{Enter}");
-    // user-event reads `{` as a key descriptor, so it is doubled.
-    await user.type(screen.getByLabelText("Audience capabilities"), '{{"supports_standard": true}');
+    // Scoped and pasted. Each label lookup across the whole Catalog took
+    // ~240ms, and typing ten values a keystroke at a time added the rest: 6s
+    // here, past the 15s budget on a CI runner. The form is where the labels
+    // are, and this test is about what reaches the wire, not the keystrokes.
+    // Chip fields still get their Enter.
+    const form = await waitFor(() => {
+      const el = document.querySelector('[data-block="create-package"]');
+      expect(el).toBeTruthy();
+      return el as HTMLElement;
+    });
+    const fill = async (label: string, text: string, enter = false) => {
+      await user.click(within(form).getByLabelText(label));
+      await user.paste(text);
+      if (enter) await user.keyboard("{Enter}");
+    };
+    await fill("Name", "Holiday");
+    await fill("Base price", "10");
+    await fill("Floor", "5");
+    await fill("Description", "Seasonal bundle");
+    await fill("Products", "prod-1, prod-2", true);
+    await fill("Content categories", "IAB1, IAB2", true);
+    await fill("Content taxonomy", "6");
+    await fill("Seasonal label", "Q4");
+    await fill("Audience segment ids", "seg-1", true);
+    await fill("Audience capabilities", '{"supports_standard": true}');
     await confirm(user, "create-package", "Create package");
 
     await waitFor(() => expect(sent).toHaveLength(1));
