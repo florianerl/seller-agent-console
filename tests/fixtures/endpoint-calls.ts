@@ -105,6 +105,7 @@ export const ENDPOINT_CALLS: Record<string, CallSpec> = {
   inventoryTypeOverride: { method: "GET", args: ["prod-1"] },
   rateCard: { method: "GET", args: [] },
   packages: { method: "GET", args: [] },
+  publicPackages: { method: "GET", args: [] },
   packageById: { method: "GET", args: ["pkg-1"] },
   createPackage: { method: "POST", args: [{ name: "pkg", base_price: 10, floor_price: 5 }] },
   updatePackage: { method: "PUT", args: ["pkg-1", { name: "renamed" }] },

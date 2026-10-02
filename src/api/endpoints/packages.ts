@@ -45,6 +45,15 @@ export const packages = (c: Connection, signal?: AbortSignal): Promise<Result<Pa
   get(c, PATHS.packages, { schema: PackageList, signal });
 
 /**
+ * The same route as a caller with no key sees it: the key is dropped from the
+ * connection, so the agent answers with the public view — a `price_range` band
+ * where the authenticated view has exact and floor prices. This is what an
+ * operator cannot see by looking at their own screen.
+ */
+export const publicPackages = (c: Connection, signal?: AbortSignal): Promise<Result<PackageList>> =>
+  get({ baseUrl: c.baseUrl }, PATHS.packages, { schema: PackageList, signal });
+
+/**
  * `/packages/{id}` shares `/packages`'s credential sensitivity in both
  * directions: same authenticated-vs-public field split, and — unlike the
  * catalog routes in products.ts — an invalid key is rejected (401) rather than

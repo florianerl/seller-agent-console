@@ -90,6 +90,15 @@ function enabledIn(block: string, name: string, index = 0) {
   });
 }
 
+/** The one Edit above the rate card, once the credential has said writes are on. */
+function rateCardEdit() {
+  return waitFor(() => {
+    const el = document.querySelector('[data-action="edit-rate"]');
+    expect(el).toBeEnabled();
+    return el as HTMLElement;
+  });
+}
+
 async function confirm(user: ReturnType<typeof userEvent.setup>, action: string, label: string) {
   const button = await waitFor(() => {
     const el = document.querySelector(`[data-action="${action}"]`);
@@ -122,14 +131,38 @@ describe("catalog inline writes", () => {
     );
   });
 
+  it("shows the keyless package view, fetched without the API key", async () => {
+    await credential(true);
+    const keys: Array<string | null> = [];
+    server.use(
+      http.get(`${API}/packages`, ({ request }) => {
+        const key = request.headers.get("x-api-key");
+        keys.push(key);
+        return HttpResponse.json({
+          packages: [key ? PACKAGE : { package_id: "pkg-1", name: "Sports bundle", rate_type: "fixed", price_range: "$8-$12" }],
+        });
+      }),
+    );
+    mount();
+
+    const table = await waitFor(() => {
+      const el = document.querySelector('[data-block="public-package-table"]');
+      expect(el).toBeTruthy();
+      return el as HTMLElement;
+    });
+    expect(within(table).getByText("$8-$12")).toBeTruthy();
+    expect(keys).toContain(null);
+    expect(keys).toContain("k");
+  });
+
   it("saves an edited rate with every other row sent back unchanged", async () => {
     await credential(true);
     const sent = capture("put", "/api/v1/rate-card", CARD);
     const user = userEvent.setup();
     mount();
 
-    await user.click(await enabledIn("rate-card", "Edit", 1));
-    const cpm = screen.getByLabelText("Base CPM");
+    await user.click(await rateCardEdit());
+    const cpm = screen.getAllByLabelText("Base CPM")[1]!;
     await user.clear(cpm);
     await user.type(cpm, "30");
     await confirm(user, "save-rate", "Save");
@@ -148,8 +181,8 @@ describe("catalog inline writes", () => {
     const user = userEvent.setup();
     mount();
 
-    await user.click(await enabledIn("rate-card", "Edit"));
-    const cpm = screen.getByLabelText("Base CPM");
+    await user.click(await rateCardEdit());
+    const cpm = screen.getAllByLabelText("Base CPM")[0]!;
     await user.clear(cpm);
     await user.type(cpm, "0");
 
@@ -163,8 +196,9 @@ describe("catalog inline writes", () => {
     const user = userEvent.setup();
     mount();
 
-    await user.click(await enabledIn("rate-card", "Remove"));
-    await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Remove" }));
+    await user.click(await rateCardEdit());
+    await user.click(within(document.querySelector('[data-block="rate-card"]') as HTMLElement).getAllByRole("button", { name: "Remove" })[0]!);
+    await confirm(user, "save-rate", "Save");
 
     await waitFor(() => expect(sent).toHaveLength(1));
     expect(sent[0]).toEqual([
@@ -178,20 +212,15 @@ describe("catalog inline writes", () => {
     const user = userEvent.setup();
     mount();
 
-    await user.click(
-      await waitFor(() => {
-        const el = document.querySelector('[data-action="new-rate"]');
-        expect(el).toBeEnabled();
-        return el as HTMLElement;
-      }),
-    );
+    await user.click(await rateCardEdit());
+    await user.click(document.querySelector('[data-action="new-rate"]') as HTMLElement);
     await user.click(screen.getByLabelText("Inventory type"));
     const offered = (await screen.findAllByRole("option")).map((o) => o.textContent);
     expect(offered).not.toContain("display");
     expect(offered).not.toContain("video");
     await user.click(screen.getByRole("option", { name: "ctv" }));
-    await user.type(screen.getByLabelText("Base CPM"), "40");
-    await confirm(user, "add-rate", "Add");
+    await user.type(screen.getAllByLabelText("Base CPM")[2]!, "40");
+    await confirm(user, "save-rate", "Save");
 
     await waitFor(() => expect(sent).toHaveLength(1));
     expect(sent[0]).toEqual([
@@ -276,7 +305,7 @@ describe("catalog inline writes", () => {
     await credential(false);
     mount();
 
-    await screen.findByText("Sports bundle");
+    await screen.findAllByText("Sports bundle");
     await waitFor(() => expect(document.querySelector('[data-note="read-only"]')).toBeTruthy());
     for (const action of [
       "edit-rate",

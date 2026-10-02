@@ -1,4 +1,5 @@
 import { Fragment, useState, type FormEvent } from "react";
+import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Paper from "@mui/material/Paper";
@@ -46,6 +47,7 @@ import { Hint } from "../components/Hint";
 import { plain } from "../lib/money";
 import { useMutation } from "../query/useMutation";
 import { PackageTable } from "./PackageTable";
+import { PublicPackages } from "./PublicPackages";
 import { RateCardTable } from "./RateCardTable";
 
 function money(amount: Money | null | undefined): string {
@@ -691,25 +693,32 @@ export default function CatalogScreen() {
         title="Products"
         caption="The same for every caller — this route ignores the key entirely."
       >
+        {/* Not a ReadOnlyNotice: the write switch is irrelevant here. The
+            agent API has no create/update/delete route for products, so there
+            is nothing for the switch to enable. */}
+        <Alert severity="info" variant="outlined" sx={{ mb: 2.5 }} data-note="products-read-only">
+          Products can't be created, edited or archived from this console. The agent API offers no
+          write endpoints for products yet, so this table is read-only whatever the write switch is
+          set to.
+          <br />
+          Products come from the agent's own setup and inventory sync, so changing one means changing
+          it there.
+        </Alert>
         <Products />
       </ScreenSection>
 
-      <ScreenSection
-        title="Rate card"
-        caption="Operator-set base pricing by inventory type. Edit a row in place; every save replaces the whole card."
-      >
-        <RateCardTable />
-      </ScreenSection>
+      <RateCardTable />
 
       <ScreenSection
         title="Packages"
         // The one catalog route whose content depends on the credential:
         // without a key the agent returns a price band, with one it returns
         // exact and floor prices. Calling this "the catalog" would overstate
-        // what is on screen.
-        caption="As seen by this key. Unauthenticated callers get price bands instead of exact prices, and a buyer key may be priced differently again."
+        // what is on screen, so the keyless view is shown beside it.
+        caption="Exact and floor prices, as returned for the key you are connected with. Callers without a key only see a price range."
       >
         <PackageTable />
+        <PublicPackages />
       </ScreenSection>
 
       <ScreenSection

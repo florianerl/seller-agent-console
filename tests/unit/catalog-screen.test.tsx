@@ -173,17 +173,17 @@ describe("the catalog screen", () => {
 
   it("shows the exact price for a package that has one", async () => {
     renderScreen();
-    await waitFor(() => expect(screen.getByText("Exact-priced package")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByText("Exact-priced package")[0]!).toBeInTheDocument());
 
-    const row = screen.getByText("Exact-priced package").closest("tr")!;
+    const row = screen.getAllByText("Exact-priced package")[0]!.closest("tr")!;
     expect(row.textContent).toContain("$9.50");
   });
 
   it("shows the price band for a package priced only as a range", async () => {
     renderScreen();
-    await waitFor(() => expect(screen.getByText("Banded package")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByText("Banded package")[0]!).toBeInTheDocument());
 
-    const row = screen.getByText("Banded package").closest("tr")!;
+    const row = screen.getAllByText("Banded package")[0]!.closest("tr")!;
     expect(row.textContent).toContain("$5-$10 CPM");
   });
 

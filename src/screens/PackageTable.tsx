@@ -179,7 +179,7 @@ export function PackageTable() {
         title="Sync packages from the ad server?"
         confirmLabel="Sync packages"
         action="sync-packages"
-        variant="text"
+        hint="Re-runs the agent's package setup (ProductSetupFlow), which builds packages from the ad server. Each click starts it again, and the console cannot tell what it changes, so don't click repeatedly."
         blocked={blocked}
         pending={sync.pending}
         onConfirm={() => void sync.run({})}

@@ -6,7 +6,7 @@ import { priceProblem } from "../lib/money";
  * different resource names, so a write from either drops both rather than
  * leave the other screen showing the old ones.
  */
-export const PACKAGE_VIEWS = ["packages", "media-kit*"];
+export const PACKAGE_VIEWS = ["packages", "packages-public", "media-kit*"];
 
 /**
  * What the media kit form edits: the fields a buyer browsing the kit sees,
