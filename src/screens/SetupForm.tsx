@@ -109,16 +109,6 @@ export function SetupForm() {
           </Stack>
         </form>
       </Paper>
-
-      <Alert severity="warning" variant="outlined" sx={{ mt: 3 }}>
-        <AlertTitle>About the key you paste here</AlertTitle>
-        <Typography variant="body2">
-          An operator key carries full write authority on your agent. This console
-          will not send writes until you enable them for this key, under the
-          connection menu. Anything running in this browser can read the key. Use
-          a dedicated key and revoke it if the device is lost.
-        </Typography>
-      </Alert>
       </Box>
       </PageHeader>
   );
