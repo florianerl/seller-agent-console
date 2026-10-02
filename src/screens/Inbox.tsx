@@ -38,6 +38,8 @@ import { GatePicker } from "./pickers";
 import { TipField } from "../components/TipField";
 import { EnumSelect } from "../components/EnumSelect";
 import { LEGACY_DEAL_TYPES } from "../api/vocabulary";
+import { negotiationLog, proposalContext, type ProposalContext } from "./approvalContext";
+import { NegotiationChat } from "./NegotiationChat";
 import { palette } from "../theme/palette";
 
 /**
@@ -64,13 +66,29 @@ function termsProblems(t: TermsDraft) {
   };
 }
 
-function termsBody(t: TermsDraft): Record<string, unknown> | undefined {
+/** What the form opens with: the terms on the table, so the operator edits rather than retypes. */
+function baselineTerms(p: ProposalContext | undefined): TermsDraft {
+  const price = p?.counterPrice ?? p?.requestedPrice;
+  const impressions = p?.counterImpressions ?? p?.requestedImpressions;
+  return {
+    ...NO_TERMS,
+    dealType: p?.dealType ?? "",
+    start: p?.startDate ?? "",
+    end: p?.endDate ?? "",
+    price: price === undefined ? "" : String(price),
+    impressions: impressions === undefined ? "" : String(impressions),
+  };
+}
+
+/** Only what differs from the baseline is sent: an untouched prefill is not a modification. */
+function termsBody(t: TermsDraft, base: TermsDraft): Record<string, unknown> | undefined {
+  const changed = (key: keyof TermsDraft) => t[key].trim() !== "" && t[key] !== base[key];
   const body: Record<string, unknown> = {
-    ...(t.dealType ? { deal_type: t.dealType } : {}),
-    ...(t.price.trim() ? { price: Number(t.price) } : {}),
-    ...(t.impressions.trim() ? { impressions: Number(t.impressions) } : {}),
-    ...(t.start ? { start_date: t.start } : {}),
-    ...(t.end ? { end_date: t.end } : {}),
+    ...(changed("dealType") ? { deal_type: t.dealType } : {}),
+    ...(changed("price") ? { price: Number(t.price) } : {}),
+    ...(changed("impressions") ? { impressions: Number(t.impressions) } : {}),
+    ...(changed("start") ? { start_date: t.start } : {}),
+    ...(changed("end") ? { end_date: t.end } : {}),
   };
   return Object.keys(body).length > 0 ? body : undefined;
 }
@@ -86,16 +104,19 @@ function termsBody(t: TermsDraft): Record<string, unknown> | undefined {
 function DecisionControls({
   approvalId,
   status,
+  proposal,
   onDecided,
 }: {
   approvalId: string;
   status: string;
+  proposal: ProposalContext | undefined;
   onDecided: (result: Result<unknown>) => void;
 }) {
   const { writesEnabled } = useCredential();
   const [reason, setReason] = useState("");
   const [name, setName] = useState("");
-  const [terms, setTerms] = useState<TermsDraft>(NO_TERMS);
+  const [terms, setTerms] = useState<TermsDraft>(() => baselineTerms(proposal));
+  const base = baselineTerms(proposal);
   const [pendingDecision, setPendingDecision] = useState<"approve" | "reject" | undefined>();
 
   const decide = useMutation<{ id: string; body: ApprovalDecisionInput }, unknown>(
@@ -112,7 +133,7 @@ function DecisionControls({
   const problems = termsProblems(terms);
   const termsInvalid = problems.price || problems.impressions || problems.end;
   const blocked = !writesEnabled || !decidable || termsInvalid;
-  const pendingTerms = termsBody(terms);
+  const pendingTerms = termsBody(terms, base);
   const setTerm = <K extends keyof TermsDraft>(key: K, value: TermsDraft[K]) =>
     setTerms((current) => ({ ...current, [key]: value }));
 
@@ -126,7 +147,7 @@ function DecisionControls({
         1. Change the terms (optional)
       </Typography>
       <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
-        Fill in only what should change. These are sent together with your decision when you
+        Starts from the terms on the table. Change only what should differ; these are sent together with your decision when you
         click Approve or Reject below.
       </Typography>
       <FormRow>
@@ -281,7 +302,7 @@ function DecisionControls({
           const decision = pendingDecision;
           setPendingDecision(undefined);
           if (!decision) return;
-          const modifications = termsBody(terms);
+          const modifications = termsBody(terms, base);
           void decide
             .run({
               id: approvalId,
@@ -370,6 +391,78 @@ function ResumeControls({
   );
 }
 
+const yesNo = (value: boolean | undefined) => (value === undefined ? "—" : value ? "yes" : "no");
+
+/**
+ * What a decider needs to see before approving: what the buyer asked for,
+ * what the agent proposes back, and whether its own checks passed. Internal
+ * ids and the flow snapshot are deliberately left out.
+ */
+function ProposalSummary({ p }: { p: ProposalContext }) {
+  const money = (value: number | undefined) =>
+    value === undefined ? "—" : `${p.currency ?? ""} ${value.toLocaleString()} CPM`.trim();
+  const volume = (value: number | undefined) =>
+    value === undefined ? "—" : `${value.toLocaleString()} impressions`;
+  return (
+    <Box sx={{ mt: 2 }} data-block="proposal-summary">
+      <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 0.5 }}>Proposal under review</Typography>
+      {p.reason && (
+        <Typography variant="body2" sx={{ mb: 1 }}>
+          {p.recommendation ? <strong>{p.recommendation}: </strong> : null}
+          {p.reason}
+        </Typography>
+      )}
+      <FieldGrid min={200}>
+        <Field label="Product">
+          {p.productName ?? p.productId ?? "—"}
+          {p.productName && p.productId ? (
+            <Box component="span" sx={{ color: palette.textSecondary, fontSize: 12 }}>
+              {" "}
+              ({p.productId})
+            </Box>
+          ) : null}
+        </Field>
+        <Field label="Buyer asked">
+          {money(p.requestedPrice)}
+          <br />
+          {volume(p.requestedImpressions)}
+          <br />
+          {p.dealType ? (LEGACY_DEAL_TYPES.find((t) => t.value === p.dealType)?.label ?? p.dealType) : "deal type —"}
+          <br />
+          {p.startDate && p.endDate ? `${p.startDate} → ${p.endDate}` : "flight —"}
+        </Field>
+        <Field label="Agent proposes">
+          {money(p.counterPrice)}
+          <br />
+          {p.counterImpressions === undefined ? "—" : `up to ${volume(p.counterImpressions)}`}
+        </Field>
+        <Field label="Rate card">
+          Floor {money(p.floorPrice)}
+          <br />
+          Base {money(p.basePrice)}
+        </Field>
+        <Field label="Checks">
+          Price acceptable: {yesNo(p.priceAcceptable)}
+          <br />
+          Pricing verified: {yesNo(p.pricingVerified)}
+          <br />
+          Audience validated: {yesNo(p.audienceValidated)}
+        </Field>
+      </FieldGrid>
+      {p.pricingVerified === false && p.pricingVerificationReason && (
+        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+          Pricing not verified: {p.pricingVerificationReason}
+        </Typography>
+      )}
+      {p.problems.length + p.warnings.length > 0 && (
+        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+          Notes: {[...p.problems, ...p.warnings].join("; ")}
+        </Typography>
+      )}
+    </Box>
+  );
+}
+
 function Decision({
   approvalId,
   locked,
@@ -396,6 +489,8 @@ function Decision({
   }
 
   const request = detail.data?.request;
+  const proposal = request ? proposalContext(request) : undefined;
+  const chat = request ? negotiationLog(request) : undefined;
   const response = detail.data?.response ?? null;
   const decided = response !== null || locked;
 
@@ -418,6 +513,14 @@ function Decision({
         <Field label="Raised">{stamp(request.created_at)}</Field>
         <Field label="Expires">{stamp(request.expires_at)}</Field>
       </FieldGrid>
+      )}
+      {proposal && <ProposalSummary p={proposal} />}
+      {chat && (
+        <NegotiationChat
+          log={chat}
+          proposal={proposal}
+          awaitingDecision={!decided && (request?.status ?? "pending") === "pending"}
+        />
       )}
 
       <Box sx={{ mt: 2 }}>
@@ -463,6 +566,7 @@ function Decision({
         <DecisionControls
           approvalId={approvalId}
           status={request?.status ?? "pending"}
+          proposal={proposal}
           onDecided={(result) => {
             if (result.kind === "ok") onLocked();
             detail.refresh();

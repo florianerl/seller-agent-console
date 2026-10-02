@@ -74,6 +74,7 @@ export const CONTRAST_CONTRACT: ReadonlyArray<{
   { name: "active nav text on paper", fg: palette.brandRedText, bg: palette.paper, min: "body" },
   { name: "active nav text on wash", fg: palette.brandRedText, bg: palette.navActiveWash, min: "body" },
   { name: "body text on nav wash", fg: palette.text, bg: palette.navActiveWash, min: "body" },
+  { name: "secondary text on nav wash", fg: palette.textSecondary, bg: palette.navActiveWash, min: "body" },
   { name: "link text on paper", fg: palette.brandRedText, bg: palette.paper, min: "body" },
   { name: "overline on paper", fg: palette.brandRedText, bg: palette.paper, min: "body" },
   { name: "overline on ground", fg: palette.brandRedText, bg: palette.ground, min: "body" },

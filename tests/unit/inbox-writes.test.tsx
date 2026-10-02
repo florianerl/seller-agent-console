@@ -158,6 +158,162 @@ describe("deciding an approval", () => {
     await waitFor(() => expect(listReads).toBeGreaterThan(1));
   });
 
+  const WITH_CONTEXT = {
+    ...GATE,
+    context: {
+      evaluation: {
+        product_id: "p-1",
+        recommendation: "counter",
+        requested_price: 1,
+        requested_impressions: 10000000,
+        minimum_acceptable_price: 8,
+        price_acceptable: false,
+        audience_validated: false,
+      },
+      counter_terms: {
+        reason: "We cannot accept $1.00 CPM.",
+        proposed_price: 8,
+        max_impressions: 10000000,
+      },
+      pricing_verified: false,
+      pricing_verification_reason: "No matching quote found",
+    },
+    flow_state_snapshot: {
+      id: "snap-1",
+      negotiation_history: {
+        status: "active",
+        limits: { max_rounds: 3 },
+        rounds: [
+          {
+            round_number: 1,
+            action: "counter",
+            buyer_price: 1,
+            seller_price: 8,
+            timestamp: "2026-10-02T14:11:01.746606",
+            buyer_rationale: "We cannot accept $1.00 CPM.",
+            rationale: "Buyer offer is below our floor.",
+          },
+        ],
+      },
+      warnings: ["Requested deal type preferreddeal not supported for product"],
+      proposal_data: {
+        price: 1,
+        deal_type: "preferreddeal",
+        start_date: "2026-10-01",
+        end_date: "2026-10-30",
+        impressions: 10000000,
+      },
+      products: { "p-1": { name: "Leaderboard", currency: "USD", base_cpm: 12, floor_cpm: 7.5 } },
+    },
+  };
+
+  function serveContext() {
+    server.use(
+      http.get(`${API}/approvals`, () => HttpResponse.json({ approvals: [WITH_CONTEXT] })),
+      http.get(`${API}/approvals/appr-1`, () =>
+        HttpResponse.json({ request: WITH_CONTEXT, response: null }),
+      ),
+    );
+  }
+
+  it("summarises the proposal and leaves internal ids out", async () => {
+    await connect(true);
+    const user = userEvent.setup();
+    serveContext();
+
+    renderScreen();
+    await openGate(user);
+    const block = (await screen.findByText("Proposal under review")).closest(
+      '[data-block="proposal-summary"]',
+    ) as HTMLElement;
+    expect(block.textContent).toContain("We cannot accept $1.00 CPM.");
+    expect(block.textContent).toContain("Leaderboard");
+    expect(block.textContent).toContain("USD 8 CPM");
+    expect(block.textContent).toContain("10,000,000 impressions");
+    expect(block.textContent).toContain("No matching quote found");
+    expect(block.textContent).toContain("preferred deal");
+    expect(block.textContent).toContain("2026-10-01 → 2026-10-30");
+    expect(block.textContent).toContain("not supported for product");
+    expect(block.textContent).not.toContain("snap-1");
+  });
+
+  it("shows the negotiation as a conversation, buyer then seller", async () => {
+    await connect(true);
+    const user = userEvent.setup();
+    serveContext();
+
+    renderScreen();
+    await openGate(user);
+    const chat = (await screen.findByText(/Negotiation so far/)).closest(
+      '[data-block="negotiation-chat"]',
+    ) as HTMLElement;
+    expect(chat.textContent).toContain("round 1 of 3");
+    const bubbles = [...chat.querySelectorAll("[data-side]")];
+    expect(bubbles.map((b) => b.getAttribute("data-side"))).toEqual(["buyer", "seller"]);
+    expect(bubbles[0]!.textContent).toContain("Proposes USD 1 CPM");
+    expect(bubbles[0]!.textContent).toContain("10,000,000 impressions");
+    expect(bubbles[0]!.textContent).toContain("preferred deal");
+    expect(bubbles[0]!.textContent).toContain("2026-10-01 → 2026-10-30");
+    expect(bubbles[1]!.textContent).toContain("for up to 10,000,000 impressions");
+    expect(bubbles[1]!.textContent).toContain("Counters at USD 8 CPM");
+    expect(bubbles[1]!.textContent).toContain("We cannot accept $1.00 CPM.");
+    expect(bubbles[1]!.textContent).toContain("Agent's reasoning: Buyer offer is below our floor.");
+    expect(chat.textContent).toContain("Waiting for your decision");
+  });
+
+  it("starts the terms from the agent's counter and sends only what changed", async () => {
+    await connect(true);
+    const user = userEvent.setup();
+    const bodies: unknown[] = [];
+    serveContext();
+    server.use(
+      http.post(`${API}/approvals/appr-1/decide`, async ({ request }) => {
+        bodies.push(await request.json());
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+
+    renderScreen();
+    await openGate(user);
+    expect(await screen.findByLabelText("Price")).toHaveValue(8);
+    expect(screen.getByLabelText("Impressions")).toHaveValue(10000000);
+    expect(screen.getByLabelText("Flight start")).toHaveValue("2026-10-01");
+    expect(screen.getByLabelText("Flight end")).toHaveValue("2026-10-30");
+
+    const approve = () => document.querySelector('[data-action="approve"]') as HTMLElement;
+    const confirm = () => document.querySelector('[data-action="confirm-mutation"]') as HTMLElement;
+
+    // Untouched prefill is not a modification.
+    await user.click(approve());
+    await user.click(confirm());
+    await waitFor(() => expect(bodies).toHaveLength(1));
+    expect(bodies[0]).toEqual({ decision: "approve" });
+  });
+
+  it("sends a changed flight end and leaves the rest of the prefill out", async () => {
+    await connect(true);
+    const user = userEvent.setup();
+    const bodies: unknown[] = [];
+    serveContext();
+    server.use(
+      http.post(`${API}/approvals/appr-1/decide`, async ({ request }) => {
+        bodies.push(await request.json());
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+
+    renderScreen();
+    await openGate(user);
+    const end = await screen.findByLabelText("Flight end");
+    await user.clear(end);
+    await user.type(end, "2026-11-15");
+    await user.click(document.querySelector('[data-action="approve"]') as HTMLElement);
+    await user.click(document.querySelector('[data-action="confirm-mutation"]') as HTMLElement);
+
+    await waitFor(() => expect(bodies).toHaveLength(1));
+    expect(bodies[0]).toEqual({ decision: "approve", modifications: { end_date: "2026-11-15" } });
+  });
+
   it("sends only the terms that were filled in, as modifications", async () => {
     await connect(true);
     const user = userEvent.setup();
