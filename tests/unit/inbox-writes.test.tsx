@@ -158,6 +158,41 @@ describe("deciding an approval", () => {
     await waitFor(() => expect(listReads).toBeGreaterThan(1));
   });
 
+  it("sends only the terms that were filled in, as modifications", async () => {
+    await connect(true);
+    const user = userEvent.setup();
+    const bodies: unknown[] = [];
+    server.use(
+      http.post(`${API}/approvals/appr-1/decide`, async ({ request }) => {
+        bodies.push(await request.json());
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+
+    renderScreen();
+    await openGate(user);
+    const approve = document.querySelector('[data-action="approve"]') as HTMLButtonElement;
+
+    // A non-positive price is refused before the wire.
+    await user.type(screen.getByLabelText("Price"), "-1");
+    expect(approve).toBeDisabled();
+    await user.clear(screen.getByLabelText("Price"));
+    expect(approve).toBeEnabled();
+
+    await user.type(screen.getByLabelText("Price"), "12.5");
+    await user.type(screen.getByLabelText("Impressions"), "500000");
+    await user.click(screen.getByRole("combobox", { name: "Deal type" }));
+    await user.click(await screen.findByRole("option", { name: "preferred deal" }));
+    await user.click(approve);
+    await user.click(document.querySelector('[data-action="confirm-mutation"]') as HTMLElement);
+
+    await waitFor(() => expect(bodies).toHaveLength(1));
+    expect(bodies[0]).toEqual({
+      decision: "approve",
+      modifications: { deal_type: "preferreddeal", price: 12.5, impressions: 500000 },
+    });
+  });
+
   it("reports a refused write in place rather than pretending it landed", async () => {
     await connect(true);
     const user = userEvent.setup();

@@ -36,7 +36,44 @@ import { FormRow, WriteForm } from "../components/WriteForm";
 import { Hint } from "../components/Hint";
 import { GatePicker } from "./pickers";
 import { TipField } from "../components/TipField";
+import { EnumSelect } from "../components/EnumSelect";
+import { LEGACY_DEAL_TYPES } from "../api/vocabulary";
 import { palette } from "../theme/palette";
+
+/**
+ * `modifications` is a free-form object upstream, with no schema to build a
+ * form from. The terms offered are those of a proposal (`ProposalRequest`) —
+ * what a proposal decision can sensibly change — and the deal type uses the
+ * long form the proposal flow compares against, not the quote API's PG/PD/PA.
+ * Only fields the operator filled in are sent.
+ */
+type TermsDraft = {
+  dealType: string;
+  price: string;
+  impressions: string;
+  start: string;
+  end: string;
+};
+const NO_TERMS: TermsDraft = { dealType: "", price: "", impressions: "", start: "", end: "" };
+
+function termsProblems(t: TermsDraft) {
+  return {
+    price: t.price.trim() !== "" && !(Number(t.price) > 0),
+    impressions: t.impressions.trim() !== "" && !/^[1-9]\d*$/.test(t.impressions.trim()),
+    end: t.start !== "" && t.end !== "" && t.end < t.start,
+  };
+}
+
+function termsBody(t: TermsDraft): Record<string, unknown> | undefined {
+  const body: Record<string, unknown> = {
+    ...(t.dealType ? { deal_type: t.dealType } : {}),
+    ...(t.price.trim() ? { price: Number(t.price) } : {}),
+    ...(t.impressions.trim() ? { impressions: Number(t.impressions) } : {}),
+    ...(t.start ? { start_date: t.start } : {}),
+    ...(t.end ? { end_date: t.end } : {}),
+  };
+  return Object.keys(body).length > 0 ? body : undefined;
+}
 
 /**
  * The approve/reject controls.
@@ -58,6 +95,7 @@ function DecisionControls({
   const { writesEnabled } = useCredential();
   const [reason, setReason] = useState("");
   const [name, setName] = useState("");
+  const [terms, setTerms] = useState<TermsDraft>(NO_TERMS);
   const [pendingDecision, setPendingDecision] = useState<"approve" | "reject" | undefined>();
 
   const decide = useMutation<{ id: string; body: ApprovalDecisionInput }, unknown>(
@@ -71,14 +109,83 @@ function DecisionControls({
   // decide. The control stays visible so the row does not change shape.
   const decidable = status === "pending";
   const busy = decide.pending;
-  const blocked = !writesEnabled || !decidable;
+  const problems = termsProblems(terms);
+  const termsInvalid = problems.price || problems.impressions || problems.end;
+  const blocked = !writesEnabled || !decidable || termsInvalid;
+  const pendingTerms = termsBody(terms);
+  const setTerm = <K extends keyof TermsDraft>(key: K, value: TermsDraft[K]) =>
+    setTerms((current) => ({ ...current, [key]: value }));
 
   const outcome = decide.last;
 
   return (
     <Box sx={{ mt: 2 }} data-block="approval-controls">
-      <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 1 }}>Decide this approval</Typography>
+      <Typography sx={{ fontSize: 13, fontWeight: 600, mb: 1.5 }}>Decide this approval</Typography>
 
+      <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 0.5 }}>
+        1. Change the terms (optional)
+      </Typography>
+      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+        Fill in only what should change. These are sent together with your decision when you
+        click Approve or Reject below.
+      </Typography>
+      <FormRow>
+        <EnumSelect
+          hint="Change the deal type. Leave empty to keep the proposal's. Sent as modifications.deal_type."
+          label="Deal type"
+          value={terms.dealType}
+          options={LEGACY_DEAL_TYPES}
+          onChange={(v) => setTerm("dealType", v)}
+          any="Unchanged"
+          disabled={!writesEnabled || !decidable || busy}
+        />
+        <TipField
+          hint="Change the price (CPM). Leave empty to keep the proposal's."
+          size="small"
+          label="Price"
+          type="number"
+          value={terms.price}
+          onChange={(e) => setTerm("price", e.target.value)}
+          error={problems.price}
+          disabled={!writesEnabled || !decidable || busy}
+          sx={{ width: 130 }}
+        />
+        <TipField
+          hint="Change the impression count, a whole number."
+          size="small"
+          label="Impressions"
+          type="number"
+          value={terms.impressions}
+          onChange={(e) => setTerm("impressions", e.target.value)}
+          error={problems.impressions}
+          disabled={!writesEnabled || !decidable || busy}
+          sx={{ width: 150 }}
+        />
+        <TipField
+          hint="Change the first day of the flight."
+          size="small"
+          label="Flight start"
+          type="date"
+          slotProps={{ inputLabel: { shrink: true } }}
+          value={terms.start}
+          onChange={(e) => setTerm("start", e.target.value)}
+          disabled={!writesEnabled || !decidable || busy}
+        />
+        <TipField
+          hint="Change the last day of the flight, on or after the start."
+          size="small"
+          label="Flight end"
+          type="date"
+          slotProps={{ inputLabel: { shrink: true } }}
+          value={terms.end}
+          onChange={(e) => setTerm("end", e.target.value)}
+          error={problems.end}
+          disabled={!writesEnabled || !decidable || busy}
+        />
+      </FormRow>
+      <Typography sx={{ fontSize: 12, fontWeight: 600, mt: 2, mb: 1 }}>
+        2. Decide
+      </Typography>
       <FormRow>
         <TipField
           hint="Optional. Why you are approving or rejecting; recorded with the decision."
@@ -124,8 +231,9 @@ function DecisionControls({
       <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75, mb: 1.5 }}>
         {/* Sent because the agent's own default is the literal "anonymous",
             which is a worse record than a name nobody checked. */}
-        Name is stored as given; the agent does not verify it. Deciding only records the
-        answer; resuming the flow, which hands it back, is offered here once the decision is in.
+        Approve or Reject records your decision together with any terms you changed above. It
+        does not restart the proposal flow. After you decide, a "Resume the flow" section appears
+        in this panel with a Resume flow button; that hands the decision back to the flow. Your name is saved as typed and is not verified.
       </Typography>
 
       {!decidable && writesEnabled && (
@@ -148,6 +256,17 @@ function DecisionControls({
         onCancel={() => setPendingDecision(undefined)}
         consequence={
           <>
+            {pendingTerms && (
+              <>
+                This also sends the changed terms:{" "}
+                <strong>
+                  {Object.entries(pendingTerms)
+                    .map(([key, value]) => `${key.replace(/_/g, " ")} ${String(value)}`)
+                    .join(", ")}
+                </strong>
+                .{" "}
+              </>
+            )}
             {/* What a failure leaves behind, said plainly, because the agent
                 records the first decision and refuses a second: a retry after
                 an unclear failure may answer about the earlier attempt. */}
@@ -162,6 +281,7 @@ function DecisionControls({
           const decision = pendingDecision;
           setPendingDecision(undefined);
           if (!decision) return;
+          const modifications = termsBody(terms);
           void decide
             .run({
               id: approvalId,
@@ -169,6 +289,7 @@ function DecisionControls({
                 decision,
                 ...(reason ? { reason } : {}),
                 ...(name ? { decided_by: name } : {}),
+                ...(modifications ? { modifications } : {}),
               },
             })
             .then(onDecided);
@@ -282,6 +403,10 @@ function Decision({
     <Box sx={{ py: 1 }}>
       {request && (
       <FieldGrid data-block="approval-detail">
+        <Field label="Kind">{request.gate_name || "—"}</Field>
+        <Field label="Status">
+          <StatusChip status={request.status} />
+        </Field>
         <Field label="Flow">{request.flow_type || "—"}</Field>
         <Field label="Flow id">
           <Box component="span" sx={{ fontFamily: "monospace", fontSize: 12 }}>
@@ -290,6 +415,7 @@ function Decision({
         </Field>
         <Field label="Proposal">{request.proposal_id || "—"}</Field>
         <Field label="Deal">{request.deal_id || "—"}</Field>
+        <Field label="Raised">{stamp(request.created_at)}</Field>
         <Field label="Expires">{stamp(request.expires_at)}</Field>
       </FieldGrid>
       )}
