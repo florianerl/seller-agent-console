@@ -479,7 +479,7 @@ function AvailsCheck() {
         <FormRow>
           <ProductPicker value={productId} onChange={setProductId} hint="The product to use. Pick one, or type or paste an id. Required." />
           <TipField
-            hint="First day of the flight to check. Required,; the check will not run without it."
+            hint="First day of the flight to check. Required; the check will not run without it."
             size="small"
             label="Start"
             type="date"
@@ -488,7 +488,7 @@ function AvailsCheck() {
             onChange={(e) => setStartDate(e.target.value)}
           />
           <TipField
-            hint="Last day of the flight to check. Required,; the check will not run without it."
+            hint="Last day of the flight to check. Required; the check will not run without it."
             size="small"
             label="End"
             type="date"
