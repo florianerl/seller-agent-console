@@ -42,17 +42,28 @@ export const BUILT_SCREENS = SCREENS.filter((s) => !s.soon);
 export const NAV_SCREENS = SCREENS.filter((s) => !s.hidden);
 
 /**
- * Sidebar grouping only. Order of `SCREENS` is still the source of "which
- * screens exist"; this table must list every id or the shell test fails.
+ * Nav grouping only. Order of `SCREENS` is still the source of "which screens
+ * exist"; this table must list every id or the shell test fails.
  */
-// Groups follow the deal lifecycle top to bottom: discover what is for sale,
-// agree terms (proposal or quote, then negotiation), book the deal, run the
-// order, then read the event log of what happened. Keep it in that order.
-export const NAV_GROUPS: ReadonlyArray<{ label: string; ids: readonly string[] }> = [
+// Groups follow the deal lifecycle: discover what is for sale, agree terms
+// (proposal or quote, negotiation, closing the deal), execute the order, then
+// monitor the event log. `stage` marks the lifecycle steps; the horizontal
+// header numbers nothing but draws chevrons between them, so a group that is
+// not a step (Overview) stays outside the chain. Keep the stages in order.
+export type NavGroup = {
+  readonly label: string;
+  readonly ids: readonly string[];
+  readonly stage?: true;
+};
+
+export const NAV_GROUPS: readonly NavGroup[] = [
   { label: "Overview", ids: ["setup", "inbox"] },
-  { label: "Discover", ids: ["catalog", "media-kit", "curators", "agents"] },
-  { label: "Pipeline", ids: ["proposals", "negotiation", "deals", "orders"] },
-  { label: "Monitor", ids: ["events"] },
+  { label: "Discovery", ids: ["catalog", "media-kit", "curators", "agents"], stage: true },
+  { label: "Planning", ids: ["proposals", "negotiation", "deals"], stage: true },
+  { label: "Execution", ids: ["orders"], stage: true },
+  // Events is the agent's audit log, not delivery reporting; "Monitoring"
+  // says what the screen does without promising impressions or spend.
+  { label: "Monitoring", ids: ["events"], stage: true },
 ];
 
 export const NAV_GROUP_IDS = NAV_GROUPS.flatMap((group) => group.ids);

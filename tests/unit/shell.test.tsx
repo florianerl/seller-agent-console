@@ -56,6 +56,20 @@ describe("shell navigation", () => {
     }
   });
 
+  it("lays the header out as the lifecycle, stage by stage", async () => {
+    renderApp();
+    const nav = await screen.findByRole("navigation", { name: /console sections/i });
+    const groups = within(nav)
+      .getAllByRole("group")
+      .map((g) => g.getAttribute("data-nav-group"));
+    expect(groups).toEqual(["Overview", "Discovery", "Planning", "Execution", "Monitoring"]);
+
+    // Each stage is named by its visible caption, and its screens sit inside it.
+    const planning = within(nav).getByRole("group", { name: "Planning" });
+    expect(within(planning).getByRole("link", { name: "Deals" })).toBeInTheDocument();
+    expect(within(nav).getByRole("group", { name: "Execution" })).toHaveTextContent("Orders");
+  });
+
   it("places every screen in a nav group", () => {
     expect([...NAV_GROUP_IDS].sort()).toEqual([...SCREENS.map((s) => s.id)].sort());
   });

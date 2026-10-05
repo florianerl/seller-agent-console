@@ -1,3 +1,4 @@
+import { useId } from "react";
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import List from "@mui/material/List";
@@ -6,7 +7,7 @@ import ListItemButton from "@mui/material/ListItemButton";
 import ListItemText from "@mui/material/ListItemText";
 import Typography from "@mui/material/Typography";
 import { NavLink, useLocation } from "react-router";
-import { NAV_GROUPS, NAV_SCREENS, type Screen } from "./screens";
+import { NAV_GROUPS, NAV_SCREENS, type NavGroup, type Screen } from "./screens";
 import { palette } from "../theme/palette";
 
 export function BrandMark({
@@ -71,6 +72,169 @@ function SoonItem({ screen }: { screen: Screen }) {
   );
 }
 
+const byId = new Map(NAV_SCREENS.map((screen) => [screen.id, screen]));
+
+function groupScreens(group: NavGroup): Screen[] {
+  return group.ids.flatMap((id) => byId.get(id) ?? []);
+}
+
+/**
+ * The horizontal header draws the lifecycle: each stage is a captioned
+ * cluster, consecutive stages are joined by a chevron, and a group that is not
+ * a stage (Overview) sits apart behind a divider. Links share one bottom edge
+ * so the active underline lines up whether or not a cluster has a caption.
+ */
+function HeaderNav({
+  pathname,
+  onNavigate,
+}: {
+  pathname: string;
+  onNavigate?: (() => void) | undefined;
+}) {
+  // A hidden screen can empty a group (Proposals alone would); drop the group
+  // rather than draw a caption over nothing.
+  const groups = NAV_GROUPS.map((group) => ({ group, screens: groupScreens(group) })).filter(
+    ({ screens }) => screens.length > 0,
+  );
+
+  return (
+    <nav aria-label="Console sections">
+      <Box
+        sx={{
+          display: "flex",
+          flexWrap: "nowrap",
+          alignItems: "flex-end",
+          columnGap: { md: 1, lg: 1.25, xl: 1.75 },
+          overflowX: "auto",
+          scrollbarWidth: "none",
+          "&::-webkit-scrollbar": { display: "none" },
+        }}
+      >
+        {groups.map(({ group, screens }, i) => {
+          const previous = groups[i - 1]?.group;
+          return (
+            <Box key={group.label} sx={{ display: "contents" }}>
+              {previous &&
+                (previous.stage && group.stage ? <StageChevron /> : <GroupDivider />)}
+              <HeaderGroup
+                group={group}
+                screens={screens}
+                pathname={pathname}
+                onNavigate={onNavigate}
+              />
+            </Box>
+          );
+        })}
+      </Box>
+    </nav>
+  );
+}
+
+function HeaderGroup({
+  group,
+  screens,
+  pathname,
+  onNavigate,
+}: {
+  group: NavGroup;
+  screens: Screen[];
+  pathname: string;
+  onNavigate?: (() => void) | undefined;
+}) {
+  const captionId = useId();
+  return (
+    <Box
+      role="group"
+      // The caption names the group when it is shown; Overview has none, so
+      // it is named directly and a screen reader still hears where it is.
+      {...(group.stage ? { "aria-labelledby": captionId } : { "aria-label": group.label })}
+      data-nav-group={group.label}
+      sx={{ display: "flex", flexDirection: "column", flexShrink: 0 }}
+    >
+      {group.stage && (
+        <Typography
+          id={captionId}
+          component="span"
+          sx={{ fontSize: 11, lineHeight: 1.2, color: palette.textSecondary, whiteSpace: "nowrap" }}
+        >
+          {group.label}
+        </Typography>
+      )}
+      <Box sx={{ display: "flex", alignItems: "center", columnGap: { md: 1.25, lg: 1.5, xl: 2 } }}>
+        {screens.map((screen) =>
+          screen.soon ? (
+            <SoonItem key={screen.id} screen={screen} />
+          ) : (
+            <HeaderLink
+              key={screen.id}
+              screen={screen}
+              active={pathname === screen.path}
+              onNavigate={onNavigate}
+            />
+          ),
+        )}
+      </Box>
+    </Box>
+  );
+}
+
+function HeaderLink({
+  screen,
+  active,
+  onNavigate,
+}: {
+  screen: Screen;
+  active: boolean;
+  onNavigate?: (() => void) | undefined;
+}) {
+  return (
+    <Box
+      component={NavLink}
+      to={screen.path}
+      end={screen.path === "/"}
+      onClick={onNavigate}
+      aria-current={active ? "page" : undefined}
+      data-nav={screen.id}
+      data-state={active ? "active" : "idle"}
+      sx={{
+        color: active ? palette.brandRedText : palette.brandBlack,
+        fontSize: { md: 13, lg: 13.5, xl: 14 },
+        fontWeight: 600,
+        textDecoration: "none",
+        borderBottom: active ? `2px solid ${palette.brandRed}` : "2px solid transparent",
+        py: 1,
+        whiteSpace: "nowrap",
+        flexShrink: 0,
+      }}
+    >
+      {screen.label}
+    </Box>
+  );
+}
+
+function StageChevron() {
+  // Decoration: the order is already the reading order, so a screen reader
+  // has nothing to gain from hearing "greater than" between stages.
+  return (
+    <Box
+      component="span"
+      aria-hidden
+      sx={{ color: palette.textSecondary, fontSize: 16, lineHeight: 1, pb: 1.25, flexShrink: 0 }}
+    >
+      ›
+    </Box>
+  );
+}
+
+function GroupDivider() {
+  return (
+    <Box
+      aria-hidden
+      sx={{ alignSelf: "stretch", width: "1px", my: 0.5, backgroundColor: palette.line, flexShrink: 0 }}
+    />
+  );
+}
+
 export function ConsoleNav({
   onNavigate,
   stacked = false,
@@ -81,58 +245,8 @@ export function ConsoleNav({
   const { pathname } = useLocation();
 
   if (!stacked) {
-    return (
-      <nav aria-label="Console sections">
-        <Box
-          sx={{
-            display: "flex",
-            flexWrap: "nowrap",
-            alignItems: "center",
-            columnGap: { md: 1.25, lg: 1.5, xl: 2 },
-            rowGap: 0,
-            overflowX: "auto",
-            scrollbarWidth: "none",
-            "&::-webkit-scrollbar": { display: "none" },
-          }}
-        >
-          {NAV_SCREENS.map((screen) => {
-            if (screen.soon) {
-              return <SoonItem key={screen.id} screen={screen} />;
-            }
-            const active = pathname === screen.path;
-            return (
-              <Box
-                key={screen.id}
-                component={NavLink}
-                to={screen.path}
-                end={screen.path === "/"}
-                onClick={onNavigate}
-                aria-current={active ? "page" : undefined}
-                data-nav={screen.id}
-                data-state={active ? "active" : "idle"}
-                sx={{
-                  color: active ? palette.brandRedText : palette.brandBlack,
-                  fontSize: { md: 13, lg: 13.5, xl: 14 },
-                  fontWeight: 600,
-                  textDecoration: "none",
-                  borderBottom: active
-                    ? `2px solid ${palette.brandRed}`
-                    : "2px solid transparent",
-                  py: 1.25,
-                  whiteSpace: "nowrap",
-                  flexShrink: 0,
-                }}
-              >
-                {screen.label}
-              </Box>
-            );
-          })}
-        </Box>
-      </nav>
-    );
+    return <HeaderNav pathname={pathname} onNavigate={onNavigate} />;
   }
-
-  const byId = new Map(NAV_SCREENS.map((screen) => [screen.id, screen]));
 
   return (
     <nav aria-label="Console sections">
