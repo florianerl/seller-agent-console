@@ -186,7 +186,8 @@ describe("media kit queries", () => {
       expect(el).toBeTruthy();
       return el!;
     });
-    expect(table.textContent).toContain("$17.50 · floor $9.00");
+    expect(table.textContent).toContain("$17.50");
+    expect(table.textContent).not.toContain("floor");
     expect(table.textContent).toContain("negotiable");
     expect(table.textContent).toContain("Homepage hero");
   });

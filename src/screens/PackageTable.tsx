@@ -1,4 +1,5 @@
 import { useState } from "react";
+import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import Box from "@mui/material/Box";
 import Checkbox from "@mui/material/Checkbox";
@@ -25,6 +26,7 @@ import {
   type Package,
   type PackageCreate,
   type PackageListQuery,
+  type SyncAck,
 } from "../api/endpoints";
 import { describe, type Result } from "../api/errors";
 import { ConfirmButton, WRITES_OFF_HINT } from "../components/ConfirmButton";
@@ -50,9 +52,21 @@ import { ProductMultiPicker } from "./pickers";
 /** Which row is open: a package id, or one of the two new-package rows. */
 type Editing = { kind: "edit"; id: string } | { kind: "create" } | { kind: "assemble" };
 
-type Draft = { name: string; featured: boolean; base: string; floor: string; productIds: string[] };
+type Draft = {
+  name: string;
+  featured: boolean;
+  base: string;
+  floor: string;
+  productIds: string[];
+};
 
-const EMPTY: Draft = { name: "", featured: false, base: "", floor: "", productIds: [] };
+const EMPTY: Draft = {
+  name: "",
+  featured: false,
+  base: "",
+  floor: "",
+  productIds: [],
+};
 
 const cellSx = { fontSize: 12 } as const;
 
@@ -60,6 +74,10 @@ const cellSx = { fontSize: 12 } as const;
  * Only the fields the operator changed go on the wire. The PUT is a partial
  * update on the agent's side, so an untouched field keeps whatever it holds —
  * including fields this table does not show.
+ *
+ * Floor is compared against nothing: since upstream #125 no view returns a
+ * package's floor, so a typed value is sent as is and a blank one is left out,
+ * which keeps whatever the agent has stored.
  *
  * Base price is never prefilled. The Price column is this key's price, with
  * its tier discount applied, not the stored base; prefilling the field with it
@@ -69,9 +87,7 @@ function changes(pkg: Package, draft: Draft): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   if (draft.name.trim() && draft.name.trim() !== pkg.name) out.name = draft.name.trim();
   if (draft.featured !== pkg.is_featured) out.is_featured = draft.featured;
-  if (draft.floor.trim() !== "" && Number(draft.floor) !== pkg.floor_price) {
-    out.floor_price = Number(draft.floor);
-  }
+  if (draft.floor.trim() !== "") out.floor_price = Number(draft.floor);
   if (draft.base.trim() !== "") out.base_price = Number(draft.base);
   return out;
 }
@@ -104,7 +120,9 @@ export function PackageTable() {
 
   const update = useMutation<{ id: string; body: Record<string, unknown> }, unknown>(
     (c, args) => updatePackage(c, args.id, args.body),
-    { invalidates: (args) => [...PACKAGE_VIEWS, `package:${args.id}`] },
+    {
+      invalidates: (args) => [...PACKAGE_VIEWS, `package:${args.id}`],
+    },
   );
   const archive = useMutation<{ id: string }, unknown>((c, args) => deletePackage(c, args.id), {
     invalidates: (args) => [...PACKAGE_VIEWS, `package:${args.id}`],
@@ -116,7 +134,7 @@ export function PackageTable() {
     (c, args) => assemblePackage(c, args),
     { invalidates: PACKAGE_VIEWS },
   );
-  const sync = useMutation<Record<string, never>, unknown>((c) => syncPackages(c), {
+  const sync = useMutation<Record<string, never>, SyncAck>((c) => syncPackages(c), {
     invalidates: PACKAGE_VIEWS,
   });
 
@@ -391,7 +409,12 @@ export function PackageTable() {
             disabled={assembleProblem !== undefined}
             hint={assembleProblem}
             onConfirm={() =>
-              void settle(assemble.run({ name: draft.name.trim(), product_ids: draft.productIds }))
+              void settle(
+                assemble.run({
+                  name: draft.name.trim(),
+                  product_ids: draft.productIds,
+                }),
+              )
             }
             consequence="Not idempotent: each call mints a new package. A product id that no longer resolves is refused (422) and nothing is created."
           />
@@ -435,7 +458,14 @@ export function PackageTable() {
           )}
         </TableCell>
         <TableCell>
-          {priceField("Floor", "floor", "Lowest price the package may be sold at.")}
+          {/* Upstream #125 removed the floor from every read view, so the
+              agent cannot say what it holds; blank means "leave it". */}
+          {priceField(
+            "Floor",
+            "floor",
+            "Lowest price the package may be sold at. The agent does not return the current floor, so leave blank to keep the stored one.",
+            "New floor",
+          )}
         </TableCell>
         <TableCell align="right">
           <Stack direction="row" spacing={1} justifyContent="flex-end">
@@ -489,9 +519,11 @@ export function PackageTable() {
             ? plain(pkg.exact_price, pkg.currency)
             : (pkg.price_range ?? "—")}
         </TableCell>
-        <TableCell sx={{ ...cellSx, color: palette.textSecondary }}>
-          {plain(pkg.floor_price, pkg.currency)}
-        </TableCell>
+        {/* No floor cell: upstream #125 dropped floor_price from the
+            authenticated package view, and a blank "—" would read as "no
+            floor". The edit form still takes one. The cell below stays so the
+            columns line up with the edit row's floor input. */}
+        <TableCell />
         <TableCell align="right">
           <Stack direction="row" spacing={1} justifyContent="flex-end">
             <Hint hint={blocked ? WRITES_OFF_HINT : undefined}>
@@ -506,7 +538,6 @@ export function PackageTable() {
                       ...EMPTY,
                       name: pkg.name,
                       featured: pkg.is_featured,
-                      floor: pkg.floor_price == null ? "" : String(pkg.floor_price),
                     },
                   )
                 }
@@ -556,7 +587,7 @@ export function PackageTable() {
                 <TableCell sx={{ fontWeight: 600 }}>Package</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>Rate</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>Price</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Floor</TableCell>
+                <TableCell />
                 <TableCell />
               </TableRow>
             </TableHead>
@@ -574,7 +605,24 @@ export function PackageTable() {
       {[update, archive, create, assemble, sync].map((m, i) => (
         <Failure key={i} last={m.last} />
       ))}
-      {sync.last?.kind === "ok" && (
+      {sync.last?.kind === "ok" && sync.last.data.status === "error" && (
+        // Upstream #100: a failed ad-server sync answers HTTP 200 with
+        // status "error", so "ok" alone is not success.
+        <Alert severity="error" sx={{ mt: 1 }} data-state="sync-failed">
+          <Typography variant="body2">
+            The agent could not sync from the ad server. The packages synced before were left as
+            they were.
+          </Typography>
+          {sync.last.data.warnings.length > 0 && (
+            <ul style={{ margin: "4px 0 0", paddingLeft: 20 }}>
+              {sync.last.data.warnings.map((w, i) => (
+                <li key={i}>{w}</li>
+              ))}
+            </ul>
+          )}
+        </Alert>
+      )}
+      {sync.last?.kind === "ok" && sync.last.data.status !== "error" && (
         <Typography variant="body2" sx={{ mt: 1 }} data-state="write-ok">
           The agent accepted the sync. New packages appear here once it finishes.
         </Typography>
