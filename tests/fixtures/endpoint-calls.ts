@@ -10,7 +10,7 @@ import type { Connection } from "../../src/api/http";
  * being skipped in silence.
  *
  * `method` is the contract. A `POST` here is either a deliberate write or one
- * of the five query-shaped routes exempted in src/api/policy.ts, and adding one
+ * of the query-shaped routes exempted in src/api/policy.ts, and adding one
  * means saying which.
  */
 export type CallSpec = {
@@ -147,26 +147,40 @@ export const ENDPOINT_CALLS: Record<string, CallSpec> = {
   gamOrders: { method: "GET", args: [] },
   gamDeliveryReport: { method: "GET", args: [{ order_ids: "ORD-1" }] },
 
-  // --- OpenProposal 3.0, provisional paths (ADR 14)
-  openProposals: { method: "GET", args: [] },
-  openProposalById: { method: "GET", args: ["OP-1"] },
-  publishProposal: { method: "POST", args: ["OP-1", { idempotency_key: "idem-op", expected_version: 1 }] },
-  withdrawProposal: { method: "POST", args: ["OP-1", { idempotency_key: "idem-op", expected_version: 1 }] },
-  holdLineItem: {
+  // --- OpenProposal negotiation threads, on an unmerged upstream branch (ADR 15)
+  opNegotiationById: { method: "GET", args: ["opn-1"] },
+  openOpNegotiation: {
     method: "POST",
-    args: ["OP-1", "li-1", { action: "grant" as const, idempotency_key: "idem-op", expected_version: 1 }],
+    args: [
+      {
+        idempotency_key: "idem-opn",
+        proposal_id: "P-1",
+        version: 1,
+        line_item_id: "prod-1",
+        transaction_mechanism: "PREFERRED_DEAL",
+        commitment: { basis: "units" as const, amount: 1000 },
+        requested_rate: 10,
+      },
+    ],
   },
-  assentProposal: {
+  postOpNegotiationMessage: {
     method: "POST",
-    args: ["OP-1", { decision: "accept" as const, idempotency_key: "idem-op", expected_version: 1 }],
+    args: ["opn-1", { idempotency_key: "idem-opn-2", version: 2, action: "counter" as const, requested_rate: 11 }],
   },
+  commitOpNegotiation: { method: "POST", args: ["opn-1", { idempotency_key: "idem-opn-3", version: 2 }] },
 
   // --- writes. Each one is refused at the seam while the switch is off.
   decideApproval: { method: "POST", args: ["A-1", { decision: "approve" as const }] },
   resumeApproval: { method: "POST", args: ["A-1"] },
 
-  // --- the five query-shaped POSTs: unsafe by method, safe by semantics.
+  // --- the query-shaped POSTs: unsafe by method, safe by semantics.
   // Exempted by exact path in src/api/policy.ts; ADR 12 says what that costs.
+  // The four OpenProposal mappings and the field map they come with (ADR 15).
+  opFieldMap: { method: "GET", args: [] },
+  mapGamLineItem: { method: "POST", args: [{ line_item: { id: 1, orderId: 2, name: "L", lineItemType: "STANDARD", status: "DRAFT" } }] },
+  mapGamLineItems: { method: "POST", args: [{ line_items: [] }] },
+  mapGamAdUnit: { method: "POST", args: [{ ad_unit: { id: "1", name: "Run-of-site" } }] },
+  buildManyToOneProposal: { method: "POST", args: [{ proposal_id: "P-1", line_items: [] }] },
   discovery: { method: "POST", args: [{ query: "sports inventory" }] },
   checkAvails: {
     method: "POST",

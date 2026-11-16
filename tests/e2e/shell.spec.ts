@@ -90,8 +90,8 @@ const ROUTES = [
   { hash: "#/events", heading: "Events" },
   { hash: "#/orders", heading: "Orders" },
   { hash: "#/deals", heading: "Deals" },
-  // Against the fixture agent, which advertises only opendirect21: this is the
-  // not-advertised notice, the state every 2.x agent will show.
+  // Against the fixture agent, which has no OpenProposal routes: this is the
+  // not-served notice, the state every agent on upstream's main line shows.
   { hash: "#/proposals", heading: "Proposals" },
   { hash: "#/negotiation", heading: "Negotiation" },
   { hash: "#/catalog", heading: "Catalog" },

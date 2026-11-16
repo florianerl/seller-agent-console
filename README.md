@@ -120,7 +120,7 @@ differently, because they send you to different places.
 | Events | `/events`, `/events/{id}` | Operator-only. A tail, not a log — the API offers no cursor, so there is no way to page backwards |
 | Orders | `/api/v1/orders`, `/{id}/audit`, `/api/v1/change-requests`, `/api/v1/orders/report`, `/gam/orders`, `/gam/report`, `/api/v1/deals`, `/api/v1/quotes/{id}` (lazy expiry); writes `POST /api/v1/orders`, `/{id}/transition`, and change-request create, `/{id}/review`, `/{id}/apply` | Every state and who moves it (nothing in the agent does it on its own), the legal next steps, the timeline, what applied changes wrote, the price and terms the order was made on, and the order's change requests acted on in place. See [docs/order-journey.md](docs/order-journey.md). The actor is shown as a label, not as attribution. The agent's totals (`/orders/report`) sit above the list and load on arrival, refreshed by hand. Opening an order reads its GAM check and its delivery report, which finds the deal's GAM orders by reading up to 500 of GAM's (the agent keeps a deal's GAM order id out of its responses), and its price and terms from the deal list; each card re-reads only from its reload button. Nothing here polls, and GAM payloads are rendered verbatim. Price and terms come from the order's deal in the deal list, on a click, since the list is a full scan; the single-deal route is never called. The quote is offered only without a deal, since the agent deletes a quote 24 hours after issuing or booking it, and is fetched only on *Show quote*, since that read can persist `expired` |
 | Deals | `/api/v1/deals`, `/{id}` (lazy expiry), `/{id}/performance`, `/{id}/lineage`, `/{id}/buyer-status`, `/{id}/ssp-troubleshoot`, `/export`; writes generate `/deals`, book, template, bulk, push, distribute, curated, migrate, deprecate | Operator-only list is unpaginated, so it never polls. Delivery figures are **placeholders** upstream |
-| Proposals | `/.well-known/agent.json`; only if it advertises `openproposal-3.0`: `/api/v3/proposals`, `/{id}`; writes `/{id}/publish`, `/{id}/withdraw`, `/{id}/line-items/{li}/hold`, `/{id}/assent` | OpenProposal (AAMP 3.0) against a **provisional** contract (ADR 14). Against any other agent it sends nothing to `/api/v3`. Mutability markers are quoted from spec `3.0-draft-1`, not received. Writes carry an idempotency key reused across an unknown-outcome retry, and the version on screen |
+| Proposals (hidden until upstream merges) | `GET /api/v1/op-gam/line-item/field-map` as the support probe; only if it answers: query POSTs `/api/v1/op-gam/line-item`, `/line-items`, `/ad-unit`, `/api/v1/op-many-to-one/proposal`; `/api/v1/op-negotiations/{id}`; writes open a thread, `/{id}/messages`, `/{id}/commit` | OpenProposal (AAMP 3.0) as the seller agent's unmerged `feat/openproposal-mapping` branch serves it (ADR 15). Against any other agent: one GET, a 404, nothing else. Threads belong to the key that opened them, so these are the operator's own; commit books a real deal. Moves carry the thread version and an idempotency key reused across an unknown-outcome retry |
 | Inbox | `/approvals`, `/approvals/{id}`; writes `/{id}/decide`, `/{id}/resume` | Resume is offered only once a decision exists (the agent refuses it before), and only for proposal decisions, the one gate kind it can resume. A gate decided here stays on screen after the queue drops it, and any gate can be opened by id — including one decided with MCP `approve_or_reject`, which never resumes. The agent's reason is shown when it refuses |
 | Negotiation | `/sessions`, `/sessions/{id}`, `/proposals/{id}/negotiation`; writes create/message/close session, submit/counter proposal, `POST /api/v1/negotiations/messages` | Discloses that listing writes, **and** that session routes declare no authentication |
 | Catalog | `/products`, `/products/{id}`, inventory-type override GET/POST/DELETE, `/api/v1/rate-card` GET/PUT, `/packages` CRUD + assemble/sync; query POSTs `/discovery`, `/products/avails`, `/pricing` | Override values carry their own freshness stamp. Rate-card PUT replaces the whole card, so the table has one Edit for all rows and one Save that sends every row back |
@@ -278,16 +278,15 @@ covers the three ways it can go wrong.
    party, which is what the no-external-hosts guard and `connect-src` exist to
    prevent. Adding analytics later means deliberately removing two safety
    rails.
-7. **OpenProposal support is built against a draft and a guess.** The spec
-   (`3.0-draft-1`) is open for comment until 2026-10-22, defines no transport
-   and publishes no schema; upstream serves none of the `/api/v3` routes the
-   Proposals screen calls. The paths, the list envelope, the write bodies and
-   the `openproposal-3.0` protocol token are this console's proposal (ADR 14).
-   The screen only calls them for an agent whose card advertises the token, and
-   the drift guard fails the day upstream ships one, so the guess is checked as
-   soon as there is something to check it against. Support is read from the
-   agent card on its five-minute cadence, so an agent upgraded mid-session
-   shows up on the next poll or reload.
+7. **OpenProposal support is built against unmerged code and a draft.** The
+   spec is still `3.0-draft-1` after its comment period closed (2026-10-22),
+   with no schema. The routes the Proposals screen calls exist only on the
+   seller agent's `feat/openproposal-mapping` branch, so the screen is hidden
+   from the navigation until it merges (reachable at `#/proposals`), its
+   routes sit in the drift guard's PROVISIONAL map, and its agent fixtures are
+   derived from the branch's source rather than captured (ADR 15). Support is
+   probed on the field map every five minutes, so an agent upgraded
+   mid-session shows up on the next probe or reload.
 8. **Initial load is ~195 kB gzipped**, mostly React and MUI. Above the 170 kB
    figure the design aimed at; kept deliberately, since the console is an
    internal tool on a desk rather than a landing page.

@@ -1,7 +1,8 @@
 import { render } from "@testing-library/react";
 import { ThemeProvider } from "@mui/material/styles";
 import { SWRConfig } from "swr";
-import { API } from "../setup/msw";
+import { http, HttpResponse } from "msw";
+import { API, server } from "../setup/msw";
 import { theme } from "../../src/theme/theme";
 import ProposalsScreen from "../../src/screens/Proposals";
 import { CredentialProvider } from "../../src/credentials/context";
@@ -9,25 +10,14 @@ import { clearCredential, saveCredential } from "../../src/credentials/store";
 import { sameResult } from "../../src/query/freshness";
 import { resetReachability } from "../../src/query/reachability";
 import { resetWritePolicy } from "../../src/api/policy";
-import proposal from "./openproposal/proposal.json";
-import display from "./openproposal/line-item-display.json";
-import ctv from "./openproposal/line-item-ctv.json";
-import audio from "./openproposal/line-item-audio.json";
+import fieldMap from "./openproposal/agent/field-map.json";
+import threadOpen from "./openproposal/agent/thread-open.json";
 
 /** Shared by the Proposals screen and write tests. */
 
-export const card = (protocols: string[]) => ({
-  name: "Ad Seller",
-  description: null,
-  url: "http://localhost:8000",
-  version: "1.0.0",
-  provider: { name: "Seller", url: null },
-  capabilities: { protocols, streaming: false, push_notifications: false },
-  skills: [],
-});
-
-/** The spec's own examples, with the CTV line item sold out under a live proposal. */
-export const WHOLE = { ...proposal, line_items: [display, { ...ctv, status: "sold_out" }, audio] };
+export const FIELD_MAP = fieldMap;
+export const THREAD = threadOpen;
+export const THREAD_ID = threadOpen.negotiation_id;
 
 export function renderScreen() {
   return render(
@@ -55,4 +45,30 @@ export async function connect(writesEnabled = false) {
     reportedVersion: "2.4.2",
     writesEnabled,
   });
+}
+
+/** An agent on the OpenProposal branch: the probe answers with the real field map. */
+export function serveOpenProposal() {
+  server.use(http.get(`${API}/api/v1/op-gam/line-item/field-map`, () => HttpResponse.json(FIELD_MAP)));
+}
+
+/** An agent without it: FastAPI's 404 for a route it does not have. */
+export function serveNoOpenProposal() {
+  server.use(
+    http.get(`${API}/api/v1/op-gam/line-item/field-map`, () =>
+      HttpResponse.json({ detail: "Not Found" }, { status: 404 }),
+    ),
+  );
+}
+
+/**
+ * Every request, seen at the transport rather than at a handler, so no handler
+ * installed later can hide one. "Sends nothing else" is asserted against this.
+ */
+export function watchWire(): string[] {
+  const seen: string[] = [];
+  server.events.on("request:start", ({ request }) => {
+    seen.push(`${request.method} ${new URL(request.url).pathname}`);
+  });
+  return seen;
 }

@@ -1,0 +1,232 @@
+{
+  "summary": {
+    "total": 2,
+    "mapped": 1,
+    "unmappable_by_type": {
+      "HOUSE": 1
+    },
+    "problems": {
+      "lifecycle_mismatch": 1,
+      "commercial_terms_missing": 1,
+      "choice_space_lost": 1,
+      "date_time_semantics": 1
+    },
+    "field_status_counts": {
+      "transformed": 2,
+      "mapped": 1,
+      "lossy": 1,
+      "no_home": 1
+    },
+    "gap_counts": {
+      "audiences": 1,
+      "availability": 1
+    }
+  },
+  "results": [
+    {
+      "gam_line_item_id": "7202154879",
+      "mapped": {
+        "line_item": {
+          "line_item_id": "gam-li-7202154879",
+          "status": "draft",
+          "channel": "display",
+          "properties": {
+            "available": [
+              {
+                "id": "gam-au-54545842"
+              }
+            ],
+            "included": [
+              "gam-au-54545842"
+            ]
+          },
+          "content_detail": "Streaming brand - PG Line - 2,250,000 imps",
+          "environments": {
+            "available": [
+              "web_desktop",
+              "web_mobile"
+            ],
+            "included": [
+              "web_desktop",
+              "web_mobile"
+            ]
+          },
+          "formats": {
+            "available": [
+              "display/300x250",
+              "display/728x90"
+            ],
+            "included": [
+              "display/300x250",
+              "display/728x90"
+            ]
+          },
+          "pricing": [
+            {
+              "cost_method": "CPM",
+              "gross_rate": 27.84,
+              "agreed_rate": 27.84,
+              "currency": "USD"
+            }
+          ],
+          "commitment": {
+            "basis": "units",
+            "amount": 2250000,
+            "flight_start": "2026-03-01T00:00:00[America/New_York]",
+            "flight_end": "2026-06-30T23:59:00[America/New_York]",
+            "idempotency_key": "OD-BC9DAEFA"
+          },
+          "hold_status": {
+            "hold_available": false,
+            "state": "none"
+          },
+          "buying_route": "PUBLISHER_AD_SERVER",
+          "transaction_mechanism": {
+            "available": [
+              "DIRECT_IO"
+            ],
+            "included": [
+              "DIRECT_IO"
+            ]
+          },
+          "serving_platform": "gam",
+          "external_references": [
+            {
+              "system": "gam",
+              "namespace": "network:12345678",
+              "id": "7202154879",
+              "role": "line_item"
+            },
+            {
+              "system": "gam",
+              "namespace": "network:12345678",
+              "id": "3961795097",
+              "role": "order"
+            }
+          ],
+          "correlation_id": "OD-BC9DAEFA",
+          "ext": {
+            "gam": {
+              "priority": 8,
+              "deliveryRateType": "EVENLY"
+            }
+          }
+        },
+        "provenance": {
+          "line_item_id": "ad_server",
+          "status": "ad_server",
+          "channel": "inferred",
+          "properties": "not_available",
+          "content_detail": "ad_server",
+          "environments": "ad_server",
+          "audiences": "not_available",
+          "addressable_scale": "not_available",
+          "activation_route": "not_available",
+          "buyer_supplied": "not_available",
+          "formats": "ad_server",
+          "specs": "not_available",
+          "third_party_tags": "not_available",
+          "creative_delivery": "not_available",
+          "approval": "not_available",
+          "assets": "not_available",
+          "materials_due": "not_available",
+          "production": "not_available",
+          "geo": "not_available",
+          "device": "not_available",
+          "daypart": "not_available",
+          "frequency_cap": "not_available",
+          "pricing": "ad_server",
+          "availability": "not_available",
+          "commitment_bounds": "not_available",
+          "commitment": "ad_server",
+          "hold_status": "inferred",
+          "min_spend": "not_available",
+          "cancellation_policy": "not_available",
+          "exclusivity": "not_available",
+          "creative_policy": "not_available",
+          "committed_metrics": "not_available",
+          "measurement_source": "not_available",
+          "shortfall_remedy": "not_available",
+          "reporting": "not_available",
+          "visibility": "seller_config",
+          "required_credentials": "not_available",
+          "eligible_bidders": "not_available",
+          "terms_acceptance_required": "not_available",
+          "buying_route": "inferred",
+          "transaction_mechanism": "ad_server",
+          "serving_mode": "not_available",
+          "deal_id_issuance": "not_available",
+          "buyer_requirements": "not_available",
+          "serving_platform": "ad_server",
+          "external_references": "ad_server",
+          "correlation_id": "ad_server",
+          "billing": "not_available",
+          "supported_order_systems": "not_available"
+        },
+        "gaps": [
+          "audiences: GAM carries no audience option space",
+          "availability: needs a forecast call, not part of the line item",
+          "pricing[].floor: GAM holds no floor for a standard line"
+        ],
+        "unmapped_source_fields": [
+          "priority",
+          "deliveryRateType",
+          "creativeRotationType",
+          "roadblockingType"
+        ],
+        "field_report": [
+          {
+            "gam_field": "id",
+            "op_field": "line_item_id, external_references[line_item]",
+            "status": "transformed",
+            "note": "Prefixed gam-li-.",
+            "value": 7202154879
+          },
+          {
+            "gam_field": "status",
+            "op_field": "status",
+            "status": "mapped",
+            "problem": "lifecycle_mismatch",
+            "note": "",
+            "value": "DRAFT"
+          },
+          {
+            "gam_field": "lineItemType",
+            "op_field": "transaction_mechanism",
+            "status": "lossy",
+            "problem": "lossy_enum",
+            "note": "STANDARD and SPONSORSHIP both become DIRECT_IO.",
+            "value": "STANDARD"
+          },
+          {
+            "gam_field": "costPerUnit",
+            "op_field": "pricing[].gross_rate",
+            "status": "transformed",
+            "note": "Micros to units.",
+            "value": {
+              "currencyCode": "USD",
+              "microAmount": 27840000
+            }
+          },
+          {
+            "gam_field": "priority",
+            "status": "no_home",
+            "problem": "delivery_settings_without_op_field",
+            "note": "Kept in ext.gam.",
+            "value": 8
+          }
+        ],
+        "problems": [
+          "lifecycle_mismatch",
+          "commercial_terms_missing",
+          "choice_space_lost",
+          "date_time_semantics"
+        ]
+      }
+    },
+    {
+      "gam_line_item_id": "1001",
+      "error": "HOUSE line items are not a sale and have no OpenProposal form."
+    }
+  ]
+}

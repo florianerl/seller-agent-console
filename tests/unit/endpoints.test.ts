@@ -19,7 +19,7 @@ const callers = Object.entries(endpoints).filter(
 ) as Array<[string, EndpointFn]>;
 
 /**
- * The table is no longer all reads: five POSTs are queries the agent could not
+ * The table is no longer all reads: nine POSTs are queries the agent could not
  * fit in a URL (src/api/policy.ts). So this asserts each endpoint issues the
  * method it *claims* in the shared call table, rather than asserting GET — and
  * a write added without declaring itself fails here rather than passing

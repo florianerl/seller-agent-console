@@ -19,8 +19,10 @@
  */
 
 /**
- * Unsafe by method, safe by semantics: five POSTs the agent uses to answer a
- * query that does not fit in a URL. They stay available with writes off,
+ * Unsafe by method, safe by semantics: POSTs the agent uses to answer a
+ * query that does not fit in a URL — five that read the agent's own data, and
+ * four OpenProposal mappings that take a payload and hand back its
+ * translation (ADR 15). They stay available with writes off,
  * because refusing them would withhold reads for a reason that has nothing to
  * do with what they do.
  *
@@ -39,6 +41,14 @@ export const QUERY_SHAPED_PATHS: readonly string[] = [
   "/media-kit/search",
   /** Scores an audience brief against segments. Stores no segment. */
   "/agentic-audience/match",
+  /** Translates a pasted GAM line item. Stores nothing and needs no key. */
+  "/api/v1/op-gam/line-item",
+  /** The same over a LineItemService export. Stores nothing. */
+  "/api/v1/op-gam/line-items",
+  /** Translates a pasted GAM ad unit into a draft line item. Stores nothing. */
+  "/api/v1/op-gam/ad-unit",
+  /** Assembles a proposal from ad-server objects and returns it. Stores nothing. */
+  "/api/v1/op-many-to-one/proposal",
 ];
 
 const queryShaped = new Set(QUERY_SHAPED_PATHS);

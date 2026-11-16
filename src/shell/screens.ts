@@ -26,8 +26,9 @@ export const SCREENS: readonly Screen[] = [
   { id: "catalog", path: "/catalog", label: "Catalog" },
   { id: "media-kit", path: "/media-kit", label: "Media kit" },
   { id: "curators", path: "/curators", label: "Curators" },
-  // Hidden until upstream serves OpenProposal (AAMP 3.0); see ADR 14. Every
-  // 2.x agent would land on the not-advertised notice.
+  // Hidden until the seller agent's feat/openproposal-mapping branch merges
+  // (ADR 15). Until then every agent on its main line lands on the not-served
+  // notice; #/proposals still works against one running the branch.
   { id: "proposals", path: "/proposals", label: "Proposals", hidden: true },
   { id: "negotiation", path: "/negotiation", label: "Negotiation" },
   { id: "deals", path: "/deals", label: "Deals" },

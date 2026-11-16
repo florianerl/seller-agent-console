@@ -1,15 +1,15 @@
 {
-  "line_item_id": "fox-ctv",
+  "line_item_id": "weather-app-ctv",
   "status": "published",
   "channel": "ctv",
   "properties": {
     "available": [
       {
-        "id": "fox-weather-app"
+        "id": "weather-app"
       }
     ],
     "included": [
-      "fox-weather-app"
+      "weather-app"
     ]
   },
   "environments": {
@@ -65,7 +65,7 @@
     "currency": "USD",
     "flight_start": "2026-10-06",
     "flight_end": "2026-12-21",
-    "idempotency_key": "wpp-volt2-fox-ctv-3b7e0d52"
+    "idempotency_key": "agency-a-camp1-weather-app-ctv-3b7e0d52"
   },
   "hold_status": {
     "hold_available": true,
@@ -91,5 +91,5 @@
     ]
   },
   "serving_mode": "ssai",
-  "correlation_id": "nc-q4-2026-commitment/fox-ctv"
+  "correlation_id": "ep-q4-2026-commitment/weather-app-ctv"
 }

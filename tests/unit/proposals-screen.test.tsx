@@ -1,143 +1,202 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { API, server } from "../setup/msw";
-import { OPENPROPOSAL_PROTOCOL } from "../../src/api/capabilities";
-import display from "../fixtures/openproposal/line-item-display.json";
-import { card, connect, renderScreen, WHOLE } from "../fixtures/proposals-harness";
+import {
+  connect,
+  renderScreen,
+  serveNoOpenProposal,
+  serveOpenProposal,
+  THREAD,
+  THREAD_ID,
+  watchWire,
+} from "../fixtures/proposals-harness";
+import mapped from "../fixtures/openproposal/agent/mapped-line-item.json";
+import batch from "../fixtures/openproposal/agent/mapped-batch.json";
+import { GAM_LINE_ITEM_EXAMPLE } from "../../src/screens/opExamples";
 
-/**
- * Every request, seen at the transport rather than at a handler, so no handler
- * installed later can hide one. This is what "sends nothing to /api/v3" is
- * asserted against.
- */
-function watchWire(): string[] {
-  const seen: string[] = [];
-  server.events.on("request:start", ({ request }) => {
-    seen.push(`${request.method} ${new URL(request.url).pathname}`);
-  });
-  return seen;
-}
+const opTraffic = (wire: string[]) => wire.filter((line) => line.includes("/op-"));
 
 afterEach(() => server.events.removeAllListeners());
 
-describe("against an agent that does not speak OpenProposal", () => {
+describe("against an agent without OpenProposal", () => {
   beforeEach(() => connect());
 
-  it("says what the agent does advertise, and sends nothing to /api/v3", async () => {
+  it("says what it asked and what came back, and sends nothing else", async () => {
     const wire = watchWire();
-    server.use(http.get(`${API}/.well-known/agent.json`, () => HttpResponse.json(card(["opendirect21"]))));
+    serveNoOpenProposal();
 
     renderScreen();
-    const notice = await screen.findByText(/does not advertise OpenProposal 3\.0/);
-    expect(notice.closest("[data-state]")?.textContent).toContain("opendirect21");
+    const notice = await screen.findByText(/This agent does not serve OpenProposal/);
+    expect(notice.closest("[data-state]")?.textContent).toContain("404");
 
-    expect(wire).toContain("GET /.well-known/agent.json");
+    expect(opTraffic(wire)).toEqual(["GET /api/v1/op-gam/line-item/field-map"]);
     expect(wire.filter((line) => line.includes("/api/v3"))).toEqual([]);
   });
 
-  it("does not guess when the card itself cannot be read", async () => {
+  it("does not guess when the probe itself fails", async () => {
     const wire = watchWire();
-    server.use(http.get(`${API}/.well-known/agent.json`, () => new HttpResponse(null, { status: 500 })));
+    server.use(http.get(`${API}/api/v1/op-gam/line-item/field-map`, () => new HttpResponse(null, { status: 500 })));
 
     renderScreen();
-    await screen.findByText(/Could not tell whether this agent speaks OpenProposal/);
+    await screen.findByText(/Could not tell whether this agent serves OpenProposal/);
     expect(document.querySelector('[data-state="protocol-unknown"]')?.textContent).toContain("500");
-    expect(wire.filter((line) => line.includes("/api/v3"))).toEqual([]);
+    expect(opTraffic(wire)).toEqual(["GET /api/v1/op-gam/line-item/field-map"]);
   });
 });
 
-describe("against an agent that advertises OpenProposal 3.0", () => {
+describe("against an agent that serves OpenProposal", () => {
   beforeEach(async () => {
     await connect();
+    serveOpenProposal();
+  });
+
+  it("shows the agent's field map, filterable by how a field lands", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    const map = await screen.findByText("GAM field map");
+    const section = map.closest("section") as HTMLElement;
+    expect(section.querySelectorAll("[data-gam-field]")).toHaveLength(0);
+    await user.click(await within(section).findByRole("button", { name: "Show all 96 rules" }));
+    await waitFor(() => expect(section.querySelectorAll("[data-gam-field]")).toHaveLength(96));
+    expect(section.querySelector('[data-gam-field="priority"] [data-field-status="no_home"]')).toBeTruthy();
+  });
+
+  it("maps a pasted GAM line item with writes off, and shows what the trip lost", async () => {
+    const bodies: unknown[] = [];
+    const queries: string[] = [];
     server.use(
-      http.get(`${API}/.well-known/agent.json`, () =>
-        HttpResponse.json(card(["opendirect21", OPENPROPOSAL_PROTOCOL])),
-      ),
-      http.get(`${API}/api/v3/proposals`, () => HttpResponse.json({ proposals: [WHOLE], total: 1 })),
-      http.get(`${API}/api/v3/proposals/newscorp-us-q4-2026-omni`, () => HttpResponse.json(WHOLE)),
+      http.post(`${API}/api/v1/op-gam/line-item`, async ({ request }) => {
+        queries.push(new URL(request.url).search);
+        bodies.push(await request.json());
+        return HttpResponse.json(mapped);
+      }),
     );
-  });
-
-  it("lists the proposal with its channels and a freshness stamp", async () => {
-    renderScreen();
-    expect(await screen.findByText("newscorp-us-q4-2026-omni")).toBeInTheDocument();
-    expect(screen.getByText(/display, ctv, audio/)).toBeInTheDocument();
-    expect(document.querySelector('[data-freshness="live"]')?.textContent).toMatch(/1 proposal/);
-  });
-
-  it("shows each line item on its own terms, including one sold out under a published proposal", async () => {
     const user = userEvent.setup();
     renderScreen();
-    await user.click(await screen.findByRole("button", { name: "Details" }));
-    await screen.findByText("wsj-display");
 
-    const lifecycle = document.querySelector('[data-block="lifecycle"]');
-    expect(lifecycle?.querySelector('[data-status="published"]')).toBeTruthy();
-    const soldOut = document.querySelector('[data-line-item="fox-ctv"] [data-status="sold_out"]');
-    expect(soldOut).toBeTruthy();
+    const mapping = (await screen.findByText("Map from Google Ad Manager")).closest("section") as HTMLElement;
+    await user.click(within(mapping).getByRole("button", { name: /Load the agent's example/ }));
+    await user.click(within(mapping).getByRole("button", { name: "Map to OpenProposal" }));
 
-    // The two windows the spec warns are easy to conflate are labelled apart.
-    expect(screen.getByText("Offer window (not the flight)")).toBeInTheDocument();
-    expect(screen.getAllByText("Flight (not the offer window)").length).toBeGreaterThan(0);
+    await waitFor(() => expect(bodies).toEqual([GAM_LINE_ITEM_EXAMPLE]));
+    expect(queries).toEqual(["?explain=true"]);
+
+    const result = await screen.findByText("gam-li-7202154879");
+    const card = result.closest("[data-line-item]") as HTMLElement;
+    // Where each value came from is the agent's word, shown beside the spec's marker.
+    expect(card.querySelector('[data-field="audiences"] [data-source="not_available"]')).toBeTruthy();
+    expect(card.querySelector('[data-field="formats"] [data-source="ad_server"]')).toBeTruthy();
+    // The flight is zone-bracketed upstream; it is shown as sent, not re-read in this zone.
+    expect(card.textContent).toContain("2026-03-01T00:00:00[America/New_York]");
+
+    const report = document.querySelector('[data-block="mapped-line-item"]') as HTMLElement;
+    expect(report.querySelector('[data-problem="lifecycle_mismatch"]')).toBeTruthy();
+    expect(report.querySelector('[data-gam-field="priority"]')?.textContent).toContain("8");
   });
 
-  it("shows a catalog reference as unresolved rather than as a value", async () => {
-    const user = userEvent.setup();
-    renderScreen();
-    await user.click(await screen.findByRole("button", { name: "Details" }));
-    await screen.findByText("wsj-display");
-
-    const refs = document.querySelectorAll('[data-state="unresolved-ref"]');
-    expect(refs).toHaveLength(1);
-    expect(refs[0]?.textContent).toContain("newscorp/audiences/smb-decision-makers@3");
-    // A published proposal may carry refs; only an agreed one may not.
-    expect(document.querySelector('[data-state="agreed-with-refs"]')).toBeNull();
-  });
-
-  it("quotes the spec's markers and maps execution to its downstream standard", async () => {
-    const user = userEvent.setup();
-    renderScreen();
-    await user.click(await screen.findByRole("button", { name: "Details" }));
-    await screen.findByText("wsj-display");
-
-    const display = document.querySelector('[data-line-item="wsj-display"]') as HTMLElement;
-    expect(display.querySelector('[data-field="audiences"] [data-marker="selectable"]')).toBeTruthy();
-    expect(display.querySelector('[data-field="geo"] [data-marker="settable"]')).toBeTruthy();
-    expect(display.querySelector('[data-block="downstream"]')?.textContent).toContain(
-      "OpenDirect 2.1 + Deals API",
-    );
-  });
-
-  it("flags an agreed proposal that still carries a catalog reference", async () => {
+  it("refuses to send what is not JSON", async () => {
+    const sent: string[] = [];
     server.use(
-      http.get(`${API}/api/v3/proposals/newscorp-us-q4-2026-omni`, () =>
-        HttpResponse.json({ ...WHOLE, status: "agreed" }),
-      ),
+      http.post(`${API}/api/v1/op-gam/line-item`, () => {
+        sent.push("map");
+        return HttpResponse.json(mapped);
+      }),
     );
     const user = userEvent.setup();
     renderScreen();
-    await user.click(await screen.findByRole("button", { name: "Details" }));
-    expect(await screen.findByText(/agreed but still carries catalog references/)).toBeInTheDocument();
+
+    const box = await screen.findByLabelText("GAM payload (JSON)");
+    fireEvent.change(box, { target: { value: "{ not json" } });
+    await user.click(screen.getByRole("button", { name: "Map to OpenProposal" }));
+
+    expect(await screen.findByText(/Not JSON/)).toBeInTheDocument();
+    expect(sent).toEqual([]);
   });
 
-  it("counts a line item it cannot read instead of silently dropping it", async () => {
+  it("names the line items a batch could not map, and why", async () => {
+    server.use(http.post(`${API}/api/v1/op-gam/line-items`, () => HttpResponse.json(batch)));
+    const user = userEvent.setup();
+    renderScreen();
+
+    const mapping = (await screen.findByText("Map from Google Ad Manager")).closest("section") as HTMLElement;
+    await user.click(within(mapping).getByLabelText("Payload"));
+    await user.click(await screen.findByRole("option", { name: "A LineItemService export" }));
+    await user.click(within(mapping).getByRole("button", { name: /Load the agent's example/ }));
+    await user.click(within(mapping).getByRole("button", { name: "Map to OpenProposal" }));
+
+    const unmappable = await screen.findByText(/not mapped: HOUSE line items are not a sale/);
+    expect(unmappable.closest("[data-batch-result]")?.getAttribute("data-batch-result")).toBe("1001");
+    expect(document.querySelector('[data-block="mapped-batch"]')?.textContent).toMatch(/1 of 2/);
+  });
+
+  it("lists every reason a many-to-one request was refused", async () => {
     server.use(
-      http.get(`${API}/api/v3/proposals/newscorp-us-q4-2026-omni`, () =>
-        HttpResponse.json({ ...WHOLE, line_items: [display, { channel: "video" }] }),
+      http.post(`${API}/api/v1/op-many-to-one/proposal`, () =>
+        HttpResponse.json(
+          {
+            detail: {
+              error: "invalid_many_to_one",
+              errors: ["line item weather-ctv mixes two channels", "line item x has no objects"],
+            },
+          },
+          { status: 422 },
+        ),
       ),
     );
     const user = userEvent.setup();
     renderScreen();
-    await user.click(await screen.findByRole("button", { name: "Details" }));
-    const alert = await screen.findByText(/could not be read and is not shown/);
-    expect(alert.textContent).toMatch(/1 line item/);
+
+    const builder = (await screen.findByText("Build a proposal from several ad servers")).closest("section") as HTMLElement;
+    await user.click(within(builder).getByRole("button", { name: /Load the agent's example/ }));
+    await user.click(within(builder).getByRole("button", { name: "Build proposal" }));
+
+    const refused = await screen.findByText(/mixes two channels/);
+    expect(refused.closest('[data-state="mapping-refused"]')?.textContent).toContain("has no objects");
+  });
+});
+
+describe("negotiation threads", () => {
+  beforeEach(async () => {
+    await connect();
+    serveOpenProposal();
+    server.use(http.get(`${API}/api/v1/op-negotiations/${THREAD_ID}`, () => HttpResponse.json(THREAD)));
   });
 
-  it("explains a rejected key rather than showing an empty list", async () => {
-    server.use(http.get(`${API}/api/v3/proposals`, () => new HttpResponse(null, { status: 403 })));
+  it("says the list is this browser's, since the agent has none", async () => {
     renderScreen();
-    await waitFor(() => expect(document.querySelector('[data-state="operator-required"]')).toBeTruthy());
+    expect(await screen.findByText(/None yet/)).toBeInTheDocument();
+    expect(document.querySelector('[data-block="recent-threads"]')?.textContent).toMatch(/agent has no list of threads/);
+  });
+
+  it("reads a pasted thread, shows both sides of it, and remembers it", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.type(await screen.findByLabelText("Negotiation id"), THREAD_ID);
+    await user.click(screen.getByRole("button", { name: "Read thread" }));
+
+    const history = await screen.findByText(/Concession of 3\.7%/);
+    const log = history.closest('[data-block="thread-history"]') as HTMLElement;
+    expect([...log.querySelectorAll("[data-actor]")].map((e) => e.getAttribute("data-actor"))).toEqual(["buyer", "seller"]);
+    expect(document.querySelector('[data-block="thread-summary"]')?.textContent).toContain("USD 39.00");
+
+    await waitFor(() => expect(document.querySelector(`[data-recent-thread="${THREAD_ID}"]`)).toBeTruthy());
+  });
+
+  it("explains a thread it cannot see without calling it an outage", async () => {
+    server.use(
+      http.get(`${API}/api/v1/op-negotiations/opn-nope`, () =>
+        HttpResponse.json({ detail: { error: "negotiation_not_found", message: "Negotiation 'opn-nope' not found." } }, { status: 404 }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.type(await screen.findByLabelText("Negotiation id"), "opn-nope");
+    await user.click(screen.getByRole("button", { name: "Read thread" }));
+
+    expect(await screen.findByText(/visible only to the key that opened them/)).toBeInTheDocument();
   });
 });

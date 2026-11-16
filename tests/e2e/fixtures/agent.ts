@@ -216,6 +216,19 @@ export async function mockAgent(
                 }
               : undefined;
 
+    // This fixture is an agent on the seller agent's main line, which has no
+    // OpenProposal routes: the Proposals screen's support probe gets the 404
+    // FastAPI would send, deliberately, rather than counting as unanswered.
+    if (path === "/api/v1/op-gam/line-item/field-map") {
+      await route.fulfill({
+        status: 404,
+        contentType: "application/json",
+        headers: { "access-control-allow-origin": "*" },
+        body: JSON.stringify({ detail: "Not Found" }),
+      });
+      return;
+    }
+
     if (body === undefined) {
       unhandled.push(`GET ${path}`);
       await route.fulfill({ status: 404, body: "no fixture" });

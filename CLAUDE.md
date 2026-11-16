@@ -61,7 +61,7 @@ is off, returning `unavailable / "writes-disabled"` without sending anything.
 The flag is stored on the `Credential` record (so it is per key, and sign-out
 takes it), pushed into the policy module by `CredentialProvider`, toggled in
 `ConnectionMenu` behind a confirmation, and shown as a chip in the app bar.
-Five query-shaped POSTs are exempt by exact path — see `QUERY_SHAPED_PATHS`,
+Nine query-shaped POSTs are exempt by exact path — see `QUERY_SHAPED_PATHS`,
 and ADR 12 for why that exemption makes "read-only" a judgement rather than a
 checkable property. `tests/unit/writes-policy.test.ts` sweeps the whole endpoint
 table with the switch off and asserts on recorded wire traffic; add a write
@@ -79,13 +79,18 @@ client answers none of that generically. Screens under `src/screens/` own those
 call sites, each behind `ConfirmAction` / `WriteForm`.
 
 **OpenProposal (AAMP 3.0) is provisional.** `src/api/endpoints/proposals.ts`
-calls `/api/v3` routes upstream does not serve yet; [ADR 14](docs/adr/0014-openproposal-provisional-contract.md)
-records the guessed contract. They are listed in `PROVISIONAL` in the drift
-guard, which fails once the captured surface declares one. The Proposals screen
-calls nothing there unless `openProposalSupport()` (`src/api/capabilities.ts`)
-finds the protocol on the agent card, which keeps a 2.x agent untouched. Pure
-helpers live in `src/api/openproposal/`, not in `endpoints/`, because every
-function the endpoints barrel exports is swept as an endpoint.
+calls routes that exist only on the seller agent's unmerged
+`feat/openproposal-mapping` branch; [ADR 15](docs/adr/0015-openproposal-upstream-branch.md)
+records why, and what replaced ADR 14's guessed contract. They are listed in
+`PROVISIONAL` in the drift guard, which fails once the captured surface
+declares one. The Proposals screen (hidden in `screens.ts` until the branch
+merges) calls nothing else until `probeOpenProposal()` (`src/api/capabilities.ts`)
+gets the field map back; a 404 there means "not served". The four mapping POSTs
+are query-shaped. Negotiation threads are visible only to the key that opened
+them, so the screen drives its own and remembers their ids per credential
+(`src/credentials/recentNegotiations.ts`). Pure helpers live in
+`src/api/openproposal/`, not in `endpoints/`, because every function the
+endpoints barrel exports is swept as an endpoint.
 
 **Results are values, never exceptions.** `src/api/errors.ts` defines
 `Result<T>` = `ok` | `rejected` (401/403 only) | `unavailable` (timeout,

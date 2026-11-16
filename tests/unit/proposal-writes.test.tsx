@@ -3,184 +3,228 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { API, server } from "../setup/msw";
-import { OPENPROPOSAL_PROTOCOL } from "../../src/api/capabilities";
-import { card, connect, renderScreen, WHOLE } from "../fixtures/proposals-harness";
+import { connect, renderScreen, serveOpenProposal, THREAD, THREAD_ID } from "../fixtures/proposals-harness";
 
 /**
- * Lifecycle writes on an OpenProposal record. The question each one has to
- * answer is different from the other screens': a timeout on publish or assent
- * may have landed, so a retry must be recognisably the same attempt, and a
- * record that moved under the operator must refuse rather than overwrite.
+ * Negotiation moves are a buyer's moves, made by the operator testing their
+ * own agent. The questions each one has to answer: nothing goes out while the
+ * switch is off; a move names the version it answers, so one made against a
+ * counter the operator has not seen is refused; a retry after a lost response
+ * is the same attempt; and commit — which books a real deal — says so before
+ * it is sent.
  */
 
-const ID = "newscorp-us-q4-2026-omni";
+type Sent = { path: string; body: Record<string, unknown> };
 
-function serve(proposal: object) {
-  server.use(
-    http.get(`${API}/.well-known/agent.json`, () => HttpResponse.json(card([OPENPROPOSAL_PROTOCOL]))),
-    http.get(`${API}/api/v3/proposals`, () => HttpResponse.json({ proposals: [proposal], total: 1 })),
-    http.get(`${API}/api/v3/proposals/${ID}`, () => HttpResponse.json(proposal)),
-  );
-}
-
-function captureWrites(): { method: string; path: string; body: Record<string, unknown> }[] {
-  const writes: { method: string; path: string; body: Record<string, unknown> }[] = [];
+function captureWrites(): Sent[] {
+  const writes: Sent[] = [];
   server.events.on("request:start", async ({ request }) => {
-    if (request.method === "GET") return;
-    writes.push({
-      method: request.method,
-      path: new URL(request.url).pathname,
-      body: (await request.clone().json()) as Record<string, unknown>,
-    });
+    if (request.method !== "POST") return;
+    writes.push({ path: new URL(request.url).pathname, body: (await request.clone().json()) as Record<string, unknown> });
   });
   return writes;
 }
 
-async function openDetail(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(await screen.findByRole("button", { name: "Details" }));
-  await screen.findByText("wsj-display");
+const click = (selector: string) => document.querySelector(selector) as HTMLElement;
+
+function serveThread(thread: object) {
+  server.use(http.get(`${API}/api/v1/op-negotiations/${THREAD_ID}`, () => HttpResponse.json(thread)));
 }
 
-const click = (selector: string) => document.querySelector(selector) as HTMLElement;
+async function readThread(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(await screen.findByLabelText("Negotiation id"), THREAD_ID);
+  await user.click(screen.getByRole("button", { name: "Read thread" }));
+  await screen.findByText(/Concession of 3\.7%/);
+}
 
 afterEach(() => server.events.removeAllListeners());
 
-describe("proposal lifecycle writes", () => {
-  beforeEach(() => serve({ ...WHOLE, status: "draft", version: 3 }));
+describe("opening a thread", () => {
+  beforeEach(() => serveOpenProposal());
 
-  it("offers publish on a draft but sends nothing while writes are off", async () => {
+  it("sends every field the agent takes, then shows the thread it opened", async () => {
+    await connect(true);
+    const writes = captureWrites();
+    server.use(
+      http.post(`${API}/api/v1/op-negotiations`, () => HttpResponse.json(THREAD, { status: 201 })),
+      http.get(`${API}/api/v1/op-negotiations/${THREAD_ID}`, () => HttpResponse.json(THREAD)),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("button", { name: "Ask for a price" }));
+    await user.type(screen.getByLabelText("Proposal id"), "examplepub-standard");
+    await user.type(screen.getByLabelText("Line item (product id)"), "inv-ctv-apex-series");
+    await user.click(click('[data-action="wizard-next"]'));
+    await user.type(screen.getByLabelText("Impressions"), "500000");
+    await user.type(screen.getByLabelText("Requested CPM"), "36");
+    await user.click(click('[data-action="wizard-next"]'));
+    await user.type(screen.getByLabelText("Seat id (optional)"), "seat-demo");
+    await user.click(click('[data-action="wizard-next"]'));
+
+    expect(screen.getByRole("dialog").textContent).toMatch(/owned by this key/);
+    await user.click(click('[data-action="wizard-create"]'));
+
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0]).toMatchObject({
+      path: "/api/v1/op-negotiations",
+      body: {
+        proposal_id: "examplepub-standard",
+        version: 1,
+        line_item_id: "inv-ctv-apex-series",
+        transaction_mechanism: "PREFERRED_DEAL",
+        commitment: { basis: "units", amount: 500000 },
+        requested_rate: 36,
+        buyer_identity: { seat_id: "seat-demo" },
+      },
+    });
+    expect(typeof writes[0]?.body["idempotency_key"]).toBe("string");
+    // Blank optional fields stay off the wire.
+    expect(writes[0]?.body["commitment"]).not.toHaveProperty("flight_start");
+
+    await user.click(click('[data-action="wizard-done"]'));
+    expect(await screen.findByText(/Concession of 3\.7%/)).toBeInTheDocument();
+    expect(document.querySelector(`[data-recent-thread="${THREAD_ID}"]`)).toBeTruthy();
+  });
+
+  it("offers no way to open a thread while writes are off", async () => {
     await connect(false);
     const writes = captureWrites();
     const user = userEvent.setup();
     renderScreen();
-    await openDetail(user);
 
-    expect(click('[data-action="publish-proposal"]')).toBeDisabled();
-    expect(document.querySelector('[data-action="withdraw-proposal"]')).toBeNull();
+    await user.click(await screen.findByRole("button", { name: "Ask for a price" }));
+    await user.type(screen.getByLabelText("Proposal id"), "p");
+    await user.type(screen.getByLabelText("Line item (product id)"), "prod-1");
+    await user.click(click('[data-action="wizard-next"]'));
+    await user.type(screen.getByLabelText("Impressions"), "1000");
+    await user.type(screen.getByLabelText("Requested CPM"), "10");
+    await user.click(click('[data-action="wizard-next"]'));
+    await user.click(click('[data-action="wizard-next"]'));
+
+    expect(click('[data-action="wizard-create"]')).toBeDisabled();
+    expect(writes).toEqual([]);
+  });
+});
+
+describe("moving on an open thread", () => {
+  beforeEach(() => {
+    serveOpenProposal();
+    serveThread(THREAD);
+  });
+
+  it("disables every move while writes are off, and sends nothing", async () => {
+    await connect(false);
+    const writes = captureWrites();
+    const user = userEvent.setup();
+    renderScreen();
+    await readThread(user);
+
+    for (const action of ["op-counter", "op-accept", "op-decline", "op-withdraw"]) {
+      expect(click(`[data-action="${action}"]`)).toBeDisabled();
+    }
     expect(document.querySelector('[data-note="read-only"]')).toBeTruthy();
     expect(writes).toEqual([]);
   });
 
-  it("asks first, then publishes with an idempotency key and the version on screen", async () => {
-    await connect(true);
-    const writes = captureWrites();
-    server.use(http.post(`${API}/api/v3/proposals/${ID}/publish`, () => HttpResponse.json({ ok: true })));
-    const user = userEvent.setup();
-    renderScreen();
-    await openDetail(user);
-
-    await user.click(click('[data-action="publish-proposal"]'));
-    expect((await screen.findByRole("dialog")).textContent).toMatch(/discover version 3/);
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(writes).toEqual([]);
-
-    await user.click(click('[data-action="publish-proposal"]'));
-    await user.click(click('[data-action="confirm-mutation"]'));
-    await waitFor(() => expect(writes).toHaveLength(1));
-    expect(writes[0]).toMatchObject({
-      method: "POST",
-      path: `/api/v3/proposals/${ID}/publish`,
-      body: { expected_version: 3 },
-    });
-    expect(typeof writes[0]?.body["idempotency_key"]).toBe("string");
-  });
-
-  it("retries a publish whose outcome is unknown with the same key", async () => {
+  it("counters against the version on screen, and reuses the key when the answer was lost", async () => {
     await connect(true);
     const writes = captureWrites();
     let attempts = 0;
     server.use(
-      http.post(`${API}/api/v3/proposals/${ID}/publish`, () => {
+      http.post(`${API}/api/v1/op-negotiations/${THREAD_ID}/messages`, () => {
         attempts += 1;
-        return attempts === 1 ? HttpResponse.error() : HttpResponse.json({ ok: true });
+        return attempts === 1 ? HttpResponse.error() : HttpResponse.json({ ...THREAD, version: 3 });
       }),
     );
     const user = userEvent.setup();
     renderScreen();
-    await openDetail(user);
+    await readThread(user);
 
-    for (let i = 0; i < 2; i += 1) {
-      await user.click(click('[data-action="publish-proposal"]'));
+    await user.type(screen.getByLabelText("Requested CPM"), "37");
+    const counter = async () => {
+      await user.click(click('[data-action="op-counter"]'));
+      expect(screen.getByRole("dialog").textContent).toMatch(/against version 2/);
       await user.click(click('[data-action="confirm-mutation"]'));
-      await waitFor(() => expect(writes).toHaveLength(i + 1));
-      await waitFor(() => expect(click('[data-action="publish-proposal"]')).not.toBeDisabled());
-    }
+    };
 
+    await counter();
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(await screen.findByText("could not reach the agent")).toBeInTheDocument();
+    await counter();
+    await waitFor(() => expect(writes).toHaveLength(2));
+
+    expect(writes[0]?.body).toMatchObject({ version: 2, action: "counter", requested_rate: 37 });
     expect(writes[1]?.body["idempotency_key"]).toBe(writes[0]?.body["idempotency_key"]);
   });
 
-  it("says the record moved when the agent answers 409, rather than just failing", async () => {
+  it("says the seller moved first when the agent answers stale_version", async () => {
     await connect(true);
     server.use(
-      http.post(`${API}/api/v3/proposals/${ID}/publish`, () => new HttpResponse(null, { status: 409 })),
+      http.post(`${API}/api/v1/op-negotiations/${THREAD_ID}/messages`, () =>
+        HttpResponse.json(
+          { detail: { error: "stale_version", message: "Version 2 is stale; the current version is 3.", current_version: 3 } },
+          { status: 409 },
+        ),
+      ),
     );
     const user = userEvent.setup();
     renderScreen();
-    await openDetail(user);
+    await readThread(user);
 
-    await user.click(click('[data-action="publish-proposal"]'));
+    await user.click(click('[data-action="op-accept"]'));
+    expect(screen.getByRole("dialog").textContent).toMatch(/Nothing is booked yet/);
     await user.click(click('[data-action="confirm-mutation"]'));
-    expect(await screen.findByText(/changed since this screen loaded it/)).toBeInTheDocument();
+
+    const note = await screen.findByText(/it is at version 3 now/);
+    expect(note.getAttribute("data-state")).toBe("refused-stale_version");
   });
 });
 
-describe("assent on a version under review", () => {
-  beforeEach(() =>
-    serve({
-      ...WHOLE,
-      status: "under_review",
-      version: 4,
-      negotiation_history: [
-        { version: 3, actor: "seller", action: "proposed", fields_changed: [], at: "2026-09-20T10:00:00Z" },
-        { version: 4, actor: "buyer", action: "countered", fields_changed: ["materials_due"], at: "2026-09-21T10:00:00Z" },
-      ],
-    }),
-  );
+describe("committing an accepted thread", () => {
+  const ACCEPTED = {
+    ...THREAD,
+    state: "accepted",
+    negotiation_history: [
+      ...THREAD.negotiation_history,
+      { version: 2, actor: "buyer", action: "accepted", fields_changed: [], at: "2026-11-16T10:05:00Z", ext: { rate: 39 } },
+    ],
+  };
 
-  it("names what the buyer changed and what accepting makes binding", async () => {
-    await connect(true);
-    const writes = captureWrites();
-    server.use(http.post(`${API}/api/v3/proposals/${ID}/assent`, () => HttpResponse.json({ ok: true })));
-    const user = userEvent.setup();
-    renderScreen();
-    await openDetail(user);
-
-    expect(document.querySelector('[data-block="assent-ask"]')?.textContent).toMatch(
-      /countered on version 4, changing materials_due/,
-    );
-    expect(document.querySelector('[data-action="publish-proposal"]')).toBeNull();
-
-    await user.click(click('[data-action="assent-accept"]'));
-    expect((await screen.findByRole("dialog")).textContent).toMatch(/version 4 binding/);
-    await user.click(click('[data-action="confirm-mutation"]'));
-
-    await waitFor(() => expect(writes).toHaveLength(1));
-    expect(writes[0]).toMatchObject({
-      path: `/api/v3/proposals/${ID}/assent`,
-      body: { decision: "accept", expected_version: 4 },
-    });
+  beforeEach(() => {
+    serveOpenProposal();
+    serveThread(ACCEPTED);
   });
-});
 
-describe("holds", () => {
-  it("offers release only on a line item that is held", async () => {
+  it("offers only commit, says it books a real deal, and sends the version", async () => {
     await connect(true);
-    serve({ ...WHOLE, status: "published", version: 2 });
     const writes = captureWrites();
     server.use(
-      http.post(`${API}/api/v3/proposals/${ID}/line-items/fox-ctv/hold`, () => HttpResponse.json({ ok: true })),
+      http.post(`${API}/api/v1/op-negotiations/${THREAD_ID}/commit`, () =>
+        HttpResponse.json({
+          ...ACCEPTED,
+          state: "committed",
+          line_item: {
+            ...ACCEPTED.line_item,
+            status: "agreed",
+            external_references: [
+              ...ACCEPTED.line_item.external_references,
+              { system: "seller-agent", id: "D-77", role: "deal" },
+            ],
+          },
+        }),
+      ),
     );
     const user = userEvent.setup();
     renderScreen();
-    await openDetail(user);
+    await readThread(user);
 
-    // The CTV example is held; the display example's hold state is "none".
-    expect(document.querySelector('[data-block="hold-writes:fox-ctv"] [data-action="release-hold"]')).toBeTruthy();
-    expect(document.querySelector('[data-block="hold-writes:wsj-display"]')).toBeNull();
-
-    await user.click(click('[data-block="hold-writes:fox-ctv"] [data-action="release-hold"]'));
+    expect(document.querySelector('[data-action="op-counter"]')).toBeNull();
+    await user.click(click('[data-action="op-commit"]'));
+    expect(screen.getByRole("dialog").textContent).toMatch(/Books a real deal at USD 39\.00/);
     await user.click(click('[data-action="confirm-mutation"]'));
+
     await waitFor(() => expect(writes).toHaveLength(1));
-    expect(writes[0]).toMatchObject({ body: { action: "release", expected_version: 2 } });
+    expect(writes[0]).toMatchObject({ path: `/api/v1/op-negotiations/${THREAD_ID}/commit`, body: { version: 2 } });
   });
 });

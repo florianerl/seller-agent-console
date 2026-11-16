@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useRef, useState, type ReactNode } from "react";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -12,7 +12,6 @@ import {
   curators,
   dealFromTemplate,
   generateDeal,
-  openProposals,
   type BuyerIdentityFull,
   type ConsentContextInput,
   type LinearTvInput,
@@ -36,7 +35,6 @@ import { stamp } from "../lib/time";
 import { CADENCE } from "../query/cadence";
 import { recordQuote } from "../credentials/recentQuotes";
 import { useMutation } from "../query/useMutation";
-import { useOpenProposalSupport } from "../query/useOpenProposalSupport";
 import { useResource } from "../query/useResource";
 import { palette } from "../theme/palette";
 import { CuratorPicker, ProductMultiPicker, ProductPicker, QuotePicker } from "./pickers";
@@ -193,42 +191,22 @@ function ProductRows({
   );
 }
 
-/**
- * Reports how many proposals the agent will list. Its own component because it
- * must only read when the agent advertises OpenProposal (a 2.x agent has no
- * `/api/v3` and must see none of that traffic), and a hook cannot be called
- * conditionally. Same key and page as the Proposals screen's unfiltered list.
- */
-function ProposalProbe({ onCount }: { onCount: (n: number) => void }) {
-  const list = useResource("open-proposals::", (c, signal) => openProposals(c, { limit: 50, offset: 0 }, signal), {
-    refreshInterval: CADENCE.proposals,
-  });
-  const count = list.data ? list.data.proposals.items.length : undefined;
-  useEffect(() => {
-    if (count !== undefined) onCount(count);
-  }, [count, onCount]);
-  return null;
-}
-
 export function DealWizard({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { writesEnabled, credential } = useCredential();
   const [step, setStep] = useState(0);
   const [chosen, setMethod] = useState<Method>("new-quote");
-  const { support } = useOpenProposalSupport();
-  const [proposalCount, setProposalCount] = useState(0);
   const curatorList = useResource("curators", (c, signal) => curators(c, signal), {
     refreshInterval: CADENCE.curators,
   });
 
-  // Offer only the routes there is something to run them on. "From a proposal"
-  // needs an accepted proposal and "For a curator" a registered curator; with
-  // none, each is a form that can only be refused. A proposal can be checked
-  // only where the agent lists them; the legacy routes have no list, so on
-  // such an agent the route is not offered (the Proposals screen still has
-  // those forms). A curator list that cannot be read leaves the route on: not
-  // knowing is not the same as none.
+  // Offer only the routes there is something to run them on. "For a curator"
+  // needs a registered curator; with none it is a form that can only be
+  // refused. A curator list that cannot be read leaves the route on: not
+  // knowing is not the same as none. "From a proposal" is always offered on
+  // the same rule — no agent lists proposals (the legacy routes have no list,
+  // and neither does OpenProposal as upstream serves it, ADR 15), so the id is
+  // pasted and the agent says whether it is one it accepted.
   const available = METHODS.filter((m) => {
-    if (m.value === "proposal") return support === "supported" && proposalCount > 0;
     if (m.value === "curated") return !(curatorList.data && curatorList.data.curators.length === 0);
     return true;
   });
@@ -1127,7 +1105,6 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
 
   return (
     <>
-      {support === "supported" && <ProposalProbe onCount={setProposalCount} />}
     <WizardDialog
       open={open}
       title="New deal"

@@ -53,13 +53,19 @@ describe("with writes off", () => {
   });
 
   /**
-   * The exemption, and its exact size. Someone adding a sixth path has to come
+   * The exemption, and its exact size. Someone adding a tenth path has to come
    * here and say why, which is the only control on a list whose whole purpose
    * is to make a rule less mechanical.
    */
-  it("exempts exactly the five query-shaped POSTs", () => {
+  it("exempts exactly the nine query-shaped POSTs", () => {
     expect([...QUERY_SHAPED_PATHS].sort()).toEqual([
       "/agentic-audience/match",
+      // The four OpenProposal mappings: payload in, translation out, nothing
+      // stored and no key required upstream (ADR 15).
+      "/api/v1/op-gam/ad-unit",
+      "/api/v1/op-gam/line-item",
+      "/api/v1/op-gam/line-items",
+      "/api/v1/op-many-to-one/proposal",
       "/discovery",
       "/media-kit/search",
       "/pricing",
@@ -115,14 +121,18 @@ describe("with writes off", () => {
       await call(connection, ...(spec!.args as never[]));
     }
 
-    const unsafe = recorder.seen.filter((line) => !line.startsWith("GET "));
+    // The exemption is by path, so the query string is dropped before
+    // comparing: the OpenProposal mappings go out with `?explain=true`, which
+    // does not change which route they are.
+    const seen = recorder.seen.map((line) => line.split("?")[0] ?? line);
+    const unsafe = seen.filter((line) => !line.startsWith("GET "));
     const allowed = QUERY_SHAPED_PATHS.map((p) => `POST ${API}${p}`);
     expect(unsafe.filter((line) => !allowed.includes(line))).toEqual([]);
 
     // And the exempt ones did go out — a sweep that sent nothing at all would
     // pass this test while proving nothing.
     for (const path of QUERY_SHAPED_PATHS) {
-      expect(recorder.seen).toContain(`POST ${API}${path}`);
+      expect(seen).toContain(`POST ${API}${path}`);
     }
   });
 });

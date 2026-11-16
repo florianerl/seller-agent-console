@@ -1,31 +1,44 @@
 import { z } from "zod";
-import { get, request, type Connection } from "../http";
+import { get, request, TIMEOUTS, type Connection } from "../http";
 import type { Result } from "../errors";
 import { eachOrCount, selectable, settable } from "../openproposal/shape";
-import { MutationAck } from "./shared";
 
 /**
- * OpenProposal 3.0 (AAMP 3.0), against a contract that does not exist yet.
+ * OpenProposal 3.0 (AAMP 3.0), as the upstream seller agent's
+ * `feat/openproposal-mapping` branch serves it (e77022e, unmerged). ADR 15.
  *
- * The spec (`3.0-draft-1`) defines an object model and no transport, and the
- * upstream seller agent serves none of these routes. The paths below are the
- * console's proposal to upstream, recorded in ADR 14 and listed as PROVISIONAL
- * in the drift guard — which fails the day the agent's captured surface starts
- * declaring one, so the guess gets checked the moment there is something to
- * check it against.
+ * Three groups, each answering a different question:
  *
- * Nothing here is called unless the agent card advertises the protocol (see
- * `src/api/capabilities.ts`). Against a 2.x agent the console sends no request
- * to `/api/v3` at all; that is the backwards-compatibility contract, and a
- * screen test asserts it on the wire.
+ * - **GAM mapping** — four POSTs that turn ad-server payloads into OpenProposal
+ *   line items and say what did not map. Pure transforms: nothing is stored,
+ *   no key is needed, so they are query-shaped and run with writes off
+ *   (`QUERY_SHAPED_PATHS`). Plus the static field map, which doubles as the
+ *   support probe.
+ * - **Many-to-one** — one proposal from objects in several ad servers. Also a
+ *   pure transform.
+ * - **Negotiation threads** — a buyer asking for a price on one line item,
+ *   countering, then committing, which books a real deal. Every thread belongs
+ *   to the key that opened it: there is no list, and another key's thread is a
+ *   404. An operator console therefore drives its own threads; it cannot watch
+ *   a buyer's.
  *
- * Not to be confused with `negotiation.ts`: the agent's existing `/proposals`
- * routes are the pre-3.0 submit-and-counter flow and stay exactly as they are.
+ * None of these are in the captured agent surface yet, so they sit in the
+ * drift guard's PROVISIONAL map until the branch merges. Not to be confused
+ * with `negotiation.ts`: the agent's `/proposals` routes are the pre-3.0
+ * submit-and-counter flow and stay as they are.
  */
 
 const PATHS = {
-  proposals: "/api/v3/proposals",
+  fieldMap: "/api/v1/op-gam/line-item/field-map",
+  mapLineItem: "/api/v1/op-gam/line-item",
+  mapLineItems: "/api/v1/op-gam/line-items",
+  mapAdUnit: "/api/v1/op-gam/ad-unit",
+  manyToOne: "/api/v1/op-many-to-one/proposal",
+  negotiations: "/api/v1/op-negotiations",
 } as const;
+
+/** Always ask for the analysis: the console's whole reason to call these is what did not map. */
+const EXPLAIN = { explain: true } as const;
 
 const text = z.string().nullable().catch(null);
 const amount = z.number().nullable().catch(null);
@@ -137,6 +150,8 @@ export const LineItem = z
 
     committed_metrics: z.array(CommittedMetric).catch([]),
     materials_due: text,
+    /** A string from the GAM mapping (the line item's name), an object in the spec. */
+    content_detail: z.union([z.string(), z.looseObject({})]).nullable().optional().catch(null),
 
     buying_route: text,
     serving_mode: text,
@@ -149,27 +164,74 @@ export type LineItem = z.infer<typeof LineItem>;
 
 const lineItems = z.unknown().optional().transform((raw) => eachOrCount(raw, (item) => LineItem.safeParse(item)));
 
-const HistoryEntry = z
+/**
+ * What the mapping analysis says about each OpenProposal field. Kept as plain
+ * strings: the vocabularies (`ad_server`, `lossy`, `choice_space_lost`…) are
+ * upstream's and still moving, and an unknown word is shown as sent.
+ */
+const FieldRule = z
   .object({
-    version: amount,
-    actor: text,
-    /** proposed · countered · accepted · declined · withdrawn, rendered as sent. */
-    action: text,
-    fields_changed: strings,
-    at: text,
+    gam_field: z.string(),
+    op_field: text.optional().catch(null),
+    status: z.string().catch("unknown"),
+    problem: text.optional().catch(null),
+    note: z.string().catch(""),
   })
   .loose();
-export type HistoryEntry = z.infer<typeof HistoryEntry>;
+export type FieldRule = z.infer<typeof FieldRule>;
 
-/**
- * The Summary Representation (§2.1) — what the list returns. `status` and
- * `type` are not in the spec's summary field list, so they may legitimately
- * be absent here and must read as not reported rather than guessed.
- */
-export const ProposalSummary = z
+export const FieldMap = z.array(FieldRule);
+export type FieldMap = z.infer<typeof FieldMap>;
+
+const FieldReportEntry = FieldRule.extend({ value: z.unknown() }).loose();
+export type FieldReportEntry = z.infer<typeof FieldReportEntry>;
+
+export const MappedLineItem = z
+  .object({
+    line_item: LineItem,
+    provenance: z.record(z.string(), z.string()).catch({}),
+    gaps: strings,
+    unmapped_source_fields: strings,
+    field_report: z.array(FieldReportEntry).catch([]),
+    problems: strings,
+  })
+  .loose();
+export type MappedLineItem = z.infer<typeof MappedLineItem>;
+
+const BatchResult = z
+  .object({
+    gam_line_item_id: z.string(),
+    mapped: MappedLineItem.nullable().optional().catch(null),
+    error: text.optional().catch(null),
+  })
+  .loose();
+export type BatchResult = z.infer<typeof BatchResult>;
+
+const counts = z.record(z.string(), z.number()).catch({});
+
+export const MappedBatch = z
+  .object({
+    summary: z
+      .object({
+        total: z.number().catch(0),
+        mapped: z.number().catch(0),
+        unmappable_by_type: counts,
+        problems: counts,
+        field_status_counts: counts,
+        gap_counts: counts,
+      })
+      .loose(),
+    results: z.array(BatchResult).catch([]),
+  })
+  .loose();
+export type MappedBatch = z.infer<typeof MappedBatch>;
+
+/** Upstream's `Proposal`: identity, lifecycle and line items, nothing negotiated yet. */
+export const BuiltProposal = z
   .object({
     proposal_id: z.string(),
     version: amount,
+    seller_id: text,
     seller_name: text,
     type: text,
     status: text,
@@ -179,97 +241,193 @@ export const ProposalSummary = z
     line_items: lineItems,
   })
   .loose();
-export type ProposalSummary = z.infer<typeof ProposalSummary>;
+export type BuiltProposal = z.infer<typeof BuiltProposal>;
 
-/** The Full Representation, catalog references resolved (§2.1). */
-export const Proposal = ProposalSummary.extend({
-  seller_id: text,
-  brief_ref: text,
-  /** Shape is WS1's, not this spec's; kept loose and shown as reported. */
-  assent: z.looseObject({}).nullable().catch(null),
-  negotiation_history: z.array(HistoryEntry).catch([]),
-  specifications: z.union([z.string(), z.looseObject({})]).nullable().catch(null),
-  best_for: strings,
-  not_suitable_for: strings,
-  seasonality_notes: text,
-}).loose();
-export type Proposal = z.infer<typeof Proposal>;
-
-export const ProposalList = z
+export const ManyToOneResult = z
   .object({
-    proposals: z.unknown().optional().transform((raw) => eachOrCount(raw, (item) => ProposalSummary.safeParse(item))),
-    total: z.number().catch(0),
+    proposal: BuiltProposal,
+    report: z
+      .array(
+        z
+          .object({
+            line_item_id: z.string(),
+            serving_platform: z.string().catch(""),
+            source_objects: z.number().catch(0),
+            provenance: z.record(z.string(), z.string()).catch({}),
+            gaps: strings,
+          })
+          .loose(),
+      )
+      .nullable()
+      .optional()
+      .catch(null),
   })
   .loose();
-export type ProposalList = z.infer<typeof ProposalList>;
+export type ManyToOneResult = z.infer<typeof ManyToOneResult>;
 
-export const openProposals = (
+const HistoryEntry = z
+  .object({
+    version: amount,
+    /** buyer · seller */
+    actor: text,
+    /** proposed · countered · accepted · declined · withdrawn, rendered as sent. */
+    action: text,
+    fields_changed: strings,
+    at: text,
+    /**
+     * The spec's entry carries no values, so the rate, the final-offer flag and
+     * the engine's rationale ride in `ext` — a proposed extension, not 3.0.
+     */
+    ext: z
+      .object({ rate: amount, final_offer: z.boolean().nullable().catch(null), rationale: text })
+      .loose()
+      .nullable()
+      .optional()
+      .catch(null),
+  })
+  .loose();
+export type HistoryEntry = z.infer<typeof HistoryEntry>;
+
+export const NegotiationThread = z
+  .object({
+    negotiation_id: z.string(),
+    proposal_id: z.string().catch(""),
+    /** Bumped by every seller counter; a move must name the current one or it is a 409. */
+    version: z.number(),
+    /** open · accepted · declined · withdrawn · committed */
+    state: z.string().catch("unknown"),
+    line_item: LineItem,
+    negotiation_history: z.array(HistoryEntry).catch([]),
+    assent: z
+      .object({ buyer_at: text, seller_at: text, version: amount })
+      .loose()
+      .nullable()
+      .optional()
+      .catch(null),
+  })
+  .loose();
+export type NegotiationThread = z.infer<typeof NegotiationThread>;
+
+// --- mapping (query-shaped: nothing is stored) -------------------------------
+
+export const opFieldMap = (c: Connection, signal?: AbortSignal): Promise<Result<FieldMap>> =>
+  get(c, PATHS.fieldMap, { schema: FieldMap, signal });
+
+export type GamLineItemInput = {
+  line_item: Record<string, unknown>;
+  order?: Record<string, unknown>;
+  network_code?: string;
+};
+
+export const mapGamLineItem = (
   c: Connection,
-  query: { status?: string; type?: string; limit?: number; offset?: number } = {},
+  body: GamLineItemInput,
   signal?: AbortSignal,
-): Promise<Result<ProposalList>> => get(c, PATHS.proposals, { schema: ProposalList, query, signal });
+): Promise<Result<MappedLineItem>> =>
+  request(c, PATHS.mapLineItem, { schema: MappedLineItem, method: "POST", body, query: EXPLAIN, signal });
 
-export const openProposalById = (
+export const mapGamLineItems = (
   c: Connection,
-  proposalId: string,
+  body: { line_items: Record<string, unknown>[]; orders?: Record<string, unknown>[]; network_code?: string },
   signal?: AbortSignal,
-): Promise<Result<Proposal>> =>
-  get(c, `${PATHS.proposals}/${encodeURIComponent(proposalId)}`, { schema: Proposal, signal });
+): Promise<Result<MappedBatch>> =>
+  request(c, PATHS.mapLineItems, {
+    schema: MappedBatch,
+    method: "POST",
+    body,
+    query: EXPLAIN,
+    // A pasted LineItemService export can be hundreds of line items.
+    timeoutMs: TIMEOUTS.heavy,
+    signal,
+  });
 
-// --- lifecycle writes -------------------------------------------------------
+export const mapGamAdUnit = (
+  c: Connection,
+  body: { ad_unit: Record<string, unknown>; network_code?: string },
+  signal?: AbortSignal,
+): Promise<Result<MappedLineItem>> =>
+  request(c, PATHS.mapAdUnit, { schema: MappedLineItem, method: "POST", body, query: EXPLAIN, signal });
+
+export const buildManyToOneProposal = (
+  c: Connection,
+  body: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<Result<ManyToOneResult>> =>
+  request(c, PATHS.manyToOne, { schema: ManyToOneResult, method: "POST", body, query: EXPLAIN, signal });
+
+// --- negotiation threads (writes, except the read) ---------------------------
 //
-// Every write carries an idempotency key and the version the operator was
-// looking at. The key makes a retry after a lost response safe (§5.6.1 asks
-// the same of commitments); the version turns "someone else moved it while you
-// were reading" into a 409 instead of a silent overwrite. Each touches one
-// object, so there is no partial failure to leave behind. Each call is spelt
-// out rather than routed through a helper: the drift guard reads the path
-// argument of every `request(...)` statically, and a variable reads as
-// unresolved.
+// Opening a thread quotes the line item and runs the seller's engine; commit
+// books a deal. Both get the heavy timeout. Every write carries an idempotency
+// key — the agent replays an identical body and 409s a different one — and the
+// moves after opening carry the thread version, so a move made against a
+// counter the operator has not seen is refused rather than applied.
 
-type Guarded = { idempotency_key: string; expected_version: number | null };
+export type OpenNegotiationBody = {
+  idempotency_key: string;
+  proposal_id: string;
+  version: number;
+  /** A seller-agent product id. */
+  line_item_id: string;
+  transaction_mechanism: string;
+  commitment: { basis: "units"; amount: number; flight_start?: string; flight_end?: string };
+  /** CPM asked for. A proposed extension; the spec has no field for it. */
+  requested_rate: number;
+  buyer_identity?: Record<string, string>;
+};
 
-/** draft → published. Buyer agents can discover it from this point. */
-export const publishProposal = (
+export const openOpNegotiation = (
   c: Connection,
-  proposalId: string,
-  body: Guarded,
+  body: OpenNegotiationBody,
   signal?: AbortSignal,
-): Promise<Result<MutationAck>> =>
-  request(c, `${PATHS.proposals}/${encodeURIComponent(proposalId)}/publish`, { schema: MutationAck, method: "POST", body, signal });
+): Promise<Result<NegotiationThread>> =>
+  request(c, PATHS.negotiations, {
+    schema: NegotiationThread,
+    method: "POST",
+    body,
+    timeoutMs: TIMEOUTS.heavy,
+    signal,
+  });
 
-/** → withdrawn. Terminal. */
-export const withdrawProposal = (
+export const opNegotiationById = (
   c: Connection,
-  proposalId: string,
-  body: Guarded & { reason?: string },
+  negotiationId: string,
   signal?: AbortSignal,
-): Promise<Result<MutationAck>> =>
-  request(c, `${PATHS.proposals}/${encodeURIComponent(proposalId)}/withdraw`, { schema: MutationAck, method: "POST", body, signal });
+): Promise<Result<NegotiationThread>> =>
+  get(c, `${PATHS.negotiations}/${encodeURIComponent(negotiationId)}`, { schema: NegotiationThread, signal });
 
-/** requested → held (grant) or held → released (release), §5.6.2. */
-export const holdLineItem = (
-  c: Connection,
-  proposalId: string,
-  lineItemId: string,
-  body: Guarded & { action: "grant" | "release" },
-  signal?: AbortSignal,
-): Promise<Result<MutationAck>> =>
-  request(
-    c,
-    `${PATHS.proposals}/${encodeURIComponent(proposalId)}/line-items/${encodeURIComponent(lineItemId)}/hold`,
-    { schema: MutationAck, method: "POST", body, signal },
-  );
+export type NegotiationMove = {
+  idempotency_key: string;
+  version: number;
+  action: "counter" | "accept" | "decline" | "withdraw";
+  requested_rate?: number;
+};
 
-/**
- * The seller's assent on the version under review. Accepting makes that
- * version binding: status becomes `agreed`, holds convert, and the stored
- * record is frozen with every catalog reference resolved (§2.2, §5.6.1).
- */
-export const assentProposal = (
+export const postOpNegotiationMessage = (
   c: Connection,
-  proposalId: string,
-  body: Guarded & { decision: "accept" | "decline"; reason?: string },
+  negotiationId: string,
+  body: NegotiationMove,
   signal?: AbortSignal,
-): Promise<Result<MutationAck>> =>
-  request(c, `${PATHS.proposals}/${encodeURIComponent(proposalId)}/assent`, { schema: MutationAck, method: "POST", body, signal });
+): Promise<Result<NegotiationThread>> =>
+  request(c, `${PATHS.negotiations}/${encodeURIComponent(negotiationId)}/messages`, {
+    schema: NegotiationThread,
+    method: "POST",
+    body,
+    timeoutMs: TIMEOUTS.heavy,
+    signal,
+  });
+
+/** Books first, then agrees: a failed booking leaves nothing agreed. */
+export const commitOpNegotiation = (
+  c: Connection,
+  negotiationId: string,
+  body: { idempotency_key: string; version: number },
+  signal?: AbortSignal,
+): Promise<Result<NegotiationThread>> =>
+  request(c, `${PATHS.negotiations}/${encodeURIComponent(negotiationId)}/commit`, {
+    schema: NegotiationThread,
+    method: "POST",
+    body,
+    timeoutMs: TIMEOUTS.heavy,
+    signal,
+  });
