@@ -292,4 +292,25 @@ covers the three ways it can go wrong.
    figure the design aimed at; kept deliberately, since the console is an
    internal tool on a desk rather than a landing page.
 
+## Third-party data
+
+The package form offers IAB category and audience codes as choices. The agent
+serves no taxonomy route, so the console carries its own copy, generated from
+the files the agent vendors and loaded only when a package form opens:
+
+```bash
+node scripts/build-taxonomies.mjs ../seller-agent
+```
+
+- "Content Taxonomy 3.1" by IAB Tech Lab is licensed under
+  [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/).
+- "Audience Taxonomy 1.1" by IAB Tech Lab is licensed under
+  [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/).
+
+Only ids and tier names are kept (`src/data/taxonomies/`); each file records the
+`sha256` of the agent's copy it came from. `cattax` is offered as the AdCOM 1.0
+list, on which Content Taxonomy 3.1 is 9 — the agent's own default is 2, a
+deprecated taxonomy, and its model comment numbers the list differently.
+Country names come from the browser.
+
 Design decisions and their reasoning are in [docs/adr](docs/adr).

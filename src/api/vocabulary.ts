@@ -227,3 +227,56 @@ export type AudienceType = (typeof AUDIENCE_TYPES)[number]["value"];
 
 /** `AudienceSource`, models/audience_ref.py. */
 export const AUDIENCE_SOURCES = spelled(["explicit", "resolved", "inferred"] as const);
+
+/**
+ * AdCOM 1.0 "List: Category Taxonomies" — what a package's `cattax` numbers.
+ * Upstream's own comment on the field (models/media_kit.py, "1=CT1.0,
+ * 2=CT2.0, 3=CT3.0") misnumbers it: 3 is the Ad Product Taxonomy and Content
+ * Taxonomy 3.0 is 7. The agent does not check the value and defaults it to
+ * 2, a deprecated taxonomy; the one it vendors is 3.1, which is 9. Codes of
+ * 500 and up are vendor-specific and are kept when read, not offered.
+ */
+export const CATEGORY_TAXONOMIES: readonly Option[] = [
+  { value: "1", label: "1 · Content Category 1.0 (deprecated)" },
+  { value: "2", label: "2 · Content Category 2.0 (deprecated)" },
+  { value: "3", label: "3 · Ad Product 1.0" },
+  { value: "4", label: "4 · Audience 1.1" },
+  { value: "5", label: "5 · Content 2.1" },
+  { value: "6", label: "6 · Content 2.2" },
+  { value: "7", label: "7 · Content 3.0" },
+  { value: "8", label: "8 · Ad Product 2.0" },
+  { value: "9", label: "9 · Content 3.1" },
+];
+
+/** The `cattax` whose ids the console can offer as choices (src/data/taxonomies). */
+export const LISTED_CATTAX = "9";
+
+/**
+ * ISO 3166-1 alpha-2, the 249 assigned codes. Geo targets also take
+ * subdivisions (US-NY, ISO 3166-2) and the agent checks neither, so these
+ * are suggestions; the names come from the browser (Intl.DisplayNames).
+ */
+export const COUNTRY_CODES: readonly string[] = `
+  AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS
+  BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE
+  EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM
+  HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC
+  LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA
+  NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW
+  SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO
+  TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW
+`
+  .trim()
+  .split(/\s+/);
+
+let regionNames: Intl.DisplayNames | undefined;
+
+/** A country's English name, or undefined when the browser does not know the code. */
+export function countryName(code: string): string | undefined {
+  try {
+    regionNames ??= new Intl.DisplayNames(["en"], { type: "region", fallback: "none" });
+    return regionNames.of(code);
+  } catch {
+    return undefined;
+  }
+}

@@ -22,8 +22,20 @@ import { resetReachability } from "../../src/query/reachability";
 
 const CARD = {
   entries: [
-    { inventory_type: "display", base_cpm: 12, currency: "USD", effective_date: "2026-01-01", notes: null },
-    { inventory_type: "video", base_cpm: 25, currency: "USD", effective_date: null, notes: "pre-roll" },
+    {
+      inventory_type: "display",
+      base_cpm: 12,
+      currency: "USD",
+      effective_date: "2026-01-01",
+      notes: null,
+    },
+    {
+      inventory_type: "video",
+      base_cpm: 25,
+      currency: "USD",
+      effective_date: null,
+      notes: "pre-roll",
+    },
   ],
   updated_at: "2026-09-01T00:00:00Z",
   source: "stored",
@@ -46,7 +58,12 @@ const PACKAGE = {
 function mount() {
   return render(
     <SWRConfig
-      value={{ provider: () => new Map(), dedupingInterval: 0, shouldRetryOnError: false, compare: sameResult }}
+      value={{
+        provider: () => new Map(),
+        dedupingInterval: 0,
+        shouldRetryOnError: false,
+        compare: sameResult,
+      }}
     >
       <ThemeProvider theme={theme}>
         <CredentialProvider>
@@ -139,7 +156,16 @@ describe("catalog inline writes", () => {
         const key = request.headers.get("x-api-key");
         keys.push(key);
         return HttpResponse.json({
-          packages: [key ? PACKAGE : { package_id: "pkg-1", name: "Sports bundle", rate_type: "fixed", price_range: "$8-$12" }],
+          packages: [
+            key
+              ? PACKAGE
+              : {
+                  package_id: "pkg-1",
+                  name: "Sports bundle",
+                  rate_type: "fixed",
+                  price_range: "$8-$12",
+                },
+          ],
         });
       }),
     );
@@ -197,7 +223,12 @@ describe("catalog inline writes", () => {
     mount();
 
     await user.click(await rateCardEdit());
-    await user.click(within(document.querySelector('[data-block="rate-card"]') as HTMLElement).getAllByRole("button", { name: "Remove" })[0]!);
+    await user.click(
+      within(document.querySelector('[data-block="rate-card"]') as HTMLElement).getAllByRole(
+        "button",
+        { name: "Remove" },
+      )[0]!,
+    );
     await confirm(user, "save-rate", "Save");
 
     await waitFor(() => expect(sent).toHaveLength(1));
@@ -308,7 +339,9 @@ describe("catalog inline writes", () => {
     await fill("Description", "Seasonal bundle");
     await fill("Products", "prod-1, prod-2", true);
     await fill("Content categories", "IAB1, IAB2", true);
-    await fill("Content taxonomy", "6");
+    // A select over the AdCOM list now, not a text box.
+    await user.click(within(form).getByRole("combobox", { name: "Content taxonomy" }));
+    await user.click(await screen.findByRole("option", { name: "6 · Content 2.2" }));
     await fill("Seasonal label", "Q4");
     await fill("Audience segment ids", "seg-1", true);
     await fill("Audience capabilities", '{"supports_standard": true}');

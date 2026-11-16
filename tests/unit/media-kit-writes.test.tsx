@@ -212,16 +212,17 @@ describe("media kit writes", () => {
     await user.click(await enabled("media-kit-edit-package"));
     const form = document.querySelector('[data-block="media-kit-edit-package"]') as HTMLElement;
     // Prefilled from the stored values, so an untouched form changes nothing.
-    expect(within(form).getByLabelText("Content taxonomy")).toHaveValue("2");
+    expect(within(form).getByRole("combobox", { name: "Content taxonomy" })).toHaveTextContent(
+      "2 · Content Category 2.0 (deprecated)",
+    );
     expect(within(form).getByLabelText("Seasonal label")).toHaveValue("");
     // Audience capabilities and placements are not on the edit form: the PUT
     // would replace them with what the public view cannot show.
     expect(within(form).queryByLabelText("Audience capabilities")).toBeNull();
 
     await fill(user, form, "Content categories", "IAB19", true);
-    const cattax = within(form).getByLabelText("Content taxonomy");
-    await user.clear(cattax);
-    await user.paste("3");
+    await user.click(within(form).getByRole("combobox", { name: "Content taxonomy" }));
+    await user.click(await screen.findByRole("option", { name: "3 · Ad Product 1.0" }));
     await fill(user, form, "Seasonal label", "Q4 holiday");
     await confirm(user, "media-kit-update-package", "Save");
 
@@ -242,7 +243,8 @@ describe("media kit writes", () => {
     await fill(user, form, "Base price", "20");
     await fill(user, form, "Floor", "10");
     await fill(user, form, "Content categories", "IAB17", true);
-    await fill(user, form, "Content taxonomy", "3");
+    await user.click(within(form).getByRole("combobox", { name: "Content taxonomy" }));
+    await user.click(await screen.findByRole("option", { name: "3 · Ad Product 1.0" }));
     await fill(user, form, "Seasonal label", "Q4 holiday");
     await fill(user, form, "Audience segment ids", "3-7", true);
     await fill(user, form, "Audience capabilities", '{"supports_standard": true}');
@@ -260,6 +262,85 @@ describe("media kit writes", () => {
           audience_capabilities: { supports_standard: true },
           audience_segment_ids: ["3-7"],
           seasonal_label: "Q4 holiday",
+        },
+      ]),
+    );
+  });
+
+  it("picks countries by name or code, and keeps a code no country matches", async () => {
+    await credential(true);
+    const sent = capture("post", "/packages", PACKAGE);
+    const user = userEvent.setup();
+    mount();
+
+    await user.click(await enabled("media-kit-new-package"));
+    const form = document.querySelector('[data-block="media-kit-create-package"]') as HTMLElement;
+    await fill(user, form, "Name", "Football");
+    await fill(user, form, "Base price", "20");
+    await fill(user, form, "Floor", "10");
+    // "germ" is a name prefix only Germany has: Enter adds DE, not the text.
+    // "us" is an exact code, ahead of names that merely contain it. A code
+    // nothing matches is kept as typed.
+    await fill(user, form, "Geo targets", "germ", true);
+    await fill(user, form, "Geo targets", "us", true);
+    // Several equally good matches add nothing; the operator picks.
+    await fill(user, form, "Geo targets", "united", true);
+    await fill(user, form, "Geo targets", "US-NY", true);
+
+    await confirm(user, "media-kit-create-package", "Create package");
+    await waitFor(() =>
+      expect(sent).toEqual([
+        {
+          name: "Football",
+          base_price: 20,
+          floor_price: 10,
+          is_featured: false,
+          geo_targets: ["DE", "US", "US-NY"],
+        },
+      ]),
+    );
+  });
+
+  it("picks content categories and audience segments by name, and sends their ids", async () => {
+    await credential(true);
+    const sent = capture("post", "/packages", PACKAGE);
+    const user = userEvent.setup();
+    mount();
+
+    await user.click(await enabled("media-kit-new-package"));
+    const form = document.querySelector('[data-block="media-kit-create-package"]') as HTMLElement;
+    await fill(user, form, "Name", "Football");
+    await fill(user, form, "Base price", "20");
+    await fill(user, form, "Floor", "10");
+    // The content list is offered only once its taxonomy is chosen.
+    await user.click(within(form).getByLabelText("Content categories"));
+    await user.paste("Soccer");
+    expect(screen.queryByRole("option", { name: /Soccer/ })).toBeNull();
+    await user.keyboard("{Escape}");
+    await user.clear(within(form).getByLabelText("Content categories"));
+    await user.click(within(form).getByRole("combobox", { name: "Content taxonomy" }));
+    await user.click(await screen.findByRole("option", { name: "9 · Content 3.1" }));
+    await user.click(within(form).getByLabelText("Content categories"));
+    await user.paste("Soccer");
+    await user.click(await screen.findByRole("option", { name: /Sports › Soccer/ }));
+
+    await user.click(within(form).getByLabelText("Audience segment ids"));
+    await user.paste("18-20");
+    await user.click(await screen.findByRole("option", { name: /Age Range › 18-20/ }));
+    // The chip names the segment; the wire carries its id.
+    expect(within(form).getByText("18-20 · 3")).toBeInTheDocument();
+
+    await confirm(user, "media-kit-create-package", "Create package");
+    await waitFor(() =>
+      expect(sent).toEqual([
+        {
+          name: "Football",
+          base_price: 20,
+          floor_price: 10,
+          is_featured: false,
+          cat: ["533"],
+          cattax: 9,
+          audience_segment_ids: ["3"],
         },
       ]),
     );

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Autocomplete from "@mui/material/Autocomplete";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -15,7 +15,17 @@ import {
   type PackageCreate,
 } from "../api/endpoints";
 import { describe, type Result } from "../api/errors";
-import { AD_FORMATS, DEVICE_TYPES, deviceLabel } from "../api/vocabulary";
+import {
+  AD_FORMATS,
+  CATEGORY_TAXONOMIES,
+  COUNTRY_CODES,
+  DEVICE_TYPES,
+  LISTED_CATTAX,
+  countryName,
+  deviceLabel,
+} from "../api/vocabulary";
+import { EnumSelect } from "../components/EnumSelect";
+import { useTaxonomy } from "../data/taxonomies";
 import { ConfirmButton } from "../components/ConfirmButton";
 import { TipField } from "../components/TipField";
 import { useCredential } from "../credentials/context";
@@ -33,10 +43,70 @@ import {
   type PackageDraft,
 } from "./package-draft";
 
+/** Built once: the browser's names for the ISO codes, for the geo picker. */
+const COUNTRIES: ReadonlyMap<string, string> = new Map(
+  COUNTRY_CODES.map((code) => [code, countryName(code) ?? code]),
+);
+
+/** Enough to pick from; a taxonomy has 1,500 entries and a search narrows it. */
+const MAX_OPTIONS = 60;
+
+/**
+ * How well a code answers what was typed: the exact code, then a code
+ * prefix, then a name that starts with it, then a name that contains it.
+ * "us" ranks US above Australia and Belarus, whose names merely contain it.
+ * 4 is no match. Stable sort keeps the list's own order within a rank.
+ */
+function rank(code: string, name: string | undefined, q: string): number {
+  const c = code.toLowerCase();
+  if (c === q) return 0;
+  if (c.startsWith(q)) return 1;
+  const n = name?.toLowerCase();
+  if (n?.startsWith(q) || n?.split(" › ").some((tier) => tier.startsWith(q))) return 2;
+  if (c.includes(q) || n?.includes(q)) return 3;
+  return 4;
+}
+
+/**
+ * What a typed entry adds to a listed field: the code it names when one code
+ * answers it best — "germ" is DE, "us" is US — nothing when several do, so
+ * the operator picks from the open list instead of getting the literal
+ * text, and the text itself when nothing in the list matches (US-NY, a
+ * vendor code). A literal "germ" is never a useful geo target.
+ */
+function resolve(text: string, names: ReadonlyMap<string, string>): string[] {
+  const q = text.toLowerCase();
+  let best = 4;
+  let found: string[] = [];
+  for (const [code, name] of names) {
+    const r = rank(code, name, q);
+    if (r < best) {
+      best = r;
+      found = [code];
+    } else if (r === best && r < 4) {
+      found.push(code);
+    }
+  }
+  if (best === 4) return [text];
+  if (best === 0) return [found[0]!];
+  return best <= 2 && found.length === 1 ? found : [];
+}
+
+/** The last tier of a taxonomy path, which is what a chip has room for. */
+function leaf(path: string): string {
+  return path.split(" › ").pop() ?? path;
+}
+
 /**
  * A free list of short values. Pasted lists arrive as one string and are
  * split on commas, the same as the id pickers; a value typed and left in the
  * box counts (`autoSelect`), so pressing Save never silently drops it.
+ *
+ * With `names` (code → name) it is a picker over that list: the search
+ * matches names as well as codes, options and chips show the name, and what
+ * is sent is still the code. A code outside the list is kept, not refused —
+ * the agent checks none of these fields, and a value read from a package
+ * must survive an edit that does not touch it.
  */
 export function ListField({
   label,
@@ -44,13 +114,21 @@ export function ListField({
   value,
   onChange,
   suggestions = [],
+  names,
 }: {
   label: string;
   hint: string;
   value: readonly string[];
   onChange: (value: string[]) => void;
   suggestions?: readonly string[];
+  names?: ReadonlyMap<string, string> | undefined;
 }) {
+  // A taxonomy is 1,500 codes; rebuilt on every keystroke it is most of the
+  // field's render cost.
+  const options = useMemo(
+    () => (names ? [...names.keys()] : [...suggestions]),
+    [names, suggestions],
+  );
   return (
     <Autocomplete<string, true, false, true>
       multiple
@@ -58,19 +136,66 @@ export function ListField({
       autoSelect
       filterSelectedOptions
       size="small"
-      options={[...suggestions]}
+      options={options}
+      // Highlights the best match as a guide. MUI does not let it decide what
+      // Enter adds in free-text mode — typed text wins — so `resolve` below
+      // does that.
+      autoHighlight={names !== undefined}
+      filterOptions={(codes, state) => {
+        const q = state.inputValue.trim().toLowerCase();
+        const open = codes.filter((c) => !value.includes(c));
+        if (!q) return open.slice(0, MAX_OPTIONS);
+        return open
+          .map((c) => ({ c, rank: rank(c, names?.get(c), q) }))
+          .filter((h) => h.rank < 4)
+          .sort((a, b) => a.rank - b.rank)
+          .slice(0, MAX_OPTIONS)
+          .map((h) => h.c);
+      }}
+      renderOption={(props, code) => {
+        const { key, ...rest } = props;
+        const name = names?.get(code);
+        return (
+          <li {...rest} key={key}>
+            {name ? (
+              <Box sx={{ minWidth: 0 }}>
+                <Box component="span" sx={{ fontFamily: "monospace", fontSize: 12, mr: 1 }}>
+                  {code}
+                </Box>
+                <Box component="span" sx={{ fontSize: 13 }}>
+                  {name}
+                </Box>
+              </Box>
+            ) : (
+              code
+            )}
+          </li>
+        );
+      }}
       value={[...value]}
       onChange={(_, next) => {
         const items = next
           .flatMap((v) => v.split(","))
           .map((v) => v.trim())
-          .filter(Boolean);
+          .filter(Boolean)
+          // What is already chosen is never re-resolved: a stored code the
+          // list does not know must survive an edit that leaves it alone.
+          .flatMap((v) => (!names || value.includes(v) ? [v] : resolve(v, names)));
         onChange([...new Set(items)]);
       }}
       renderValue={(items, getItemProps) =>
         items.map((item, index) => {
           const { key, ...chip } = getItemProps({ index });
-          return <Chip key={key} size="small" label={item} {...chip} />;
+          const name = names?.get(item);
+          return (
+            <Chip
+              key={key}
+              size="small"
+              label={name ? `${leaf(name)} · ${item}` : item}
+              title={name}
+              {...chip}
+            />
+          );
         })
       }
       renderInput={(params) => <TipField {...params} hint={hint} label={label} />}
@@ -101,6 +226,21 @@ export function Fields({
 }) {
   const set = <K extends keyof PackageDraft>(key: K, value: PackageDraft[K]) =>
     onChange({ ...draft, [key]: value });
+  // Loaded only once a field that offers them is on screen, and the content
+  // list only while the chosen taxonomy is the one it lists.
+  const content = useTaxonomy(
+    classification && draft.cattax === LISTED_CATTAX ? "content-3.1" : undefined,
+  );
+  const audience = useTaxonomy(full ? "audience-1.1" : undefined);
+  // A stored code the list does not hold (a vendor taxonomy, 500 and up)
+  // stays selectable rather than reading as blank.
+  const taxonomies =
+    draft.cattax.trim() && !CATEGORY_TAXONOMIES.some((t) => t.value === draft.cattax)
+      ? [
+          ...CATEGORY_TAXONOMIES,
+          { value: draft.cattax, label: `${draft.cattax} · not an AdCOM taxonomy` },
+        ]
+      : CATEGORY_TAXONOMIES;
 
   return (
     <Stack spacing={1.5}>
@@ -195,9 +335,10 @@ export function Fields({
       <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
         <ListField
           label="Geo targets"
-          hint="ISO 3166 codes, for example US or US-NY. Stored as typed; the agent does not check them."
+          hint="Countries by name or ISO code. Subdivisions such as US-NY can be typed. Stored as entered; the agent does not check them."
           value={draft.geoTargets}
           onChange={(v) => set("geoTargets", v)}
+          names={COUNTRIES}
         />
         <ListField
           label="Tags"
@@ -215,21 +356,25 @@ export function Fields({
       )}
       {classification && (
         <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
+          <EnumSelect
+            label="Content taxonomy"
+            hint="Which AdCOM taxonomy the categories come from. Choose Content 3.1 to pick categories from its list. Left as the agent's default, a new package gets 2, a deprecated taxonomy."
+            value={draft.cattax}
+            options={taxonomies}
+            any="Agent's default (2)"
+            onChange={(v) => set("cattax", v)}
+            sx={{ minWidth: 220 }}
+          />
           <ListField
             label="Content categories"
-            hint="IAB content category ids, for example IAB1, read against the taxonomy below."
+            hint={
+              content
+                ? `Categories from the ${content.title}, by name or id. ${content.attribution}`
+                : "Category ids from the chosen taxonomy, typed or pasted. Choose Content 3.1 as the taxonomy to pick from its list."
+            }
             value={draft.cat}
             onChange={(v) => set("cat", v)}
-          />
-          <TipField
-            hint="AdCOM number of the taxonomy the categories come from. Blank leaves the agent's value; a new package then gets the default, 2 (IAB Content Category Taxonomy 2.0)."
-            size="small"
-            label="Content taxonomy"
-            placeholder="2"
-            value={draft.cattax}
-            onChange={(e) => set("cattax", e.target.value)}
-            slotProps={{ htmlInput: { inputMode: "numeric" } }}
-            sx={{ width: 150 }}
+            names={content?.names}
           />
           <TipField
             hint="A label for seasonal packages, such as Q4 holiday. No view returns it, so the current one cannot be shown: blank leaves it as stored, and anything typed replaces it."
@@ -245,9 +390,10 @@ export function Fields({
         <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
           <ListField
             label="Audience segment ids"
-            hint="Audience segment ids the package targets. Stored as typed; the agent does not check them."
+            hint={`Segments from the IAB Audience Taxonomy 1.1, by name or id — the version the agent files these under. Ids outside the list are kept as typed.${audience ? ` ${audience.attribution}` : ""}`}
             value={draft.audienceSegmentIds}
             onChange={(v) => set("audienceSegmentIds", v)}
+            names={audience?.names}
           />
           <TipField
             hint='Which audience taxonomies the package supports, as a JSON object, for example {"standard_taxonomy_version": "1.1", "supports_standard": true}. Blank sends none.'
