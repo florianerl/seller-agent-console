@@ -484,13 +484,13 @@ function isOpen(open: Open | undefined, kind: "detail" | "edit", id: string): bo
 
 /**
  * What a search result costs. The agent answers with the authenticated view —
- * exact, tier-adjusted price and floor — whenever the caller has a key or
- * names a tier above public, and with the public band otherwise.
+ * exact, tier-adjusted price — whenever the caller has a key or names a tier
+ * above public, and with the public band otherwise (upstream #116). No floor is
+ * shown: upstream #125 dropped floor_price from the authenticated view.
  */
 function priceCell(pkg: MediaKitPackage): string {
   if (pkg.exact_price == null) return pkg.price_range ?? "—";
-  const floor = pkg.floor_price == null ? "" : ` · floor ${plain(pkg.floor_price, pkg.currency)}`;
-  return `${plain(pkg.exact_price, pkg.currency)}${floor}`;
+  return plain(pkg.exact_price, pkg.currency);
 }
 
 function SearchResults({ body }: { body: MediaKitSearchQuery }) {

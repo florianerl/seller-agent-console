@@ -85,6 +85,18 @@ function capture(method: "post" | "put", path: string, reply: unknown = {}) {
   return bodies;
 }
 
+/** The sync POST has no body, so `capture` (which parses one) cannot stand in. */
+function captureSync(reply: Record<string, unknown>) {
+  const calls: true[] = [];
+  server.use(
+    http.post(`${API}/packages/sync`, () => {
+      calls.push(true);
+      return HttpResponse.json(reply);
+    }),
+  );
+  return calls;
+}
+
 async function credential(writesEnabled: boolean) {
   await saveCredential({
     baseUrl: API,
@@ -278,6 +290,89 @@ describe("catalog inline writes", () => {
     await confirm(user, "update-package", "Save");
 
     await waitFor(() => expect(sent).toEqual([{ name: "Sports bundle Q4" }]));
+  });
+
+  // Upstream #125: no read route returns a package floor. A "—" in a Floor
+  // column would read as "no floor", so nothing is shown, even if an agent
+  // that still sends floor_price does.
+  it("shows no floor for a package, even one the agent sends", async () => {
+    await credential(true);
+    mount();
+
+    await screen.findAllByText("Sports bundle");
+    const table = document.querySelector('[data-block="packages"]') as HTMLElement;
+    expect(within(table).queryByText("Floor")).toBeNull();
+    expect(table.textContent).not.toContain("$5.00");
+  });
+
+  it("starts the floor blank on edit and does not send it untouched", async () => {
+    await credential(true);
+    const sent = capture("put", "/packages/pkg-1", PACKAGE);
+    const user = userEvent.setup();
+    mount();
+
+    await user.click(await enabledIn("packages", "Edit"));
+    expect(screen.getByLabelText("Floor")).toHaveValue("");
+
+    const name = screen.getByLabelText("Name");
+    await user.clear(name);
+    await user.type(name, "Renamed");
+    await confirm(user, "update-package", "Save");
+
+    await waitFor(() => expect(sent).toEqual([{ name: "Renamed" }]));
+    expect(JSON.stringify(sent)).not.toContain("floor_price");
+  });
+
+  it("sends a floor on edit only when one is typed", async () => {
+    await credential(true);
+    const sent = capture("put", "/packages/pkg-1", PACKAGE);
+    const user = userEvent.setup();
+    mount();
+
+    await user.click(await enabledIn("packages", "Edit"));
+    await user.type(screen.getByLabelText("Floor"), "4");
+    await confirm(user, "update-package", "Save");
+
+    await waitFor(() => expect(sent).toEqual([{ floor_price: 4 }]));
+  });
+
+  it("shows a sync the agent answered with status error as a failure, with its warnings", async () => {
+    await credential(true);
+    const sent = captureSync({
+      status: "error",
+      synced_packages: [],
+      warnings: ["GAM auth failed", "network code missing"],
+    });
+    const user = userEvent.setup();
+    mount();
+
+    await screen.findAllByText("Sports bundle");
+    await confirm(user, "sync-packages", "Sync packages");
+
+    await waitFor(() => expect(sent).toHaveLength(1));
+    const failed = await waitFor(() => {
+      const el = document.querySelector('[data-state="sync-failed"]');
+      expect(el).toBeTruthy();
+      return el as HTMLElement;
+    });
+    expect(failed.textContent).toContain("GAM auth failed");
+    expect(failed.textContent).toContain("network code missing");
+    expect(failed.textContent).toContain("left as they were");
+    expect(document.querySelector('[data-state="write-ok"]')).toBeNull();
+    expect(screen.queryByText(/accepted the sync/)).toBeNull();
+  });
+
+  it("keeps the success wording for a sync that succeeded", async () => {
+    await credential(true);
+    captureSync({ status: "synced", synced_packages: [], warnings: [] });
+    const user = userEvent.setup();
+    mount();
+
+    await screen.findAllByText("Sports bundle");
+    await confirm(user, "sync-packages", "Sync packages");
+
+    expect(await screen.findByText(/accepted the sync/)).toBeInTheDocument();
+    expect(document.querySelector('[data-state="sync-failed"]')).toBeNull();
   });
 
   it("creates a package from an inline row", async () => {

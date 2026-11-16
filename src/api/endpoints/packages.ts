@@ -10,8 +10,10 @@ const PATHS = {
 /**
  * The one catalog route whose *content* depends on the credential. With no key
  * it returns a public view carrying only a `price_range` band; with any valid
- * key it returns exact_price, floor_price and placements. The screen labels
- * what it shows as "as seen by this key" rather than as the catalog.
+ * key it returns exact_price and placements. The screen labels what it shows
+ * as "as seen by this key" rather than as the catalog. Neither view returns
+ * floor_price any more (upstream #125), so there is no field for it here; the
+ * create and update routes still accept one.
  */
 export const Package = z
   .object({
@@ -36,7 +38,6 @@ export const Package = z
     price_range: z.string().nullable().catch(null),
     // Authenticated view only.
     exact_price: z.number().nullable().catch(null),
-    floor_price: z.number().nullable().catch(null),
     currency: z.string().nullable().catch(null),
     negotiation_enabled: z.boolean().nullable().catch(null),
   })
@@ -159,10 +160,31 @@ export const assemblePackage = (
   body: { name: string; product_ids: string[] },
   signal?: AbortSignal,
 ): Promise<Result<Package>> =>
-  request(c, `${PATHS.packages}/assemble`, { schema: Package, method: "POST", body, signal });
+  request(c, `${PATHS.packages}/assemble`, {
+    schema: Package,
+    method: "POST",
+    body,
+    signal,
+  });
 
-export const syncPackages = (
-  c: Connection,
-  signal?: AbortSignal,
-): Promise<Result<MutationAck>> =>
-  request(c, `${PATHS.packages}/sync`, { schema: MutationAck, method: "POST", signal });
+export const syncPackages = (c: Connection, signal?: AbortSignal): Promise<Result<SyncAck>> =>
+  request(c, `${PATHS.packages}/sync`, {
+    schema: SyncAck,
+    method: "POST",
+    signal,
+  });
+
+/**
+ * `POST /packages/sync` answers HTTP 200 for a failed ad-server sync too
+ * (upstream #100): `status` is "synced" on success and "error" on failure, and
+ * a failure leaves the previously synced packages untouched. Reading only the
+ * HTTP status would report that failure as success. `warnings` and `status`
+ * are recovered rather than required, so an agent predating #100 (which sent
+ * neither) still parses.
+ */
+export const SyncAck = z.looseObject({
+  status: z.string().catch(""),
+  synced_packages: z.array(z.unknown()).catch([]),
+  warnings: z.array(z.string()).catch([]),
+});
+export type SyncAck = z.infer<typeof SyncAck>;

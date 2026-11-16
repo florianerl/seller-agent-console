@@ -62,9 +62,11 @@ export const MediaKitPackage = z
     is_featured: z.boolean().catch(false),
     audience_capabilities: AudienceCapabilities.nullable().catch(null),
     // Authenticated view only. `/media-kit/search` returns it whenever the
-    // caller has a key or names a tier above public; the GET routes never do.
+    // caller has a key or names a tier above public; the GET routes never do
+    // (upstream #116 keeps anonymous package reads on the public view).
+    // There is no floor_price: upstream #125 removed it from this view, so no
+    // read route returns a package floor, though create and update accept one.
     exact_price: z.number().nullable().catch(null),
-    floor_price: z.number().nullable().catch(null),
     currency: z.string().nullable().catch(null),
     placements: z.array(Placement).catch([]),
     negotiation_enabled: z.boolean().nullable().catch(null),
