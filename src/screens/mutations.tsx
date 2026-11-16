@@ -1411,14 +1411,26 @@ export function ChangeRequestCreate({
               pending={create.pending}
               last={create.last?.kind === "ok" || refused.length > 0 ? undefined : create.last}
               onConfirm={() =>
-                void create.run({
-                  idempotency_key: newKey(),
-                  order_id: orderId.trim(),
-                  change_type: changeType,
-                  ...(reason ? { reason } : {}),
-                  ...(actorName ? { requested_by: `human:${actorName}` } : {}),
-                  ...(diffs.length > 0 ? { diffs, proposed_values: proposed } : {}),
-                })
+                void create
+                  .run({
+                    idempotency_key: newKey(),
+                    order_id: orderId.trim(),
+                    change_type: changeType,
+                    ...(reason ? { reason } : {}),
+                    ...(actorName ? { requested_by: `human:${actorName}` } : {}),
+                    ...(diffs.length > 0 ? { diffs, proposed_values: proposed } : {}),
+                  })
+                  .then((result) => {
+                    // Back to a blank form once the agent has accepted it. A
+                    // form still holding the values just sent invites a second
+                    // click, and a second click mints a second request (a new
+                    // idempotency key each time). A refusal keeps the values so
+                    // they can be corrected.
+                    if (result.kind !== "ok") return;
+                    setChangeType("flight_dates");
+                    setRows([rowFor(CHANGE_FIELD["flight_dates"] ?? "")]);
+                    setReason("");
+                  })
               }
               consequence={
                 <>
