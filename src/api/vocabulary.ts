@@ -49,6 +49,38 @@ export const ORDER_STATUSES = spelled([
 export type OrderStatus = (typeof ORDER_STATUSES)[number]["value"];
 
 /**
+ * `ApprovalStatus`, events/models.py. `consumed` and `outcome_unknown` are the
+ * two upstream added after the first four: both mean "approved", but the first
+ * says the decision has already been acted on (terminal) and the second that
+ * the SSP may or may not have created the deal, so a resume re-checks rather
+ * than creates. Spelled out in `STATUS_LABELS` because the bare words read as
+ * nothing to an operator who has not seen the enum.
+ */
+export const APPROVAL_STATUSES = spelled([
+  "pending",
+  "approved",
+  "rejected",
+  "timed_out",
+  "consumed",
+  "outcome_unknown",
+] as const);
+export type ApprovalStatus = (typeof APPROVAL_STATUSES)[number]["value"];
+
+/**
+ * Chip labels that say more than the snake-case words do. Only for statuses
+ * where the words alone mislead; everything else falls through to `words()`.
+ */
+export const STATUS_LABELS: Readonly<Record<string, string>> = {
+  consumed: "approved, acted on",
+  outcome_unknown: "approved, outcome unknown",
+};
+
+/** The label a status chip shows. */
+export function statusLabel(status: string): string {
+  return STATUS_LABELS[status] ?? words(status);
+}
+
+/**
  * The actor on a transition is a claim, not an identity: the agent stores
  * whatever it is sent. The prefix convention (`system`, `human:<id>`,
  * `agent:<id>`, models/order_state_machine.py) is what the orders report

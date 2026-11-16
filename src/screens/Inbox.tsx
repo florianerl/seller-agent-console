@@ -38,7 +38,7 @@ import { Hint } from "../components/Hint";
 import { GatePicker } from "./pickers";
 import { TipField } from "../components/TipField";
 import { EnumSelect } from "../components/EnumSelect";
-import { LEGACY_DEAL_TYPES } from "../api/vocabulary";
+import { LEGACY_DEAL_TYPES, statusLabel } from "../api/vocabulary";
 import {
   explainWarning,
   mergeNegotiation,
@@ -279,7 +279,7 @@ function DecisionControls({
 
       {!decidable && writesEnabled && (
         <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }} data-state="not-pending">
-          This approval is {status.replace(/_/g, " ")} — only a pending approval can be decided.
+          This approval is {statusLabel(status)} — only a pending approval can be decided.
         </Typography>
       )}
 

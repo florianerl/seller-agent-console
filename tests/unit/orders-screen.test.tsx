@@ -13,6 +13,8 @@ import { sameResult } from "../../src/query/freshness";
 import { resetReachability } from "../../src/query/reachability";
 import { resetWritePolicy } from "../../src/api/policy";
 import { ORDER_STATUSES } from "../../src/api/vocabulary";
+import { loadCredential } from "../../src/credentials/store";
+import { recordQuote } from "../../src/credentials/recentQuotes";
 
 const ORDERS = [
   {
@@ -1564,5 +1566,99 @@ describe("the new-order wizard", () => {
 
     expect(within(wizard).getByRole("button", { name: "Create order" })).toBeDisabled();
     expect(wizard.textContent).toMatch(/Writes are switched off/);
+  });
+
+  // Upstream's order create checks only that a named quote is still stored
+  // (services/order_service.py:56-61), and stores quotes for 24 hours, so the
+  // quote behind a deal booked days ago is gone.
+  it("warns before sending when the deal's quote is a day past its booking", async () => {
+    const old = structuredClone(DEALS);
+    (old.deals[0]!.deal as Record<string, unknown>).created_at = "2026-01-01T00:00:00Z";
+    server.use(http.get(`${API}/api/v1/deals`, () => HttpResponse.json(old)));
+    const user = userEvent.setup();
+    const wizard = await openWizard(user);
+    await user.click(within(wizard).getByRole("button", { name: "Next" }));
+    await user.click(await within(wizard).findByLabelText("Deal"));
+    await user.click(await screen.findByText("DEMO-111"));
+    await user.click(within(wizard).getByRole("button", { name: "Next" }));
+
+    expect(wizard.querySelector('[data-state="quote-likely-gone"]')?.textContent).toMatch(/more than 24 hours ago/);
+  });
+
+  it("explains a 404 for the quote, and offers to send the order without it", async () => {
+    const sent: Record<string, unknown>[] = [];
+    server.use(
+      http.get(`${API}/api/v1/deals`, () => HttpResponse.json(DEALS)),
+      http.post(`${API}/api/v1/orders`, async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        sent.push(body);
+        if (body.quote_id) {
+          return HttpResponse.json(
+            { detail: { error: "quote_not_found", message: "Quote 'qt-from-deal' not found." } },
+            { status: 404 },
+          );
+        }
+        return HttpResponse.json({ order_id: "ORD-NOQ", status: "draft", deal_id: "DEMO-111", created_at: null });
+      }),
+    );
+    const user = userEvent.setup();
+    const wizard = await openWizard(user);
+    await user.click(within(wizard).getByRole("button", { name: "Next" }));
+    await user.click(await within(wizard).findByLabelText("Deal"));
+    await user.click(await screen.findByText("DEMO-111"));
+    await user.click(within(wizard).getByRole("button", { name: "Next" }));
+    await user.click(within(wizard).getByRole("button", { name: "Create order" }));
+
+    const alert = await waitFor(() => {
+      const el = wizard.querySelector('[data-state="quote-unusable"]');
+      expect(el).toBeTruthy();
+      return el!;
+    });
+    expect(alert.textContent).toMatch(/no quote with this id/);
+    // Not the bare "the agent returned 404".
+    expect(wizard.querySelector('[data-state="write-failed"]')).toBeNull();
+
+    await user.click(within(wizard).getByRole("button", { name: "Leave the quote out" }));
+    expect(wizard.textContent).toMatch(/Quote\s*none/);
+    await user.click(within(wizard).getByRole("button", { name: "Create order" }));
+    await waitFor(() => expect(sent).toHaveLength(2));
+    expect(sent[1]).not.toHaveProperty("quote_id");
+    expect(await within(wizard).findByText(/Created ORD-NOQ/)).toBeInTheDocument();
+  });
+
+  it("refuses to send a typed quote this browser remembers as expired", async () => {
+    const { credId } = (await loadCredential())!;
+    const now = Date.now();
+    await recordQuote(credId, {
+      quote_id: "qt-old",
+      product_id: "p1",
+      product_name: null,
+      deal_type: "PD",
+      final_cpm_micros: null,
+      currency: "USD",
+      expires_at: new Date(now - 10 * 60_000).toISOString(),
+      created_at: now - 24 * 3_600_000,
+    });
+    let posts = 0;
+    server.use(
+      http.get(`${API}/api/v1/deals`, () => HttpResponse.json(DEALS)),
+      http.post(`${API}/api/v1/orders`, () => {
+        posts += 1;
+        return HttpResponse.json({ order_id: "X", status: "draft" });
+      }),
+    );
+    const user = userEvent.setup();
+    const wizard = await openWizard(user);
+    await user.click(within(wizard).getByRole("button", { name: "Next" }));
+    await user.click(await within(wizard).findByLabelText("Deal"));
+    await user.click(await screen.findByText("DEMO-222"));
+    await user.type(within(wizard).getByLabelText("Quote id (optional)"), "qt-old");
+    await user.click(within(wizard).getByRole("button", { name: "Next" }));
+
+    await waitFor(() =>
+      expect(wizard.querySelector('[data-state="quote-unusable"]')?.textContent).toMatch(/has expired/),
+    );
+    expect(within(wizard).getByRole("button", { name: "Create order" })).toBeDisabled();
+    expect(posts).toBe(0);
   });
 });

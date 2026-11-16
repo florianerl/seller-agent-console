@@ -1,4 +1,5 @@
 import Chip from "@mui/material/Chip";
+import { statusLabel } from "../api/vocabulary";
 import { palette } from "../theme/palette";
 
 /**
@@ -33,13 +34,17 @@ const TONE: Record<string, string> = {
   // on a thread it still waits for a commit, on the legacy screens it is final.
   committed: palette.ok,
   declined: palette.error,
+  // Approvals: both are approved decisions. `consumed` is finished business;
+  // `outcome_unknown` is the one an operator has to go and check.
+  consumed: palette.ok,
+  outcome_unknown: palette.warningText,
 };
 
 export function StatusChip({ status }: { status: string }) {
   const colour = TONE[status] ?? palette.textSecondary;
   return (
     <Chip
-      label={status.replace(/_/g, " ")}
+      label={statusLabel(status)}
       size="small"
       variant="outlined"
       data-status={status}

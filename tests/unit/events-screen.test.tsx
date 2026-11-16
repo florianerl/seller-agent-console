@@ -86,6 +86,26 @@ describe("the events screen", () => {
     });
   });
 
+  // services/deal_service.py `_emit_deal_created` puts the path that made the
+  // deal in the payload; the table surfaces it for that one event type.
+  it("shows which path created a deal on deal.created rows only", async () => {
+    server.use(
+      http.get(`${API}/events`, () =>
+        HttpResponse.json({
+          events: [
+            { event_type: "deal.created", timestamp: "2026-09-16T12:00:00Z", event_id: "e1", deal_id: "D-1", payload: { source: "template", deal_type: "PD" } },
+            { event_type: "negotiation.round", timestamp: "2026-09-16T11:00:00Z", event_id: "e2", payload: { source: "ignored" } },
+            { event_type: "deal.created", timestamp: "2026-09-16T10:00:00Z", event_id: "e3", payload: {} },
+          ],
+        }),
+      ),
+    );
+    renderScreen();
+    await waitFor(() => expect(document.querySelectorAll('[data-row="event"]').length).toBe(3));
+    const cells = [...document.querySelectorAll('[data-cell="event-source"]')].map((c) => c.textContent);
+    expect(cells).toEqual(["template", "—", "—"]);
+  });
+
   it("opens a detail panel for a row", async () => {
     const user = userEvent.setup();
     renderScreen();

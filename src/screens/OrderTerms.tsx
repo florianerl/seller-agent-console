@@ -87,7 +87,7 @@ function FromDealList({
         <Typography variant="body2" color="text.secondary" data-state={skipped ? "deal-skipped" : "deal-missing"}>
           {skipped
             ? `The agent holds deal ${dealId} but could not put it into the list's shape, so its terms cannot be shown.`
-            : `Deal ${dealId} is not in the agent's deal list. An order stores whatever deal id it was created with, unchecked.`}
+            : `Deal ${dealId} is not in the agent's deal list. An order created before the agent checked ids may name a deal it never had.`}
         </Typography>
         {quoteId && <QuoteFallback quoteId={quoteId} why="The deal is not available." />}
       </>

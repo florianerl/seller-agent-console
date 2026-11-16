@@ -134,8 +134,8 @@ function QuoteResult({ quoteId, onAnswer }: { quoteId: string; onAnswer?: (answe
   // 404 and 410 are answers about the quote, not outages. A 404 is the usual
   // answer for anything a day old: upstream stores quotes with a 24-hour
   // storage TTL (renewed for 24 hours on booking), and once that lapses the row
-  // is gone, so the 410 for an expired quote is rarely seen. An order also
-  // stores whatever quote id it was created with, unchecked.
+  // is gone, so the 410 for an expired quote is rarely seen. An order created before the
+  // agent checked ids (order_service.py:47-61) can still name a quote it never had.
   const status = quote.result?.kind === "unavailable" ? quote.result.status : undefined;
   // A stored status of `expired` is the same answer as a 410, arrived earlier.
   const answer: QuoteAnswer | undefined =
@@ -163,7 +163,7 @@ function QuoteResult({ quoteId, onAnswer }: { quoteId: string; onAnswer?: (answe
           data-state={status === 404 ? "unknown-quote" : status === 410 ? "expired-quote" : "failed"}
         >
           {status === 404
-            ? "The agent has no quote with this id. It deletes a quote 24 hours after issuing it, or 24 hours after it was booked, so a quote behind an older order is usually gone. It also never checked that an order's quote id existed. This is not an outage."
+            ? "The agent has no quote with this id. It deletes a quote 24 hours after issuing it, or 24 hours after it was booked, so a quote behind an older order is usually gone. This is not an outage."
             : status === 410
               ? "This quote has expired. The agent enforces a TTL and refuses an expired quote."
               : quote.result

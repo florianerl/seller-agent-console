@@ -1,12 +1,16 @@
 import { useState } from "react";
+import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
+import Link from "@mui/material/Link";
 import { distributeDeal, pushDeal } from "../api/endpoints";
+import { CopyButton } from "../components/CopyButton";
 import { TipField } from "../components/TipField";
 import { FormFields, WriteForm } from "../components/WriteForm";
 import { useCredential } from "../credentials/context";
 import { useMutation } from "../query/useMutation";
 import { Optional, SspNameField } from "./dealFields";
 import { splitList, useJsonObject, useListField } from "./dealHooks";
+import { distributeOutcome } from "../lib/distribute-outcome";
 
 /**
  * Handing a deal to a buyer or an SSP, with every field the agent's request
@@ -128,11 +132,12 @@ export function DistributeForm({ dealId }: { dealId: string }) {
   const seats = useListField("Buyer seat ids", "Seat ids the deal is restricted to, separated by commas. Leave empty for any seat.");
   const targeting = useJsonObject("Targeting (JSON)", "Targeting handed to the SSP, as a JSON object. Left empty, none is sent.");
 
-  const dist = useMutation<Parameters<typeof distributeDeal>[1], unknown>((c, a) => distributeDeal(c, a), {
+  const dist = useMutation<Parameters<typeof distributeDeal>[1], Record<string, unknown>>((c, a) => distributeDeal(c, a), {
     invalidates: ["deals:*"],
   });
   const c = optNumber(cpm);
   const fieldsOk = c.ok && datesOk(start, end) && targeting.valid;
+  const outcome = distributeOutcome(dist.last);
 
   return (
     <Box>
@@ -142,7 +147,9 @@ export function DistributeForm({ dealId }: { dealId: string }) {
       action="distribute-deal"
       blocked={blocked || !fieldsOk}
       pending={dist.pending}
-      last={dist.last}
+      // Rendered below instead, in words that say what actually happened: the
+      // generic line would read "accepted" over a call that sent nothing.
+      last={outcome ? undefined : dist.last}
       onConfirm={() =>
         void dist.run({
           deal_id: dealId,
@@ -169,6 +176,26 @@ export function DistributeForm({ dealId }: { dealId: string }) {
         />
       </FormFields>
     </WriteForm>
+    {outcome?.kind === "pending_approval" && (
+      <Alert severity="warning" variant="outlined" sx={{ mt: 1 }} data-state="distribute-pending-approval">
+        Waiting for approval. The seat ids match more than one DSP, so nothing has been sent to the
+        SSP yet. Pick the DSP on the{" "}
+        <Link href="#/inbox">Inbox</Link>
+        {outcome.approvalId && (
+          <>
+            {" "}
+            (approval <code>{outcome.approvalId}</code> <CopyButton value={outcome.approvalId} />)
+          </>
+        )}
+        ; the deal is created when it is approved.
+      </Alert>
+    )}
+    {outcome?.kind === "outcome_unknown" && (
+      <Alert severity="error" variant="outlined" sx={{ mt: 1 }} data-state="distribute-outcome-unknown">
+        The agent could not confirm whether the deal reached the SSP. Check the SSP before sending
+        it again: a second send may create a duplicate. This console has not retried.
+      </Alert>
+    )}
     <Box sx={{ mt: 1.5 }}>
       <Optional summary="Override what is sent (optional)">
         <TipField hint="Deal type for the SSP; the agent defaults it to PMP." size="small" label="Deal type" value={dealType} onChange={(e) => setDealType(e.target.value)} fullWidth />
