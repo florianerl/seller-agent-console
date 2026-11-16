@@ -43,7 +43,14 @@ export function Shell() {
             display: "flex",
             alignItems: "center",
             gap: { xs: 1.5, md: 2, xl: 2.5 },
-            flexWrap: "nowrap",
+            // The nav takes its own row on desktop. Beside the brand and the
+            // signed-in cluster (Writes chip, connection summary, Writes switch,
+            // Sign out) it was squeezed to ~230px at 970px and clipped at 1536px
+            // too, with the scrollbar hidden, so Curators..Events could not be
+            // reached by mouse. The nav needs 700-810px; its own row has at
+            // least 784px even at the md breakpoint and it can still scroll.
+            flexWrap: "wrap",
+            rowGap: 0.5,
             pl: { xs: 2, md: 4 },
             pr: { xs: 8, md: 10.5 },
             py: 1,
@@ -63,7 +70,7 @@ export function Shell() {
           )}
           <BrandMark asHeading compact={!isDesktop} />
           {isDesktop && (
-            <Box sx={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
+            <Box sx={{ order: 3, flex: "1 0 100%", minWidth: 0, overflow: "hidden" }}>
               <ConsoleNav />
             </Box>
           )}
@@ -74,6 +81,7 @@ export function Shell() {
               gap: { xs: 1, md: 1.25 },
               ml: "auto",
               flexShrink: 0,
+              order: 2,
             }}
           >
             <WritesChip />
