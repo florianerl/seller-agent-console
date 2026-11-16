@@ -1,0 +1,164 @@
+{
+  "proposal": {
+    "proposal_id": "examplepub-cross-channel-open",
+    "version": 1,
+    "seller_id": "examplepub",
+    "seller_name": "Example Publisher US",
+    "type": "standard",
+    "status": "draft",
+    "valid_from": "2026-10-20T00:00:00Z",
+    "valid_until": "2026-12-31T23:59:59Z",
+    "description": "Business audiences across web, newsletter and CTV.",
+    "line_items": [
+      {
+        "line_item_id": "business-web-display",
+        "status": "draft",
+        "channel": "display",
+        "properties": {
+          "available": [
+            {
+              "id": "21780011",
+              "name": "Business Daily",
+              "domains": [
+                "business-daily.example"
+              ]
+            },
+            {
+              "id": "21780019",
+              "name": "Markets Weekly",
+              "domains": [
+                "markets-weekly.example"
+              ]
+            }
+          ],
+          "included": [
+            "21780011"
+          ],
+          "pricing": {
+            "21780019": {
+              "delta_cpm": 2.0
+            }
+          }
+        },
+        "formats": {
+          "available": [
+            "display/300x250",
+            "display/728x90"
+          ],
+          "included": [
+            "display/300x250"
+          ]
+        },
+        "pricing": [
+          {
+            "cost_method": "CPM",
+            "gross_rate": 18.0,
+            "currency": "USD"
+          }
+        ],
+        "availability": {
+          "unit": "impressions",
+          "basis": "flight",
+          "as_of": "2026-10-19",
+          "granularity": "line_item",
+          "type": "forecast",
+          "quantity": 6200000
+        },
+        "serving_platform": "gam",
+        "external_references": [
+          {
+            "system": "gam",
+            "namespace": "network:21700000",
+            "id": "21780011",
+            "role": "ad_unit"
+          },
+          {
+            "system": "gam",
+            "namespace": "network:21700000",
+            "id": "21780019",
+            "role": "ad_unit"
+          }
+        ]
+      },
+      {
+        "line_item_id": "business-newsletter-display",
+        "status": "draft",
+        "channel": "display",
+        "properties": {
+          "available": [
+            {
+              "id": "4401",
+              "name": "Daily newsletter",
+              "domains": [
+                "newsletter.example"
+              ]
+            }
+          ],
+          "included": [
+            "4401"
+          ]
+        },
+        "formats": {
+          "available": [
+            "display/600x200"
+          ],
+          "included": [
+            "display/600x200"
+          ]
+        },
+        "pricing": [
+          {
+            "cost_method": "CPM",
+            "gross_rate": 21.0,
+            "currency": "USD"
+          }
+        ],
+        "availability": {
+          "unit": "impressions",
+          "type": "forecast",
+          "as_of": "2026-10-19",
+          "quantity": 300000
+        },
+        "serving_platform": "kevel",
+        "external_references": [
+          {
+            "system": "kevel",
+            "namespace": "network:9120",
+            "id": "4401",
+            "role": "zone"
+          }
+        ]
+      }
+    ]
+  },
+  "report": [
+    {
+      "line_item_id": "business-web-display",
+      "serving_platform": "gam",
+      "source_objects": 2,
+      "provenance": {
+        "properties": "ad_server",
+        "formats": "ad_server",
+        "pricing": "seller_config",
+        "availability": "ad_server",
+        "channel": "inferred"
+      },
+      "gaps": [
+        "audiences: not held by the ad server"
+      ]
+    },
+    {
+      "line_item_id": "business-newsletter-display",
+      "serving_platform": "kevel",
+      "source_objects": 1,
+      "provenance": {
+        "properties": "ad_server",
+        "formats": "ad_server",
+        "pricing": "seller_config",
+        "availability": "ad_server",
+        "channel": "ad_server"
+      },
+      "gaps": []
+    }
+  ]
+}

@@ -12,10 +12,8 @@ import { clearCredential, saveCredential } from "../../src/credentials/store";
 import { sameResult } from "../../src/query/freshness";
 import { resetWritePolicy } from "../../src/api/policy";
 import { resetReachability } from "../../src/query/reachability";
-import { OPENPROPOSAL_PROTOCOL } from "../../src/api/capabilities";
 import { DealWizard } from "../../src/screens/DealWizard";
 import { DealWrites } from "../../src/screens/mutations";
-import { card, WHOLE } from "../fixtures/proposals-harness";
 import contract from "../fixtures/deal-request-schemas.json";
 
 /**
@@ -276,12 +274,6 @@ describe("every field of every deal request is sent from the screen", { timeout:
   });
 
   it("a deal from a proposal", async () => {
-    server.use(
-      http.get(`${API}/.well-known/agent.json`, () =>
-        HttpResponse.json(card(["opendirect21", OPENPROPOSAL_PROTOCOL])),
-      ),
-      http.get(`${API}/api/v3/proposals`, () => HttpResponse.json({ proposals: [WHOLE], total: 1 })),
-    );
     const sent = capture("/deals", {});
     const user = userEvent.setup({ delay: null });
     await startWizard(user, "From a proposal");

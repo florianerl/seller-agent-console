@@ -29,6 +29,10 @@ const TONE: Record<string, string> = {
   critical: palette.error,
   material: palette.warningText,
   sold_out: palette.error,
+  // OpenProposal negotiation threads. `accepted` is left neutral on purpose:
+  // on a thread it still waits for a commit, on the legacy screens it is final.
+  committed: palette.ok,
+  declined: palette.error,
 };
 
 export function StatusChip({ status }: { status: string }) {

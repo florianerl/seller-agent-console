@@ -280,3 +280,17 @@ export function countryName(code: string): string | undefined {
     return undefined;
   }
 }
+
+/**
+ * `TransactionMechanism` values `POST /api/v1/op-negotiations` will negotiate,
+ * from routers/openproposal_negotiation.py on the seller agent's
+ * `feat/openproposal-mapping` branch (e77022e). The other two (DIRECT_IO,
+ * OPEN_AUCTION) are valid OpenProposal and refused there with a 400.
+ */
+export const OP_NEGOTIABLE_MECHANISMS = spelled([
+  "PREFERRED_DEAL",
+  "PROGRAMMATIC_GUARANTEED",
+  "PRIVATE_AUCTION",
+] as const);
+export type OpNegotiableMechanism = (typeof OP_NEGOTIABLE_MECHANISMS)[number]["value"];
+

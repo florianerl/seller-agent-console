@@ -1,27 +1,27 @@
 {
-  "line_item_id": "wsj-display",
+  "line_item_id": "business-daily-display",
   "status": "published",
   "channel": "display",
   "properties": {
     "available": [
       {
-        "id": "wsj",
+        "id": "business-daily",
         "domains": [
-          "wsj.com"
+          "business-daily.example"
         ]
       },
       {
-        "id": "barrons",
+        "id": "markets-weekly",
         "domains": [
-          "barrons.com"
+          "markets-weekly.example"
         ]
       }
     ],
     "included": [
-      "wsj"
+      "business-daily"
     ],
     "pricing": {
-      "barrons": {
+      "markets-weekly": {
         "delta_cpm": 2
       }
     },
@@ -40,27 +40,27 @@
   "audiences": {
     "available": [
       {
-        "catalog_ref": "newscorp/audiences/smb-decision-makers@3"
+        "catalog_ref": "examplepub/audiences/smb-decision-makers@3"
       },
       {
-        "id": "nc:hnw-investors",
+        "id": "ep:hnw-investors",
         "provenance": "modeled",
         "addressable_scale": 1100000
       },
       {
-        "id": "nc:cfo-finance-leaders",
+        "id": "ep:cfo-finance-leaders",
         "provenance": "first_party",
         "addressable_scale": 480000
       }
     ],
     "included": [
-      "nc:smb-decision-makers"
+      "ep:smb-decision-makers"
     ],
     "pricing": {
-      "nc:hnw-investors": {
+      "ep:hnw-investors": {
         "delta_cpm": 4
       },
-      "nc:cfo-finance-leaders": {
+      "ep:cfo-finance-leaders": {
         "delta_cpm": 6.5
       }
     },
@@ -132,7 +132,7 @@
     {
       "cost_method": "CPM",
       "gross_rate": 24,
-      "agreed_rate": 25.5,
+      "agreed_rate": 24,
       "seller_rate": 20.4,
       "floor": 21,
       "price_valid_until": "2026-11-15T23:59:59Z",
@@ -149,8 +149,8 @@
     "currency": "USD",
     "flight_start": "2026-10-06",
     "flight_end": "2026-12-21",
-    "derived_units": 3137254,
-    "idempotency_key": "wpp-volt2-wsj-display-8f42c1a9"
+    "derived_units": 3333333,
+    "idempotency_key": "agency-a-camp1-business-daily-display-8f42c1a9"
   },
   "hold_status": {
     "hold_available": true,
@@ -216,7 +216,7 @@
     {
       "type": "dsp_seat",
       "scheme": "jwt_keypair",
-      "issuer": "thetradedesk",
+      "issuer": "dsp-a",
       "id_required": true
     }
   ],
@@ -234,12 +234,12 @@
   "buyer_requirements": {
     "seat_required": true,
     "dsp_allowed": [
-      "ttd",
-      "dv360"
+      "dsp-a",
+      "dsp-b"
     ],
     "dsp_seat_id": "seat-99812",
-    "dsp_id": "ttd-prod",
-    "seat_owner_entity": "Agency Alpha"
+    "dsp_id": "dsp-a-prod",
+    "seat_owner_entity": "Agency A"
   },
-  "correlation_id": "nc-q4-2026-commitment/wsj-display"
+  "correlation_id": "ep-q4-2026-commitment/business-daily-display"
 }

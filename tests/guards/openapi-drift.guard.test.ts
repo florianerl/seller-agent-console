@@ -48,20 +48,26 @@ describe("the console calls only routes the agent declares", () => {
   });
 
   /**
-   * Routes the console calls before the agent serves them. Only OpenProposal
-   * 3.0 today: the spec defines no transport, so ADR 14 proposes one, and the
-   * screen that calls it sends nothing unless the agent card advertises the
-   * protocol. An entry is a guess, and the two assertions after the main check
-   * keep it an honest one — it must still be absent upstream, and still be
-   * called here.
+   * Routes the console calls before the captured agent serves them. Only
+   * OpenProposal today: the routes are real, but on an upstream branch that
+   * has not merged, so the capture of the agent's main line does not have
+   * them. The screen sends nothing to them until the field-map probe answers.
+   * The two assertions after the main check keep each entry honest — it must
+   * still be absent from the capture, and still be called here — so the day
+   * the branch merges and the capture is refreshed, every entry has to go and
+   * the routes are checked like any other.
    */
+  const BRANCH = "seller-agent feat/openproposal-mapping @ e77022e, unmerged; ADR 15";
   const PROVISIONAL = new Map<string, string>([
-    ["GET /api/v3/proposals", "OpenProposal 3.0 draft; ADR 14"],
-    ["GET /api/v3/proposals/{}", "OpenProposal 3.0 draft; ADR 14"],
-    ["POST /api/v3/proposals/{}/publish", "OpenProposal 3.0 draft; ADR 14"],
-    ["POST /api/v3/proposals/{}/withdraw", "OpenProposal 3.0 draft; ADR 14"],
-    ["POST /api/v3/proposals/{}/line-items/{}/hold", "OpenProposal 3.0 draft; ADR 14"],
-    ["POST /api/v3/proposals/{}/assent", "OpenProposal 3.0 draft; ADR 14"],
+    ["GET /api/v1/op-gam/line-item/field-map", BRANCH],
+    ["POST /api/v1/op-gam/line-item", BRANCH],
+    ["POST /api/v1/op-gam/line-items", BRANCH],
+    ["POST /api/v1/op-gam/ad-unit", BRANCH],
+    ["POST /api/v1/op-many-to-one/proposal", BRANCH],
+    ["POST /api/v1/op-negotiations", BRANCH],
+    ["GET /api/v1/op-negotiations/{}", BRANCH],
+    ["POST /api/v1/op-negotiations/{}/messages", BRANCH],
+    ["POST /api/v1/op-negotiations/{}/commit", BRANCH],
   ]);
   const provisional = (call: { method: string; path: string }) =>
     PROVISIONAL.has(`${call.method} ${shape(call.path)}`);
@@ -143,7 +149,7 @@ describe("the console calls only routes the agent declares", () => {
 
     expect(
       shipped,
-      "the agent now declares these; remove them from PROVISIONAL and check the contract against ADR 14",
+      "the agent now declares these; remove them from PROVISIONAL and check the contract against ADR 15",
     ).toEqual([]);
   });
 

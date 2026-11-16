@@ -1,0 +1,88 @@
+{
+  "negotiation_id": "opn-1a2b3c4d",
+  "proposal_id": "examplepub-standard",
+  "version": 2,
+  "state": "open",
+  "line_item": {
+    "line_item_id": "inv-ctv-apex-series",
+    "status": "under_review",
+    "channel": "ctv",
+    "properties": {
+      "available": [
+        {
+          "id": "inv-ctv-apex-series",
+          "name": "Apex Series CTV"
+        }
+      ],
+      "included": [
+        "inv-ctv-apex-series"
+      ]
+    },
+    "content_detail": "Apex Series CTV",
+    "pricing": [
+      {
+        "cost_method": "CPM",
+        "gross_rate": 40.5,
+        "agreed_rate": 39.0,
+        "price_valid_until": "2026-11-17T10:00:00Z",
+        "currency": "USD"
+      }
+    ],
+    "commitment": {
+      "basis": "units",
+      "amount": 500000,
+      "flight_start": "2026-11-01",
+      "flight_end": "2026-11-30"
+    },
+    "hold_status": {
+      "hold_available": false,
+      "state": "none"
+    },
+    "transaction_mechanism": {
+      "available": [
+        "PREFERRED_DEAL"
+      ],
+      "included": [
+        "PREFERRED_DEAL"
+      ]
+    },
+    "deal_id_issuance": "at_commitment",
+    "external_references": [
+      {
+        "system": "seller-agent",
+        "id": "q-7f3e2a10",
+        "role": "quote"
+      }
+    ],
+    "correlation_id": "opn-1a2b3c4d"
+  },
+  "negotiation_history": [
+    {
+      "version": 1,
+      "actor": "buyer",
+      "action": "proposed",
+      "fields_changed": [
+        "pricing[].agreed_rate",
+        "commitment",
+        "transaction_mechanism"
+      ],
+      "at": "2026-11-16T10:00:00Z",
+      "ext": {
+        "rate": 36.0
+      }
+    },
+    {
+      "version": 2,
+      "actor": "seller",
+      "action": "countered",
+      "fields_changed": [
+        "pricing[].agreed_rate"
+      ],
+      "at": "2026-11-16T10:00:01Z",
+      "ext": {
+        "rate": 39.0,
+        "rationale": "Concession of 3.7% from 40.50; floor not reached."
+      }
+    }
+  ]
+}

@@ -1,14 +1,13 @@
-import { agentCard, type AgentCard } from "../api/endpoints";
-import { openProposalSupport, type Support } from "../api/capabilities";
+import { openProposalSupport, probeOpenProposal, type Support } from "../api/capabilities";
+import type { FieldMap } from "../api/endpoints";
 import { CADENCE } from "./cadence";
 import { useResource, type ResourceHandle } from "./useResource";
 
 /**
- * Same resource name and cadence as the health card that already reads the
- * agent card, so SWR shares one entry and opening this screen costs no extra
- * request.
+ * One resource for the probe and the field map it returns, so the screen's
+ * field-map table and every support check share a single request.
  */
-export function useOpenProposalSupport(): { support: Support; card: ResourceHandle<AgentCard> } {
-  const card = useResource("agent-card", agentCard, { refreshInterval: CADENCE.agentCard });
-  return { support: openProposalSupport(card.data), card };
+export function useOpenProposalSupport(): { support: Support; probe: ResourceHandle<FieldMap | null> } {
+  const probe = useResource("op-field-map", probeOpenProposal, { refreshInterval: CADENCE.opFieldMap });
+  return { support: openProposalSupport(probe.data), probe };
 }

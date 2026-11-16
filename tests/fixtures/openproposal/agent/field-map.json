@@ -1,0 +1,587 @@
+[
+  {
+    "gam_field": "id",
+    "op_field": "line_item_id, external_references[line_item]",
+    "status": "transformed",
+    "note": "Prefixed gam-li-."
+  },
+  {
+    "gam_field": "orderId",
+    "op_field": "external_references[order]",
+    "status": "mapped",
+    "note": ""
+  },
+  {
+    "gam_field": "name",
+    "op_field": "content_detail",
+    "status": "lossy",
+    "problem": "lifecycle_mismatch",
+    "note": "Trafficker label, not buyer-facing copy."
+  },
+  {
+    "gam_field": "externalId",
+    "op_field": "commitment.idempotency_key, correlation_id",
+    "status": "mapped",
+    "problem": "idempotency_and_correlation",
+    "note": "Often empty; without it a commit cannot be replayed safely."
+  },
+  {
+    "gam_field": "orderName",
+    "status": "no_home",
+    "note": "Kept in ext.gam."
+  },
+  {
+    "gam_field": "lineItemType",
+    "op_field": "transaction_mechanism",
+    "status": "lossy",
+    "problem": "lossy_enum",
+    "note": "STANDARD and SPONSORSHIP both become DIRECT_IO; HOUSE, NETWORK, BULK, ADSENSE, ADMOB, CLICK_TRACKING, BUMPER are not sales and cannot map."
+  },
+  {
+    "gam_field": "status",
+    "op_field": "status",
+    "status": "lossy",
+    "problem": "lifecycle_mismatch",
+    "note": "DELIVERING, PAUSED and DELIVERY_EXTENDED become agreed; COMPLETED becomes expired."
+  },
+  {
+    "gam_field": "isArchived",
+    "status": "no_home",
+    "problem": "lifecycle_mismatch",
+    "note": "OpenProposal has no archived state."
+  },
+  {
+    "gam_field": "reservationStatus",
+    "op_field": "hold_status.state",
+    "status": "transformed",
+    "note": "RESERVED becomes held or converted."
+  },
+  {
+    "gam_field": "reserveAtCreation",
+    "op_field": "hold_status.hold_available",
+    "status": "transformed",
+    "note": ""
+  },
+  {
+    "gam_field": "startDateTime",
+    "op_field": "commitment.flight_start",
+    "status": "transformed",
+    "problem": "date_time_semantics",
+    "note": "GAM date + time + time zone id; OpenProposal does not define a time zone."
+  },
+  {
+    "gam_field": "startDateTimeType",
+    "status": "lossy",
+    "problem": "date_time_semantics",
+    "note": "IMMEDIATELY and ONE_HOUR_FROM_NOW are lost."
+  },
+  {
+    "gam_field": "endDateTime",
+    "op_field": "commitment.flight_end",
+    "status": "transformed",
+    "problem": "date_time_semantics",
+    "note": ""
+  },
+  {
+    "gam_field": "unlimitedEndDateTime",
+    "op_field": "commitment.flight_end",
+    "status": "lossy",
+    "problem": "date_time_semantics",
+    "note": "OpenProposal requires flight_end; unlimited lines have none."
+  },
+  {
+    "gam_field": "autoExtensionDays",
+    "status": "no_home",
+    "problem": "delivery_settings_without_op_field",
+    "note": ""
+  },
+  {
+    "gam_field": "costType",
+    "op_field": "pricing[].cost_method",
+    "status": "transformed",
+    "problem": "lossy_enum",
+    "note": "The spec does not enumerate cost methods; CPD, CPA and VCPM have no defined meaning."
+  },
+  {
+    "gam_field": "costPerUnit",
+    "op_field": "pricing[].gross_rate",
+    "status": "transformed",
+    "note": "Micros to decimal."
+  },
+  {
+    "gam_field": "discountType",
+    "op_field": "pricing[].agreed_rate",
+    "status": "transformed",
+    "problem": "commercial_terms_missing",
+    "note": "agreed_rate is derived from the discount; OpenProposal has no discount field."
+  },
+  {
+    "gam_field": "discount",
+    "op_field": "pricing[].agreed_rate",
+    "status": "transformed",
+    "problem": "commercial_terms_missing",
+    "note": ""
+  },
+  {
+    "gam_field": "valueCostPerUnit",
+    "status": "no_home",
+    "problem": "commercial_terms_missing",
+    "note": "Value CPM for remnant ranking."
+  },
+  {
+    "gam_field": "budget",
+    "op_field": "commitment.amount (basis spend)",
+    "status": "transformed",
+    "problem": "goal_semantics",
+    "note": "Used only when no unit goal exists."
+  },
+  {
+    "gam_field": "contractedUnitsBought",
+    "op_field": "commitment.amount",
+    "status": "transformed",
+    "problem": "goal_semantics",
+    "note": "Used for sponsorships whose goal is a percentage."
+  },
+  {
+    "gam_field": "primaryGoal",
+    "op_field": "commitment.amount (basis units)",
+    "status": "lossy",
+    "problem": "goal_semantics",
+    "note": "DAILY goals, percentage goals and CLICKS / CONVERSIONS units have no OpenProposal basis."
+  },
+  {
+    "gam_field": "secondaryGoals",
+    "status": "no_home",
+    "problem": "many_to_one",
+    "note": "OpenProposal has one commitment."
+  },
+  {
+    "gam_field": "frequencyCaps",
+    "op_field": "frequency_cap",
+    "status": "lossy",
+    "problem": "many_to_one",
+    "note": "Only the first cap fits; GAM caps per user, OpenProposal per device, household or listener."
+  },
+  {
+    "gam_field": "creativePlaceholders",
+    "op_field": "formats",
+    "status": "transformed",
+    "problem": "format_registry_gap",
+    "note": "Sizes become display/WxH; companions, expected counts and template ids are lost."
+  },
+  {
+    "gam_field": "environmentType",
+    "op_field": "channel",
+    "status": "lossy",
+    "problem": "lossy_enum",
+    "note": "BROWSER or VIDEO_PLAYER only; CTV, DOOH and native cannot be told apart."
+  },
+  {
+    "gam_field": "allowedFormats",
+    "op_field": "channel",
+    "status": "transformed",
+    "note": "AUDIO makes the channel audio."
+  },
+  {
+    "gam_field": "videoMaxDuration",
+    "op_field": "formats",
+    "status": "transformed",
+    "problem": "format_registry_gap",
+    "note": "Becomes video/instream-<n>s; the format registry has no video ids yet (OQ-4)."
+  },
+  {
+    "gam_field": "skippableAdType",
+    "status": "no_home",
+    "problem": "format_registry_gap",
+    "note": ""
+  },
+  {
+    "gam_field": "companionDeliveryOption",
+    "status": "no_home",
+    "problem": "format_registry_gap",
+    "note": ""
+  },
+  {
+    "gam_field": "dealInfo",
+    "op_field": "external_references[deal]",
+    "status": "mapped",
+    "note": "deal_id_issuance only says how ids are minted."
+  },
+  {
+    "gam_field": "programmaticCreativeSource",
+    "status": "no_home",
+    "problem": "delivery_settings_without_op_field",
+    "note": ""
+  },
+  {
+    "gam_field": "thirdPartyMeasurementSettings",
+    "op_field": "measurement_source",
+    "status": "transformed",
+    "note": "Partner enum to vendor."
+  },
+  {
+    "gam_field": "viewabilityProviderCompanyIds",
+    "op_field": "measurement_source",
+    "status": "lossy",
+    "problem": "id_translation_needed",
+    "note": "Company ids need a lookup to a vendor name."
+  },
+  {
+    "gam_field": "priority",
+    "status": "no_home",
+    "problem": "delivery_settings_without_op_field",
+    "note": ""
+  },
+  {
+    "gam_field": "deliveryRateType",
+    "status": "no_home",
+    "problem": "delivery_settings_without_op_field",
+    "note": "Pacing."
+  },
+  {
+    "gam_field": "deliveryForecastSource",
+    "status": "no_home",
+    "problem": "delivery_settings_without_op_field",
+    "note": ""
+  },
+  {
+    "gam_field": "customPacingCurve",
+    "status": "no_home",
+    "problem": "delivery_settings_without_op_field",
+    "note": ""
+  },
+  {
+    "gam_field": "creativeRotationType",
+    "status": "no_home",
+    "problem": "delivery_settings_without_op_field",
+    "note": ""
+  },
+  {
+    "gam_field": "roadblockingType",
+    "status": "no_home",
+    "problem": "delivery_settings_without_op_field",
+    "note": ""
+  },
+  {
+    "gam_field": "repeatedCreativeServingEnabled",
+    "status": "no_home",
+    "problem": "delivery_settings_without_op_field",
+    "note": ""
+  },
+  {
+    "gam_field": "deliveryAllocationProfileId",
+    "status": "no_home",
+    "problem": "delivery_settings_without_op_field",
+    "note": ""
+  },
+  {
+    "gam_field": "competitiveConstraintScope",
+    "status": "no_home",
+    "problem": "delivery_settings_without_op_field",
+    "note": ""
+  },
+  {
+    "gam_field": "disableSameAdvertiserCompetitiveExclusion",
+    "op_field": "exclusivity",
+    "status": "lossy",
+    "problem": "commercial_terms_missing",
+    "note": "OpenProposal exclusivity is a selectable offer term, not an ad-server switch."
+  },
+  {
+    "gam_field": "appliedLabels",
+    "status": "no_home",
+    "problem": "delivery_settings_without_op_field",
+    "note": "Competitive exclusion and frequency labels."
+  },
+  {
+    "gam_field": "effectiveAppliedLabels",
+    "status": "not_applicable",
+    "note": "Derived from appliedLabels."
+  },
+  {
+    "gam_field": "childContentEligibility",
+    "status": "no_home",
+    "problem": "commercial_terms_missing",
+    "note": "Policy; no creative_policy shape."
+  },
+  {
+    "gam_field": "customVastExtension",
+    "status": "no_home",
+    "problem": "format_registry_gap",
+    "note": ""
+  },
+  {
+    "gam_field": "grpSettings",
+    "status": "no_home",
+    "problem": "goal_semantics",
+    "note": "GRP goals."
+  },
+  {
+    "gam_field": "activityAssociations",
+    "status": "no_home",
+    "problem": "goal_semantics",
+    "note": "CPA conversion tracking."
+  },
+  {
+    "gam_field": "creativeTargetings",
+    "status": "no_home",
+    "problem": "targeting_without_op_field",
+    "note": ""
+  },
+  {
+    "gam_field": "customFieldValues",
+    "status": "no_home",
+    "note": "Publisher custom fields; kept in ext.gam."
+  },
+  {
+    "gam_field": "notes",
+    "status": "no_home",
+    "note": "Kept in ext.gam."
+  },
+  {
+    "gam_field": "webPropertyCode",
+    "status": "no_home",
+    "note": "AdSense / Ad Exchange property."
+  },
+  {
+    "gam_field": "stats",
+    "status": "no_home",
+    "problem": "delivery_data_without_op_field",
+    "note": "Delivered impressions and clicks."
+  },
+  {
+    "gam_field": "deliveryIndicator",
+    "status": "no_home",
+    "problem": "delivery_data_without_op_field",
+    "note": ""
+  },
+  {
+    "gam_field": "deliveryData",
+    "status": "no_home",
+    "problem": "delivery_data_without_op_field",
+    "note": ""
+  },
+  {
+    "gam_field": "isMissingCreatives",
+    "status": "no_home",
+    "problem": "delivery_data_without_op_field",
+    "note": ""
+  },
+  {
+    "gam_field": "allowOverbook",
+    "status": "not_applicable",
+    "note": "Trafficking flag."
+  },
+  {
+    "gam_field": "skipInventoryCheck",
+    "status": "not_applicable",
+    "note": "Trafficking flag."
+  },
+  {
+    "gam_field": "skipCrossSellingRuleWarningChecks",
+    "status": "not_applicable",
+    "note": "Trafficking flag."
+  },
+  {
+    "gam_field": "youtubeKidsRestricted",
+    "status": "not_applicable",
+    "note": ""
+  },
+  {
+    "gam_field": "lastModifiedByApp",
+    "status": "not_applicable",
+    "note": "Metadata."
+  },
+  {
+    "gam_field": "lastModifiedDateTime",
+    "status": "not_applicable",
+    "note": "Metadata."
+  },
+  {
+    "gam_field": "creationDateTime",
+    "status": "not_applicable",
+    "note": "Metadata."
+  },
+  {
+    "gam_field": "targeting.inventoryTargeting",
+    "op_field": "properties",
+    "status": "transformed",
+    "problem": "id_translation_needed",
+    "note": "Ad unit and placement ids only; names and domains need an ad unit lookup."
+  },
+  {
+    "gam_field": "targeting.inventoryTargeting.excludedAdUnits",
+    "status": "no_home",
+    "problem": "targeting_without_op_field",
+    "note": "OpenProposal properties cannot express exclusions."
+  },
+  {
+    "gam_field": "targeting.geoTargeting",
+    "op_field": "geo.allowed",
+    "status": "transformed",
+    "problem": "id_translation_needed",
+    "note": "GAM location ids need translating to ISO 3166 codes."
+  },
+  {
+    "gam_field": "targeting.geoTargeting.excludedLocations",
+    "status": "no_home",
+    "problem": "targeting_without_op_field",
+    "note": "OpenProposal geo has no exclusion list."
+  },
+  {
+    "gam_field": "targeting.dayPartTargeting",
+    "op_field": "daypart",
+    "status": "transformed",
+    "problem": "targeting_without_op_field",
+    "note": "Copied as-is; the spec does not define the daypart shape."
+  },
+  {
+    "gam_field": "targeting.technologyTargeting.deviceCategoryTargeting",
+    "op_field": "device",
+    "status": "transformed",
+    "problem": "id_translation_needed",
+    "note": "GAM device category ids need a lookup."
+  },
+  {
+    "gam_field": "targeting.technologyTargeting",
+    "status": "no_home",
+    "problem": "targeting_without_op_field",
+    "note": "Browser, OS, carrier, bandwidth, manufacturer targeting."
+  },
+  {
+    "gam_field": "targeting.requestPlatformTargeting",
+    "op_field": "environments",
+    "status": "transformed",
+    "note": "BROWSER, MOBILE_APP, VIDEO_PLAYER."
+  },
+  {
+    "gam_field": "targeting.mobileApplicationTargeting",
+    "op_field": "properties.apps",
+    "status": "transformed",
+    "problem": "id_translation_needed",
+    "note": "Needs a MobileApplicationService lookup for platform and bundle."
+  },
+  {
+    "gam_field": "targeting.inventoryUrlTargeting",
+    "op_field": "properties.domains",
+    "status": "transformed",
+    "note": ""
+  },
+  {
+    "gam_field": "targeting.customTargeting",
+    "status": "no_home",
+    "problem": "targeting_without_op_field",
+    "note": "Key-values."
+  },
+  {
+    "gam_field": "targeting.userDomainTargeting",
+    "status": "no_home",
+    "problem": "targeting_without_op_field",
+    "note": ""
+  },
+  {
+    "gam_field": "targeting.contentTargeting",
+    "status": "no_home",
+    "problem": "targeting_without_op_field",
+    "note": "Content and video bundles."
+  },
+  {
+    "gam_field": "targeting.videoPositionTargeting",
+    "status": "no_home",
+    "problem": "format_registry_gap",
+    "note": "Pre-roll, mid-roll, post-roll."
+  },
+  {
+    "gam_field": "targeting.buyerUserListTargeting",
+    "status": "no_home",
+    "problem": "targeting_without_op_field",
+    "note": ""
+  },
+  {
+    "gam_field": "targeting.verticalTargeting",
+    "status": "no_home",
+    "problem": "targeting_without_op_field",
+    "note": ""
+  },
+  {
+    "gam_field": "targeting.contentLabelTargeting",
+    "status": "no_home",
+    "problem": "targeting_without_op_field",
+    "note": "Brand-safety labels."
+  },
+  {
+    "gam_field": "targeting.dateTimeRangeTargeting",
+    "status": "no_home",
+    "problem": "targeting_without_op_field",
+    "note": ""
+  },
+  {
+    "gam_field": "targeting.inventorySizeTargeting",
+    "status": "no_home",
+    "problem": "format_registry_gap",
+    "note": ""
+  },
+  {
+    "gam_field": "targeting.publisherProvidedSignalsTargeting",
+    "status": "no_home",
+    "problem": "targeting_without_op_field",
+    "note": ""
+  },
+  {
+    "gam_field": "order.id",
+    "op_field": "external_references[order]",
+    "status": "mapped",
+    "note": ""
+  },
+  {
+    "gam_field": "order.currencyCode",
+    "op_field": "pricing[].currency",
+    "status": "mapped",
+    "note": ""
+  },
+  {
+    "gam_field": "order.isProgrammatic",
+    "op_field": "transaction_mechanism",
+    "status": "transformed",
+    "note": "STANDARD becomes PG."
+  },
+  {
+    "gam_field": "order.poNumber",
+    "op_field": "billing.po_number",
+    "status": "transformed",
+    "note": ""
+  },
+  {
+    "gam_field": "order.externalOrderId",
+    "op_field": "external_references[external_order]",
+    "status": "mapped",
+    "note": ""
+  },
+  {
+    "gam_field": "order.advertiserId",
+    "status": "no_home",
+    "problem": "id_translation_needed",
+    "note": "Buyer identity is not on a line item."
+  },
+  {
+    "gam_field": "order.agencyId",
+    "status": "no_home",
+    "problem": "id_translation_needed",
+    "note": "Buyer identity is not on a line item."
+  },
+  {
+    "gam_field": "order.salespersonId",
+    "status": "no_home",
+    "note": ""
+  },
+  {
+    "gam_field": "order.traffickerId",
+    "status": "no_home",
+    "note": ""
+  },
+  {
+    "gam_field": "order.totalBudget",
+    "status": "no_home",
+    "note": "Order total spans all line items."
+  }
+]

@@ -1,6 +1,8 @@
 # 14. OpenProposal 3.0 against a provisional, detected contract
 
-**Status:** Accepted. Provisional by design; see the exit criteria.
+**Status:** Superseded by [ADR 15](0015-openproposal-upstream-branch.md). The
+reasoning below is left as it was written; it is the record of why this was
+chosen, not a description of the client today.
 
 ## Context
 

@@ -14,8 +14,6 @@ import { resetReachability } from "../../src/query/reachability";
 import { DealWizard } from "../../src/screens/DealWizard";
 import { loadCredential } from "../../src/credentials/store";
 import { readQuotes } from "../../src/credentials/recentQuotes";
-import { OPENPROPOSAL_PROTOCOL } from "../../src/api/capabilities";
-import { card, WHOLE } from "../fixtures/proposals-harness";
 
 /**
  * The wizard replaced four forms, each of which had its own test of the body
@@ -544,13 +542,17 @@ describe("the new-deal wizard", () => {
     );
   });
 
-  it("offers the proposal route only when the agent lists a proposal, and generates from it", async () => {
-    server.use(
-      http.get(`${API}/.well-known/agent.json`, () =>
-        HttpResponse.json(card(["opendirect21", OPENPROPOSAL_PROTOCOL])),
-      ),
-      http.get(`${API}/api/v3/proposals`, () => HttpResponse.json({ proposals: [WHOLE], total: 1 })),
-    );
+  /**
+   * No agent lists proposals — the legacy routes have no list and OpenProposal
+   * as upstream serves it has none (ADR 15) — so the route is offered on every
+   * agent and the id is pasted, the same "not knowing is not none" rule the
+   * curator route follows. Generating sends nothing to an OpenProposal route.
+   */
+  it("offers the proposal route without a list, and generates from a pasted id", async () => {
+    const opTraffic: string[] = [];
+    server.events.on("request:start", ({ request }) => {
+      if (new URL(request.url).pathname.includes("/op-")) opTraffic.push(request.url);
+    });
     const sent = capture("/deals");
     const user = userEvent.setup();
     mount();
@@ -561,25 +563,8 @@ describe("the new-deal wizard", () => {
     await user.click(await createButton());
 
     await waitFor(() => expect(sent).toEqual([{ proposal_id: "prop-1" }]));
-  });
-
-  it("does not offer the proposal route to an agent that lists none, or has no proposals", async () => {
-    const listed: string[] = [];
-    server.use(
-      http.get(`${API}/.well-known/agent.json`, () =>
-        HttpResponse.json(card(["opendirect21", OPENPROPOSAL_PROTOCOL])),
-      ),
-      http.get(`${API}/api/v3/proposals`, () => {
-        listed.push("list");
-        return HttpResponse.json({ proposals: [], total: 0 });
-      }),
-    );
-    mount();
-
-    // Advertises OpenProposal but holds none: nothing to generate a deal from.
-    await waitFor(() => expect(listed.length).toBeGreaterThan(0));
-    expect(screen.queryByRole("radio", { name: /From a proposal/ })).toBeNull();
-    expect(screen.getByRole("radio", { name: /From a template/ })).toBeInTheDocument();
+    expect(opTraffic).toEqual([]);
+    server.events.removeAllListeners();
   });
 
   it("does not offer the curator route when no curator is registered", async () => {
