@@ -15,6 +15,9 @@ export const EventRecord = z
     event_id: z.string().optional(),
     flow_id: z.string().nullable().optional(),
     session_id: z.string().nullable().optional(),
+    deal_id: z.string().nullable().optional(),
+    /** Differs per event type; only the keys a screen names are read. */
+    payload: z.record(z.string(), z.unknown()).nullable().catch(null).optional(),
   })
   .loose();
 export type EventRecord = z.infer<typeof EventRecord>;

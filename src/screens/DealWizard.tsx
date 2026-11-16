@@ -1012,12 +1012,18 @@ export function DealWizard({ open, onClose }: { open: boolean; onClose: () => vo
                       {firstQuoteHeld.quote_id} <CopyButton value={firstQuoteHeld.quote_id} />
                     </>,
                   ],
-                  ["Rate", `${money(firstQuoteHeld.pricing?.final_cpm)} CPM`],
+                  // Booking re-prices from an ACCEPTED negotiation about this quote
+                  // and strikes that price instead (services/deal_service.py:300-345,
+                  // resolved through the quote index). The console has no read of
+                  // a negotiation by quote id, so it labels this as the quoted
+                  // rate rather than claiming it is what will be booked.
+                  ["Quoted rate", `${money(firstQuoteHeld.pricing?.final_cpm)} CPM`],
                   ...(firstQuoteHeld.expires_at ? [["Expires", stamp(firstQuoteHeld.expires_at)] as const] : []),
                 ]}
               />
               <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-                Booking binds this quote and creates the deal. Retrying with the same quote returns
+                Booking binds this quote and creates the deal. If a negotiation about this quote was
+                accepted, the deal books at the agreed price, not the quoted rate above. Retrying with the same quote returns
                 the same deal. Quotes expire after 24 hours; going back and changing the request
                 discards this one.
               </Typography>

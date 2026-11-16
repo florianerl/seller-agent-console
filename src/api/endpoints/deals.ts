@@ -426,8 +426,12 @@ export const bookDeal = (
 
 export const dealFromTemplate = (
   c: Connection,
-  // Short codes only: the service uppercases this and looks it up in a
-  // PG/PD/PA map, so a long form like "preferred_deal" is a 400.
+  // Short codes are what the console sends. The service uppercases the value
+  // and maps it through an alias table that also takes the long forms
+  // (PROGRAMMATIC_GUARANTEED, PREFERRED_DEAL, PRIVATE_AUCTION, with or without
+  // the underscore), so "preferred_deal" works too
+  // (services/deal_service.py `_DEAL_TYPE_ALIASES`, :717-728). Anything else is
+  // a 400 `invalid_deal_type`.
   body: {
     deal_type: DealTypeCode;
     product_id: string;

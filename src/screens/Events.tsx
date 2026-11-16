@@ -34,6 +34,20 @@ const FILTER_HINTS = {
   session_id: "Shows only events with this session id, matched as typed. Optional.",
 } as const;
 
+/**
+ * Kept here, not in `api/endpoints/`: every function that barrel exports is
+ * swept as an endpoint. `deal.created` carries `payload.source`, the path that made the deal:
+ * `quote`, `template`, `curated`, `bulk` or `migration`
+ * (services/deal_service.py `_emit_deal_created`, :192-218, called at :427,
+ * :702, :845, :1575, :1673). Left a plain string: a sixth path upstream adds
+ * should show up as its own word, not vanish.
+ */
+function dealCreatedSource(event: EventRecord): string | undefined {
+  if (event.event_type !== "deal.created") return undefined;
+  const source = event.payload?.source;
+  return typeof source === "string" && source !== "" ? source : undefined;
+}
+
 export default function EventsScreen() {
   const [filters, setFilters] = useState({ event_type: "", flow_id: "", session_id: "" });
   const [selected, setSelected] = useState<EventRecord | undefined>();
@@ -133,6 +147,7 @@ export default function EventsScreen() {
                 <TableHead>
                   <TableRow>
                     <TableCell sx={{ fontWeight: 600 }}>Type</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>Source</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>When</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Flow</TableCell>
                   </TableRow>
@@ -153,6 +168,9 @@ export default function EventsScreen() {
                           variant="outlined"
                           sx={{ fontSize: 12 }}
                         />
+                      </TableCell>
+                      <TableCell sx={{ fontSize: 12 }} data-cell="event-source">
+                        {dealCreatedSource(event) ?? "—"}
                       </TableCell>
                       <TableCell sx={{ color: palette.textSecondary }}>
                         {stamp(event.timestamp)}
