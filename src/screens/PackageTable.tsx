@@ -386,7 +386,7 @@ export function PackageTable() {
 
   const assembleRow = editing?.kind === "assemble" && (
     <TableRow data-row="package" data-editing="true">
-      <TableCell colSpan={4}>
+      <TableCell colSpan={3}>
         <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap>
           {nameField}
           <ProductMultiPicker
@@ -450,22 +450,24 @@ export function PackageTable() {
         </TableCell>
         <TableCell sx={cellSx}>{pkg.rate_type ?? "—"}</TableCell>
         <TableCell>
-          {priceField(
-            "Base price",
-            "base",
-            "Leave blank to keep the stored base price. The price shown in this column is this key's, after its tier discount, so it is not the base.",
-            "New base",
-          )}
-        </TableCell>
-        <TableCell>
-          {/* Upstream #125 removed the floor from every read view, so the
-              agent cannot say what it holds; blank means "leave it". */}
-          {priceField(
-            "Floor",
-            "floor",
-            "Lowest price the package may be sold at. The agent does not return the current floor, so leave blank to keep the stored one.",
-            "New floor",
-          )}
+          {/* Base and floor share one cell. Upstream #125 removed the floor
+              from every read view, so the read row has nothing to put in a
+              floor column; keeping a column only for the edit row's input
+              left two blank headers. */}
+          <Stack direction="row" spacing={1}>
+            {priceField(
+              "Base price",
+              "base",
+              "Leave blank to keep the stored base price. The price shown in this column is this key's, after its tier discount, so it is not the base.",
+              "New base",
+            )}
+            {priceField(
+              "Floor",
+              "floor",
+              "Lowest price the package may be sold at. The agent does not return the current floor, so leave blank to keep the stored one.",
+              "New floor",
+            )}
+          </Stack>
         </TableCell>
         <TableCell align="right">
           <Stack direction="row" spacing={1} justifyContent="flex-end">
@@ -519,11 +521,6 @@ export function PackageTable() {
             ? plain(pkg.exact_price, pkg.currency)
             : (pkg.price_range ?? "—")}
         </TableCell>
-        {/* No floor cell: upstream #125 dropped floor_price from the
-            authenticated package view, and a blank "—" would read as "no
-            floor". The edit form still takes one. The cell below stays so the
-            columns line up with the edit row's floor input. */}
-        <TableCell />
         <TableCell align="right">
           <Stack direction="row" spacing={1} justifyContent="flex-end">
             <Hint hint={blocked ? WRITES_OFF_HINT : undefined}>
@@ -587,7 +584,6 @@ export function PackageTable() {
                 <TableCell sx={{ fontWeight: 600 }}>Package</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>Rate</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>Price</TableCell>
-                <TableCell />
                 <TableCell />
               </TableRow>
             </TableHead>
