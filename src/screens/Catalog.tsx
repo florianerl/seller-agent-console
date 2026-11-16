@@ -84,6 +84,15 @@ function OverrideEditor({
   const [inventoryType, setInventoryType] = useState<string>("display");
   const [reason, setReason] = useState("");
 
+  // Upstream #103: /products and /products/{id} apply the stored override on
+  // read, so the cached product (and every page of the list) shows the old
+  // type until re-read. "products" is exact because pickers share that key.
+  const overrideInvalidates = [
+    `inventory-type:${productId}`,
+    `product:${productId}`,
+    "products",
+    "products:offset:*",
+  ];
   const set = useMutation<{ inventory_type: string; reason?: string }, unknown>(
     (c, args) =>
       setInventoryTypeOverride(c, productId, {
@@ -91,11 +100,11 @@ function OverrideEditor({
         inventory_type: args.inventory_type,
         ...(args.reason ? { reason: args.reason } : {}),
       }),
-    { invalidates: [`inventory-type:${productId}`] },
+    { invalidates: overrideInvalidates },
   );
   const clear = useMutation<Record<string, never>, unknown>(
     (c) => deleteInventoryTypeOverride(c, productId),
-    { invalidates: [`inventory-type:${productId}`] },
+    { invalidates: overrideInvalidates },
   );
   const failed = [set.last, clear.last].find((r) => r && r.kind !== "ok");
 
