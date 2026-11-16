@@ -28,7 +28,12 @@ function mount() {
 }
 
 async function fillAndSubmit(user: ReturnType<typeof userEvent.setup>) {
-  await user.type(await screen.findByLabelText("Request reason"), "buyer asked");
+  // The fields render disabled until CredentialProvider has read the stored
+  // credential (writes off while loading); typing into them before then lands
+  // nothing, which made this file fail about one run in three.
+  const reason = await screen.findByLabelText("Request reason");
+  await waitFor(() => expect(reason).toBeEnabled());
+  await user.type(reason, "buyer asked");
   await user.type(screen.getByLabelText("New value"), "2026-10-15");
   await user.click(screen.getByRole("button", { name: "Create request" }));
   const dialog = await screen.findByRole("dialog");
