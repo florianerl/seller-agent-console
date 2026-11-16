@@ -76,7 +76,9 @@ export function MastheadMotif() {
   const [burst, setBurst] = useState(1);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [frame, setFrame] = useState(() => ({
-    w: typeof window !== "undefined" ? window.innerWidth : VIEW_W,
+    // A hidden or zero-size window reports innerWidth 0, and pinInViewBox
+    // divides by it: the pin lines came out as x2="-Infinity".
+    w: (typeof window !== "undefined" && window.innerWidth) || VIEW_W,
     h: VIEW_H,
   }));
   const cols = getColsForWidth(frame.w);
@@ -127,9 +129,10 @@ export function MastheadMotif() {
 
   const pinInViewBox = (tip: readonly [number, number]): [number, number] => {
     const scale = CHIP_PX / CHIP_VB;
-    const hx = frame.w - CHIP_RIGHT - CHIP_PX + tip[0] * scale;
+    const fw = frame.w > 0 ? frame.w : VIEW_W;
+    const hx = fw - CHIP_RIGHT - CHIP_PX + tip[0] * scale;
     const hy = (frame.h - CHIP_PX) / 2 + tip[1] * scale;
-    return [(hx / frame.w) * viewW, (hy / frame.h) * VIEW_H];
+    return [(hx / fw) * viewW, (hy / frame.h) * VIEW_H];
   };
 
   const point = (node: number): readonly [number, number] => {
