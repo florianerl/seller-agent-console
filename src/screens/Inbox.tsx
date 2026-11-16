@@ -40,10 +40,13 @@ import { TipField } from "../components/TipField";
 import { EnumSelect } from "../components/EnumSelect";
 import { LEGACY_DEAL_TYPES } from "../api/vocabulary";
 import {
+  dspCandidates,
   explainWarning,
+  isDspResolution,
   mergeNegotiation,
   negotiationLog,
   proposalContext,
+  type DspCandidate,
   type NegotiationLog,
   type ProposalContext,
 } from "./approvalContext";
@@ -113,11 +116,14 @@ function DecisionControls({
   approvalId,
   status,
   proposal,
+  dsp,
   onDecided,
 }: {
   approvalId: string;
   status: string;
   proposal: ProposalContext | undefined;
+  /** Set only for a `dsp_resolution` gate: the DSPs on offer (possibly none listed). */
+  dsp: { candidates: DspCandidate[] } | undefined;
   onDecided: (result: Result<unknown>) => void;
 }) {
   const { writesEnabled } = useCredential();
@@ -125,6 +131,7 @@ function DecisionControls({
   const [name, setName] = useState("");
   const [terms, setTerms] = useState<TermsDraft>(() => baselineTerms(proposal));
   const base = baselineTerms(proposal);
+  const [dspId, setDspId] = useState("");
   const [pendingDecision, setPendingDecision] = useState<"approve" | "reject" | "counter" | undefined>();
 
   const decide = useMutation<{ id: string; body: ApprovalDecisionInput }, unknown>(
@@ -140,8 +147,20 @@ function DecisionControls({
   const busy = decide.pending;
   const problems = termsProblems(terms);
   const termsInvalid = problems.price || problems.impressions || problems.end;
-  const blocked = !writesEnabled || !decidable || termsInvalid;
-  const pendingTerms = termsBody(terms, base);
+  const blocked = !writesEnabled || !decidable || (!dsp && termsInvalid);
+  // The proposal terms mean nothing to an SSP-distribution gate — the agent
+  // refuses any modification key but its own short list — so they are neither
+  // shown nor sent there.
+  const pendingTerms = dsp ? undefined : termsBody(terms, base);
+  // Approving without a DSP is a 400 upstream, so Approve waits for one. Reject
+  // needs none: nothing is created.
+  const dspChosen = dspId.trim() !== "";
+  const chosenCandidate = dsp?.candidates.find((c) => String(c.id) === dspId);
+  const selectedDspId: string | number = chosenCandidate
+    ? chosenCandidate.id
+    : /^\d+$/.test(dspId.trim())
+      ? Number(dspId.trim())
+      : dspId.trim();
   const setTerm = <K extends keyof TermsDraft>(key: K, value: TermsDraft[K]) =>
     setTerms((current) => ({ ...current, [key]: value }));
 
@@ -151,6 +170,51 @@ function DecisionControls({
     <Box sx={{ mt: 2 }} data-block="approval-controls">
       <Typography sx={{ fontSize: 13, fontWeight: 600, mb: 1.5 }}>Decide this approval</Typography>
 
+      {dsp && (
+        <>
+          <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 0.5 }}>1. Choose the DSP</Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+            The buyer's seat id matched more than one DSP and the agent will not guess. Approving records your
+            choice, sent as modifications.selected_dsp_id; the agent refuses one that is not among the candidates.
+          </Typography>
+          <FormRow>
+            {dsp.candidates.length > 0 ? (
+              <TipField
+                select
+                size="small"
+                label="DSP"
+                value={dspId}
+                onChange={(e) => setDspId(e.target.value)}
+                disabled={!writesEnabled || !decidable || busy}
+                sx={{ minWidth: 320 }}
+                hint="The DSP the deal is created for. Required to approve."
+                slotProps={{ select: { native: true }, inputLabel: { shrink: true } }}
+                data-field="selected-dsp"
+              >
+                <option value="">Choose a DSP…</option>
+                {dsp.candidates.map((c) => (
+                  <option key={String(c.id)} value={String(c.id)}>
+                    {`DSP ${c.id}${c.name ? ` — ${c.name}` : ""}${c.seat ? ` (seat ${c.seat})` : ""}`}
+                  </option>
+                ))}
+              </TipField>
+            ) : (
+              <TipField
+                size="small"
+                label="DSP id"
+                value={dspId}
+                onChange={(e) => setDspId(e.target.value)}
+                disabled={!writesEnabled || !decidable || busy}
+                sx={{ minWidth: 200 }}
+                hint="The agent listed no candidates on this approval, so enter the DSP id. Required to approve."
+                data-field="selected-dsp"
+              />
+            )}
+          </FormRow>
+        </>
+      )}
+      {!dsp && (
+        <>
       <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 0.5 }}>
         1. Change the terms (optional)
       </Typography>
@@ -212,6 +276,8 @@ function DecisionControls({
           disabled={!writesEnabled || !decidable || busy}
         />
       </FormRow>
+        </>
+      )}
       <Typography sx={{ fontSize: 12, fontWeight: 600, mt: 2, mb: 1 }}>
         2. Decide
       </Typography>
@@ -239,12 +305,13 @@ function DecisionControls({
           size="small"
           variant="contained"
           data-action="approve"
-          disabled={blocked || busy}
+          disabled={blocked || busy || (dsp !== undefined && !dspChosen)}
           onClick={() => setPendingDecision("approve")}
         >
           Approve
         </Button>
         </Hint>
+        {!dsp && (
         <Hint hint="Answer with your changed terms as a counter-proposal instead of accepting or declining. Needs at least one changed term. You confirm first; when you later resume, the flow emits proposal.countered.">
         <Button
           size="small"
@@ -256,6 +323,7 @@ function DecisionControls({
           Counter
         </Button>
         </Hint>
+        )}
         <Hint hint="Reject this approval. You confirm first; the decision is recorded but the proposal flow is not resumed until you do that separately.">
         <Button
           size="small"
@@ -269,12 +337,22 @@ function DecisionControls({
         </Hint>
       </FormRow>
       <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75, mb: 1.5 }}>
+        {dsp ? (
+          <>
+            Approve records your choice of DSP; it does not create the deal. After you decide, a "Resume the flow"
+            section appears in this panel, and resuming is what creates it. Reject declines distribution. Your name is
+            saved as typed and is not verified.
+          </>
+        ) : (
+          <>
         {/* Sent because the agent's own default is the literal "anonymous",
             which is a worse record than a name nobody checked. */}
         Approve accepts the proposal, with your changed terms if you made any. Counter answers
         with your changed terms instead. Reject declines it. The decision is recorded together with
         any changed terms; it does not restart the proposal flow. After you decide, a "Resume the flow" section appears
         in this panel with a Resume flow button; that hands the decision back to the flow. Your name is saved as typed and is not verified.
+          </>
+        )}
       </Typography>
 
       {!decidable && writesEnabled && (
@@ -305,6 +383,12 @@ function DecisionControls({
         onCancel={() => setPendingDecision(undefined)}
         consequence={
           <>
+            {dsp && pendingDecision === "approve" && (
+              <>
+                The deal will be created for DSP <strong>{String(selectedDspId)}</strong>
+                {chosenCandidate?.name ? ` (${chosenCandidate.name})` : ""} when you resume.{" "}
+              </>
+            )}
             {pendingTerms && (
               <>
                 {pendingDecision === "counter" ? "The counter-proposal is" : "This also sends the changed terms"}:{" "}
@@ -330,7 +414,11 @@ function DecisionControls({
           const decision = pendingDecision;
           setPendingDecision(undefined);
           if (!decision) return;
-          const modifications = termsBody(terms, base);
+          const modifications: Record<string, unknown> | undefined = dsp
+            ? decision === "approve"
+              ? { selected_dsp_id: selectedDspId }
+              : undefined
+            : termsBody(terms, base);
           void decide
             .run({
               id: approvalId,
@@ -353,7 +441,10 @@ function DecisionControls({
  * decision exists: before that the agent refuses with a 400 ("has not been
  * decided yet"), so a Resume button beside Approve could only ever fail.
  *
- * Upstream resumes one kind of gate — a proposal decision — by re-creating
+ * Upstream resumes two kinds of gate. An SSP distribution waiting on a DSP
+ * (`ssp_distribution / dsp_resolution`) creates the deal at the SSP with the
+ * DSP the operator chose. A proposal decision (`proposal_handling /
+ * proposal_decision`) is resumed by re-creating
  * the proposal flow from its snapshot and emitting proposal.accepted,
  * .rejected or .countered. It stores nothing else, and it is not idempotent:
  * each call emits the event again. Deciding over MCP (`approve_or_reject`)
@@ -375,10 +466,11 @@ function ResumeControls({
   // No invalidation: resume changes nothing the approval reads return.
   const resume = useMutation<{ id: string }, DecisionAck>((c, args) => resumeApproval(c, args.id));
 
-  if (flowType !== "proposal_handling" || gateName !== "proposal_decision") {
+  const dspGate = isDspResolution(flowType, gateName);
+  if (!dspGate && (flowType !== "proposal_handling" || gateName !== "proposal_decision")) {
     return (
       <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }} data-state="not-resumable">
-        The agent can only resume proposal decisions. This approval is {flowType || "an unnamed flow"}
+        The agent can only resume proposal decisions and DSP-resolution approvals. This approval is {flowType || "an unnamed flow"}
         {gateName ? ` / ${gateName}` : ""}, so there is no flow to hand the decision back to.
       </Typography>
     );
@@ -388,6 +480,47 @@ function ResumeControls({
     decision === "approve" ? "proposal.accepted" : decision === "counter" ? "proposal.countered" : "proposal.rejected";
   const result = resume.last?.kind === "ok" ? resume.last.data : undefined;
   const field = (key: string) => (typeof result?.[key] === "string" ? result[key] : undefined);
+
+  if (dspGate) {
+    return (
+      <Box sx={{ mt: 2 }} data-block="resume-controls">
+        <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 1 }}>Resume the flow</Typography>
+        <WriteForm
+          title="Resume the SSP distribution?"
+          confirmLabel="Resume flow"
+          hint="Creates the deal at the SSP for the DSP you chose. The agent refuses a second resume once the deal exists."
+          action="resume"
+          blocked={!writesEnabled}
+          pending={resume.pending}
+          last={result ? undefined : resume.last}
+          onConfirm={() => void resume.run({ id: approvalId })}
+          consequence={
+            decision === "approve" ? (
+              <>
+                Creates the deal at the SSP for the DSP chosen in the decision. The agent marks the
+                approval <code>consumed</code> first, so a repeat is refused; if the SSP's answer
+                cannot be confirmed the approval becomes <code>outcome_unknown</code>, and the next
+                resume only looks the deal up rather than creating a second. If creation fails the
+                approval goes back to approved and can be resumed again.
+              </>
+            ) : (
+              <>
+                The decision is {decision || "unreported"}, so nothing is created at the SSP; the
+                agent only reports the decision back.
+              </>
+            )
+          }
+        />
+        {result && (
+          <Typography variant="body2" sx={{ mt: 1 }} data-state="resumed">
+            Resumed. Deal {field("deal_id") ?? "—"}
+            {field("external_deal_id") ? ` (external id ${field("external_deal_id")})` : ""}
+            {field("ssp") ? ` at ${field("ssp")}` : ""} is now {field("status")?.replace(/_/g, " ") ?? "—"}.
+          </Typography>
+        )}
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ mt: 2 }} data-block="resume-controls">
@@ -620,6 +753,13 @@ function ProposalView({
   );
 }
 
+/** What the two statuses added upstream (#111) mean, for the operator. */
+const STATUS_WORDS: Readonly<Record<string, string>> = {
+  consumed: "Approved and already acted on: the agent has created the deal this approval gated.",
+  outcome_unknown:
+    "Approved, but the agent could not confirm the SSP created the deal. Resuming looks the deal up and never creates a second.",
+};
+
 function Decision({
   approvalId,
   locked,
@@ -638,6 +778,11 @@ function Decision({
 
   if (detail.loading && !detail.data && !locked) return <Skeleton height={24} />;
   if (!detail.data && !locked) {
+    // Every approvals route is operator-only upstream, so a key that read the
+    // list can still be refused here (a role change, a revoked key).
+    if (detail.result?.kind === "rejected") {
+      return <GatedNotice what="This approval" result={detail.result} />;
+    }
     return (
       <Typography variant="body2" color="text.secondary">
         {detail.result ? describe(detail.result) : "no detail"}
@@ -657,6 +802,13 @@ function Decision({
         <Field label="Kind">{request.gate_name || "—"}</Field>
         <Field label="Status">
           <StatusChip status={request.status} />
+          {/* Said in words beside the chip: these two arrive from an agent
+              newer than the console's status vocabulary. */}
+          {STATUS_WORDS[request.status] && (
+            <Box sx={{ fontSize: 12, color: palette.textSecondary, mt: 0.25 }} data-state="status-words">
+              {STATUS_WORDS[request.status]}
+            </Box>
+          )}
         </Field>
         <Field label="Flow">{request.flow_type || "—"}</Field>
         <Field label="Flow id">
@@ -722,6 +874,11 @@ function Decision({
           approvalId={approvalId}
           status={request?.status ?? "pending"}
           proposal={proposal}
+          dsp={
+            request && isDspResolution(request.flow_type, request.gate_name)
+              ? { candidates: dspCandidates(request) }
+              : undefined
+          }
           onDecided={(result) => {
             if (result.kind === "ok") onLocked();
             detail.refresh();

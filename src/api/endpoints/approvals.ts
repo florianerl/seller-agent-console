@@ -6,12 +6,17 @@ const PATHS = {
   approvals: "/approvals",
 } as const;
 
-// --- approvals (any valid key; not operator-gated) --------------------------
+// --- approvals (operator key only) ------------------------------------------
 
 /**
- * `GET /approvals` requires *a* key but not the operator role — a buyer key
- * reads it too. It also writes: listing flips any pending approval past its
- * `expires_at` to `timed_out` and persists that, so the screen discloses it.
+ * Every `/approvals` route is operator-gated since upstream #111: a buyer key
+ * gets 403, because an approval snapshots deal pricing and resume can create
+ * the deal. (It was any-valid-key before; the screen renders `GatedNotice` for
+ * the rejection.) `GET /approvals` also writes: listing flips any pending
+ * approval past its `expires_at` to `timed_out` and persists that, so the
+ * screen discloses it. Statuses are `pending`, `approved`, `rejected`,
+ * `timed_out`, and — for an approval the agent has acted on — `consumed` and
+ * `outcome_unknown`.
  */
 export const ApprovalRequestRecord = z
   .object({
@@ -88,7 +93,14 @@ export const approvalById = (
  * |         | its snapshot and emits proposal.accepted /    |          | |
  * |         | .rejected / .countered again. Refused (400)   |          | |
  * |         | before a decision exists, and for any gate    |          | |
- * |         | but proposal_handling / proposal_decision.    |          | |
+ * |         | but proposal_handling / proposal_decision and |          | |
+ * |         | ssp_distribution / dsp_resolution (see below).|          | |
+ *
+ * Resuming `ssp_distribution / dsp_resolution` is different in kind: it
+ * creates the deal at the SSP, once. The approval is marked `consumed` first
+ * (a repeat answers 409) and put back to `approved` if creation fails; when the
+ * SSP's answer cannot be confirmed it is left `outcome_unknown`, and the next
+ * resume only looks the deal up, never creates a second.
  *
  * Both are refused before they are sent while the write switch is off
  * (src/api/policy.ts, ADR 12).

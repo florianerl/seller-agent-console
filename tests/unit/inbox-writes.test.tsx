@@ -300,12 +300,21 @@ describe("deciding an approval", () => {
     server.use(
       http.get(`${API}/proposals/prop-1/negotiation`, () =>
         HttpResponse.json({
+          // What upstream's NegotiationStatusResponse sends: no strategy, base or
+          // floor price, max_rounds, concession figures or rationale.
+          negotiation_id: "neg-1",
           proposal_id: "prop-1",
+          quote_id: null,
+          product_id: "p-1",
+          buyer_tier: "public",
           status: "active",
-          max_rounds: 3,
+          total_rounds: 2,
+          started_at: "2026-10-02T14:11:00",
+          completed_at: null,
+          package_id: null,
           rounds: [
-            { round_number: 1, action: "counter", buyer_price: 1, seller_price: 8, rationale: null, timestamp: "2026-10-02T14:11:01" },
-            { round_number: 2, action: "counter", buyer_price: 6, seller_price: 7.5, rationale: null, timestamp: "2026-10-02T15:00:00" },
+            { round_number: 1, action: "counter", buyer_price: 1, seller_price: 8, timestamp: "2026-10-02T14:11:01" },
+            { round_number: 2, action: "counter", buyer_price: 6, seller_price: 7.5, timestamp: "2026-10-02T15:00:00" },
           ],
         }),
       ),
@@ -324,6 +333,12 @@ describe("deciding an approval", () => {
     expect(bubbles[3]!.textContent).toContain("Counters at USD 7.5 CPM");
     // Round 1 keeps what only the snapshot knew: the message to the buyer.
     expect(bubbles[1]!.textContent).toContain("We cannot accept $1.00 CPM.");
+    expect(bubbles[1]!.textContent).toContain("Agent's reasoning: Buyer offer is below our floor.");
+    // Round 2 exists only in the live record, which carries no reasoning: the
+    // chat says so once instead of leaving a silent gap.
+    expect(bubbles[3]!.textContent).not.toContain("Agent's reasoning");
+    expect(chat.querySelectorAll('[data-note="reasoning-not-reported"]')).toHaveLength(1);
+    expect(chat.textContent).toMatch(/no longer reports its reasoning/);
     expect(document.querySelector('[data-note="negotiation-source"]')?.textContent).toMatch(
       /^Live negotiation, as of /,
     );
@@ -619,9 +634,130 @@ describe("deciding an approval", () => {
     await user.click(await screen.findByRole("button", { name: "Details" }));
 
     await waitFor(() =>
-      expect(document.querySelector('[data-state="not-resumable"]')?.textContent).toMatch(/only resume proposal decisions/),
+      expect(document.querySelector('[data-state="not-resumable"]')?.textContent).toMatch(/only resume proposal decisions and DSP-resolution/),
     );
     expect(document.querySelector('[data-action="resume"]')).toBeNull();
+  });
+
+  describe("a DSP-resolution gate", () => {
+    const DSP_GATE = {
+      ...GATE,
+      flow_type: "ssp_distribution",
+      gate_name: "dsp_resolution",
+      proposal_id: "",
+      context: {
+        seat_ids: ["seat-9"],
+        candidates: [
+          { dsp_id: 85, requested_seat_id: "seat-9", extended_seat_id: "", buyer_name: "Alpha DSP", status: "active" },
+          { dsp_id: 91, requested_seat_id: "seat-9", extended_seat_id: "", buyer_name: "Beta DSP", status: "active" },
+        ],
+      },
+    };
+
+    function serveDsp(decided: boolean, status = "pending") {
+      server.use(
+        http.get(`${API}/approvals`, () => HttpResponse.json({ approvals: [DSP_GATE] })),
+        http.get(`${API}/approvals/appr-1`, () =>
+          HttpResponse.json({
+            request: { ...DSP_GATE, status },
+            response: decided
+              ? { decision: "approve", decided_by: "", decided_by_principal: "key:ops", decided_at: null, reason: "" }
+              : null,
+          }),
+        ),
+      );
+    }
+
+    it("keeps Approve disabled until a DSP is chosen, then sends selected_dsp_id", async () => {
+      await connect(true);
+      serveDsp(false);
+      const bodies: unknown[] = [];
+      server.use(
+        http.post(`${API}/approvals/appr-1/decide`, async ({ request }) => {
+          bodies.push(await request.json());
+          return HttpResponse.json({ ok: true });
+        }),
+      );
+      const user = userEvent.setup();
+      renderScreen();
+      await openGate(user);
+
+      const approve = document.querySelector('[data-action="approve"]') as HTMLElement;
+      expect(approve).toBeDisabled();
+      // Proposal terms and Counter mean nothing to an SSP gate.
+      expect(document.querySelector('[data-action="counter"]')).toBeNull();
+      const select = document.querySelector('[data-field="selected-dsp"] select, select[data-field="selected-dsp"]') as HTMLSelectElement;
+      expect(select).toBeTruthy();
+      expect([...select.options].map((o) => o.textContent)).toContain("DSP 91 — Beta DSP (seat seat-9)");
+
+      await user.selectOptions(select, "91");
+      expect(approve).toBeEnabled();
+      await user.click(approve);
+      await user.click(document.querySelector('[data-action="confirm-mutation"]') as HTMLElement);
+
+      await waitFor(() => expect(bodies).toHaveLength(1));
+      expect(bodies[0]).toEqual({ decision: "approve", modifications: { selected_dsp_id: 91 } });
+    });
+
+    it("asks for the id when the context lists no candidates", async () => {
+      await connect(true);
+      const bare = { ...DSP_GATE, context: {} };
+      server.use(
+        http.get(`${API}/approvals`, () => HttpResponse.json({ approvals: [bare] })),
+        http.get(`${API}/approvals/appr-1`, () => HttpResponse.json({ request: bare, response: null })),
+      );
+      const user = userEvent.setup();
+      renderScreen();
+      await openGate(user);
+
+      const approve = document.querySelector('[data-action="approve"]') as HTMLElement;
+      expect(approve).toBeDisabled();
+      await user.type(screen.getByLabelText("DSP id"), "85");
+      expect(approve).toBeEnabled();
+    });
+
+    it("offers resume once decided, and says it creates the deal", async () => {
+      await connect(true);
+      serveDsp(true);
+      const resumed: string[] = [];
+      server.use(
+        http.post(`${API}/approvals/appr-1/resume`, () => {
+          resumed.push("resume");
+          return HttpResponse.json({ deal_id: "deal-1", external_deal_id: "ext-7", ssp: "index_exchange", status: "active" });
+        }),
+      );
+      const user = userEvent.setup();
+      renderScreen();
+      await user.click(await screen.findByRole("button", { name: "Details" }));
+
+      const resume = await waitFor(() => {
+        const el = document.querySelector('[data-action="resume"]');
+        expect(el).toBeEnabled();
+        return el as HTMLElement;
+      });
+      expect(document.querySelector('[data-state="not-resumable"]')).toBeNull();
+      await user.click(resume);
+      const dialog = await screen.findByRole("dialog");
+      expect(dialog.textContent).toMatch(/creates the deal at the SSP/i);
+      expect(dialog.textContent).toMatch(/outcome_unknown/);
+      await user.click(document.querySelector('[data-action="confirm-mutation"]') as HTMLElement);
+
+      await waitFor(() => expect(resumed).toEqual(["resume"]));
+      await waitFor(() =>
+        expect(document.querySelector('[data-state="resumed"]')?.textContent).toMatch(/deal-1 \(external id ext-7\) at index_exchange is now active/),
+      );
+    });
+
+    it("explains consumed and outcome_unknown in words", async () => {
+      await connect(true);
+      serveDsp(true, "outcome_unknown");
+      const user = userEvent.setup();
+      renderScreen();
+      await user.click(await screen.findByRole("button", { name: "Details" }));
+      await waitFor(() =>
+        expect(document.querySelector('[data-state="status-words"]')?.textContent).toMatch(/could not confirm/),
+      );
+    });
   });
 
   it("keeps a gate decided here on screen after the queue drops it, so it can still be resumed", async () => {

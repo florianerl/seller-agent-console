@@ -25,19 +25,20 @@ export const NegotiationRound = z
     seller_price: z.number().nullable().catch(null),
     /** accept, counter, reject — the agent's vocabulary, rendered as sent. */
     action: z.string(),
-    concession_pct: z.number().nullable().catch(null),
-    cumulative_concession_pct: z.number().nullable().catch(null),
-    rationale: z.string().nullable().catch(null),
     timestamp: z.string().nullable().catch(null),
   })
   .loose();
 export type NegotiationRound = z.infer<typeof NegotiationRound>;
 
 /**
- * The response carries no schema at all in openapi.json, and the deployment
- * this was written against had no negotiation to read. Everything below the
- * proposal id is therefore optional with a default: a missing field must show
- * as "not reported" rather than fail the parse and blank the screen.
+ * Upstream now types this response (`NegotiationStatusResponse`) as a
+ * whitelist for the counterparty: `strategy`, `base_price`, `floor_price`,
+ * `max_rounds` and each round's `concession_pct`, `cumulative_concession_pct`
+ * and `rationale` are no longer sent, because together they reconstruct the
+ * seller's floor. Anonymous callers get 401. Everything below the proposal id
+ * keeps a default so an older agent's omission shows as "not reported" rather
+ * than blanking the screen; `quote_id` and `total_rounds` are sent but nothing
+ * renders them, so they are left to `.loose()`.
  */
 export const NegotiationStatus = z
   .object({
@@ -45,7 +46,6 @@ export const NegotiationStatus = z
     status: z.string().nullable().catch(null),
     rounds: z.array(NegotiationRound).catch([]),
     current_round: z.number().nullable().catch(null),
-    max_rounds: z.number().nullable().catch(null),
     final_price: z.number().nullable().catch(null),
     currency: z.string().nullable().catch(null),
   })
