@@ -99,9 +99,26 @@ function Summary() {
           {/* `all_packages` is the same list the Packages table reads, so it
               is not repeated here; the featured ones are named because
               nothing else on the screen picks them out at a glance. */}
-          <Field label="Featured packages">
-            {data.featured.map((p) => p.name || p.package_id).join(", ") || "—"}
-          </Field>
+          {/* Spans the row: names are long, and a grid cell sized for a count
+              wrapped them a word per line. */}
+          <Box sx={{ gridColumn: "1 / -1" }}>
+            <Field label="Featured packages">
+              {data.featured.length ? (
+                <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap" sx={{ mt: 0.5 }}>
+                  {data.featured.map((p) => (
+                    <Chip
+                      key={p.package_id}
+                      size="small"
+                      variant="outlined"
+                      label={p.name || p.package_id}
+                    />
+                  ))}
+                </Stack>
+              ) : (
+                "—"
+              )}
+            </Field>
+          </Box>
         </FieldGrid>
       )}
     </StatusCard>
@@ -672,9 +689,7 @@ export default function MediaKitScreen() {
         subtitle="The packages this agent publishes to buyers, with full-text search over them. Packages can be created, edited and archived here; prices are edited on the Catalog."
       >
         <ScreenSection title="Summary">
-          <Box sx={{ mb: 0, maxWidth: 360 }}>
-            <Summary />
-          </Box>
+          <Summary />
         </ScreenSection>
 
         <ScreenSection title="Search" caption="A query-shaped POST — it runs with writes off.">
