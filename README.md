@@ -290,6 +290,13 @@ covers the three ways it can go wrong.
 8. **Initial load is ~195 kB gzipped**, mostly React and MUI. Above the 170 kB
    figure the design aimed at; kept deliberately, since the console is an
    internal tool on a desk rather than a landing page.
+9. **Package floors are write-only.** The agent accepts a floor on create and
+   update but no read route returns one any more (upstream #125), so the
+   console cannot show a stored floor. The edit form leaves the field blank and
+   says that leaving it blank keeps the stored value.
+10. **Approvals are operator-only.** Upstream answers a buyer key with 403 on
+    every approval route (#111). The Inbox says so instead of showing an empty
+    queue.
 
 ## Third-party data
 
