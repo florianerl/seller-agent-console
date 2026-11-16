@@ -102,7 +102,12 @@ export type NegotiationTurn = {
   sellerPrice?: number | undefined;
   /** What the agent told the buyer. */
   messageToBuyer?: string | undefined;
-  /** The agent's own reason for its move, as recorded on the round. */
+  /**
+   * The agent's own reason for its move. Only the approval's snapshot carries
+   * it: the live negotiation read stopped reporting rationale (upstream #95/#97,
+   * it can state the floor in prose), so a round known only from the live
+   * record has none.
+   */
   reasoning?: string | undefined;
   timestamp?: string | undefined;
 };
@@ -111,6 +116,11 @@ export type NegotiationLog = {
   turns: NegotiationTurn[];
   status?: string | undefined;
   maxRounds?: number | undefined;
+  /**
+   * Set by `mergeNegotiation` when a round came only from the live record, which
+   * no longer reports the agent's reasoning, so the chat can say why one is missing.
+   */
+  reasoningNotReported?: boolean | undefined;
 };
 
 /**
@@ -162,16 +172,19 @@ export function explainWarning(warning: string, dealTypeLabel: (code: string) =>
   return warning;
 }
 
-/** The live record of a negotiation, as `GET /proposals/{id}/negotiation` returns it. */
+/**
+ * The live record of a negotiation, as `GET /proposals/{id}/negotiation`
+ * returns it. A whitelist upstream: no strategy, base/floor price, round limit,
+ * concession figures or rationale — each of those would let a buyer recover the
+ * seller's floor.
+ */
 export type LiveNegotiation = {
   status?: string | null | undefined;
-  max_rounds?: number | null | undefined;
   rounds: ReadonlyArray<{
     round_number: number;
     buyer_price: number | null;
     seller_price: number | null;
     action: string;
-    rationale: string | null;
     timestamp: string | null;
   }>;
 };
@@ -181,7 +194,8 @@ export type LiveNegotiation = {
  * round the gate was raised in. A counter made afterwards lives only in the
  * negotiation record. The live record wins for every field it reports; the
  * snapshot is kept only for what the live one omits — the agent's message to
- * the buyer, which the live view does not carry.
+ * the buyer and its reasoning, neither of which the live view carries. The
+ * round limit is likewise snapshot-only.
  */
 export function mergeNegotiation(
   snapshot: NegotiationLog | undefined,
@@ -198,14 +212,48 @@ export function mergeNegotiation(
         buyerPrice: r.buyer_price ?? before?.buyerPrice,
         sellerPrice: r.seller_price ?? before?.sellerPrice,
         messageToBuyer: before?.messageToBuyer,
-        reasoning: r.rationale ?? before?.reasoning,
+        reasoning: before?.reasoning,
         timestamp: r.timestamp ?? before?.timestamp,
       };
     })
     .sort((a, b) => a.round - b.round);
   return {
     turns,
+    reasoningNotReported: turns.some((t) => t.reasoning === undefined),
     status: live.status ?? snapshot?.status,
-    maxRounds: live.max_rounds ?? snapshot?.maxRounds,
+    maxRounds: snapshot?.maxRounds,
   };
 }
+
+/** A DSP the agent found for the buyer's seat id(s); `id` is as the agent sent it. */
+export type DspCandidate = {
+  id: string | number;
+  /** The seat the DSP was matched for, when reported. */
+  seat?: string | undefined;
+  name?: string | undefined;
+};
+
+/**
+ * The DSPs a `ssp_distribution / dsp_resolution` approval asks the operator to
+ * choose between: `context.candidates`, each a dump of upstream's
+ * `DspSeatMatch` (`dsp_id`, `requested_seat_id`, `buyer_name`, ...). The agent
+ * refuses a `selected_dsp_id` that is not among them, so they are the choices.
+ * Empty when the context lists none, in which case the form asks for an id.
+ */
+export function dspCandidates(request: Record<string, unknown>): DspCandidate[] {
+  const list = bag(request.context).candidates;
+  if (!Array.isArray(list)) return [];
+  const seen = new Set<string>();
+  const out: DspCandidate[] = [];
+  for (const raw of list as unknown[]) {
+    const c = bag(raw);
+    const id = typeof c.dsp_id === "number" || typeof c.dsp_id === "string" ? c.dsp_id : undefined;
+    if (id === undefined || id === "" || seen.has(String(id))) continue;
+    seen.add(String(id));
+    out.push({ id, seat: str(c.requested_seat_id), name: str(c.buyer_name) });
+  }
+  return out;
+}
+
+export const isDspResolution = (flowType: string, gateName: string): boolean =>
+  flowType === "ssp_distribution" && gateName === "dsp_resolution";

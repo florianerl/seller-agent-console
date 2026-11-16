@@ -193,6 +193,15 @@ export function NegotiationChat({
         round; volume, deal type and flight are carried over from the proposal unless it reported
         a change.
       </Typography>
+      {/* The live read dropped rationale because it can state the floor in
+          prose; a round after the snapshot therefore has none. Said once
+          rather than leaving a round that looks as if the agent gave no reason. */}
+      {log.reasoningNotReported && (
+        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }} data-note="reasoning-not-reported">
+          The agent no longer reports its reasoning for rounds it made after the approval was raised, so only
+          earlier rounds show it.
+        </Typography>
+      )}
     </Box>
   );
 }

@@ -90,6 +90,29 @@ describe("the inbox screen", () => {
     expect(document.body.textContent).not.toMatch(/could not reach|unavailable/i);
   });
 
+  // Every /approvals route is operator-gated upstream (#111).
+  it("explains what to do under a buyer key instead of showing a 403", async () => {
+    await clearCredential();
+    await saveCredential({
+      baseUrl: API,
+      apiKey: "k",
+      role: "buyer",
+      name: "Ad Seller System API",
+      reportedVersion: "2.4.2",
+    });
+    server.use(http.get(`${API}/approvals`, () => new HttpResponse(null, { status: 403 })));
+    renderScreen();
+
+    const notice = await waitFor(() => {
+      const el = document.querySelector('[data-state="operator-required"]');
+      expect(el).toBeTruthy();
+      return el as HTMLElement;
+    });
+    expect(notice.textContent).toMatch(/operator key/i);
+    expect(document.body.textContent).not.toMatch(/\b403\b/);
+    expect(document.querySelector('[data-block="gate-lookup"]')).toBeNull();
+  });
+
   it("degrades the list without crashing when a field changes upstream", async () => {
     server.use(
       http.get(`${API}/approvals`, () =>
