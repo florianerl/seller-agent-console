@@ -221,3 +221,27 @@ test("an open order row is free of axe violations", async ({ page }) => {
     violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`),
   ).toEqual([]);
 });
+
+test("every nav link stays reachable at each desktop width, signed in with writes on", async ({ page }) => {
+  await connect(page, server, unhandled);
+  // Writes on adds the chip, the widest the app bar's right side gets.
+  await page.locator("[data-control=writes-toggle]").click({ force: true });
+  await page.getByRole("button", { name: "Enable writes" }).click();
+  await expect(page.locator("[data-writes=on]")).toBeVisible();
+
+  for (const width of [900, 970, 1100, 1280, 1440, 1536]) {
+    await page.setViewportSize({ width, height: 800 });
+    // The nav scrolls with its scrollbar hidden, so "reachable" means it is not
+    // overflowing at all: every link must sit inside the nav's own box.
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const nav = document.querySelector("header nav > div") as HTMLElement;
+            return nav.scrollWidth - nav.clientWidth;
+          }),
+        { message: `nav overflows at ${width}px` },
+      )
+      .toBeLessThanOrEqual(0);
+  }
+});

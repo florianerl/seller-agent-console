@@ -74,7 +74,21 @@ export function WizardDialog({
 }) {
   const last = steps.length - 1;
   return (
-    <Dialog open={open} onClose={pending ? undefined : onClose} fullWidth maxWidth="sm" data-block={block}>
+    <Dialog
+      open={open}
+      // Escape and a backdrop click do not close a wizard that is still being
+      // filled in: closing resets every field, and Escape is also what dismisses
+      // an open Autocomplete list, so one press after picking a product threw
+      // the whole form away. Cancel (and Done) stay the ways out.
+      onClose={(_, reason) => {
+        if (pending) return;
+        if (!done && (reason === "escapeKeyDown" || reason === "backdropClick")) return;
+        onClose();
+      }}
+      fullWidth
+      maxWidth="sm"
+      data-block={block}
+    >
       <DialogTitle>{title}</DialogTitle>
       <DialogContent>
         <Stepper activeStep={step} sx={{ mb: 3, mt: 0.5 }}>

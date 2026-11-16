@@ -708,9 +708,9 @@ export default function CatalogScreen() {
           title="Packages"
           // The one catalog route whose content depends on the credential:
           // without a key the agent returns a price band, with one it returns
-          // exact and floor prices. Calling this "the catalog" would overstate
+          // exact prices. Calling this "the catalog" would overstate
           // what is on screen, so the keyless view is shown beside it.
-          caption="Exact and floor prices, as returned for the key you are connected with. Callers without a key only see a price range."
+          caption="Exact prices, as returned for the key you are connected with. The agent no longer returns package floors. Callers without a key only see a price range."
         >
           <PackageTable />
           <PublicPackages />

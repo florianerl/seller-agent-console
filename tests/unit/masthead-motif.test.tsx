@@ -119,4 +119,19 @@ describe("the header constellation", () => {
     const style = window.getComputedStyle(navBox!);
     expect(style.flexWrap).toBe("nowrap");
   });
+
+  it("never draws a non-finite coordinate in a zero-width window", () => {
+    // A hidden window reports innerWidth 0; the pin lines divided by it.
+    const original = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 0 });
+    try {
+      render(<Harness />);
+      const bad = [...document.querySelectorAll("[data-motif] line")].filter((l) =>
+        ["x1", "y1", "x2", "y2"].some((a) => !Number.isFinite(Number(l.getAttribute(a)))),
+      );
+      expect(bad).toHaveLength(0);
+    } finally {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: original });
+    }
+  });
 });
