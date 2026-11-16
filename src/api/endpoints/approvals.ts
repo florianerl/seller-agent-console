@@ -101,7 +101,12 @@ export const approvalById = (
  * than saying who was at the keyboard.
  */
 export type ApprovalDecisionInput = {
-  readonly decision: "approve" | "reject";
+  /**
+   * `counter` is not in the OpenAPI document (`decision` is a bare string
+   * there), but resume turns it into `proposal.countered`, beside accepted and
+   * rejected — so the agent knows three outcomes, not two.
+   */
+  readonly decision: "approve" | "reject" | "counter";
   readonly decided_by?: string;
   readonly reason?: string;
   readonly modifications?: Record<string, unknown>;

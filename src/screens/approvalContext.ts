@@ -39,6 +39,8 @@ export type ProposalContext = {
   /** What the agent proposes back, when it countered. */
   counterPrice?: number | undefined;
   counterImpressions?: number | undefined;
+  /** The round those counter terms belong to; the snapshot stops there. */
+  counterRound?: number | undefined;
   recommendedPrice?: number | undefined;
   availableImpressions?: number | undefined;
   priceAcceptable?: boolean | undefined;
@@ -79,6 +81,7 @@ export function proposalContext(request: Record<string, unknown>): ProposalConte
     endDate: str(submitted.end_date),
     counterPrice: num(counter.proposed_price),
     counterImpressions: num(counter.max_impressions),
+    counterRound: num(counter.round_number),
     recommendedPrice: num(evaluation.recommended_price),
     availableImpressions: num(evaluation.available_impressions),
     priceAcceptable: flag(evaluation.price_acceptable),
@@ -140,5 +143,69 @@ export function negotiationLog(request: Record<string, unknown>): NegotiationLog
     turns,
     status: str(history.status),
     maxRounds: num(bag(history.limits).max_rounds),
+  };
+}
+
+/**
+ * The agent's warnings are log lines. Two it is known to emit are put in
+ * plain words; anything else is shown as the agent wrote it.
+ */
+export function explainWarning(warning: string, dealTypeLabel: (code: string) => string): string {
+  const dealType = /^Requested deal type (\S+) not supported for product/.exec(warning);
+  if (dealType?.[1]) {
+    return `The buyer asked for a ${dealTypeLabel(dealType[1])}, which this product does not list as supported.`;
+  }
+  const crew = /^Crew evaluation skipped: (\d+)s time budget is below the (\d+)s minimum/.exec(warning);
+  if (crew?.[1] && crew[2]) {
+    return `The agent's automated proposal review did not run: it had ${crew[1]}s of time budget and needs ${crew[2]}s. The checks above come from its rule-based evaluation only.`;
+  }
+  return warning;
+}
+
+/** The live record of a negotiation, as `GET /proposals/{id}/negotiation` returns it. */
+export type LiveNegotiation = {
+  status?: string | null | undefined;
+  max_rounds?: number | null | undefined;
+  rounds: ReadonlyArray<{
+    round_number: number;
+    buyer_price: number | null;
+    seller_price: number | null;
+    action: string;
+    rationale: string | null;
+    timestamp: string | null;
+  }>;
+};
+
+/**
+ * The approval's snapshot is taken when the gate is raised, so it stops at the
+ * round the gate was raised in. A counter made afterwards lives only in the
+ * negotiation record. The live record wins for every field it reports; the
+ * snapshot is kept only for what the live one omits — the agent's message to
+ * the buyer, which the live view does not carry.
+ */
+export function mergeNegotiation(
+  snapshot: NegotiationLog | undefined,
+  live: LiveNegotiation | undefined,
+): NegotiationLog | undefined {
+  if (!live || live.rounds.length === 0) return snapshot;
+  const old = new Map((snapshot?.turns ?? []).map((t) => [t.round, t]));
+  const turns = live.rounds
+    .map((r): NegotiationTurn => {
+      const before = old.get(r.round_number);
+      return {
+        round: r.round_number,
+        action: r.action || before?.action,
+        buyerPrice: r.buyer_price ?? before?.buyerPrice,
+        sellerPrice: r.seller_price ?? before?.sellerPrice,
+        messageToBuyer: before?.messageToBuyer,
+        reasoning: r.rationale ?? before?.reasoning,
+        timestamp: r.timestamp ?? before?.timestamp,
+      };
+    })
+    .sort((a, b) => a.round - b.round);
+  return {
+    turns,
+    status: live.status ?? snapshot?.status,
+    maxRounds: live.max_rounds ?? snapshot?.maxRounds,
   };
 }

@@ -13,6 +13,7 @@ import {
   approvalById,
   approvals,
   decideApproval,
+  negotiationStatus,
   resumeApproval,
   type ApprovalDecisionInput,
   type ApprovalRequestRecord,
@@ -38,7 +39,14 @@ import { GatePicker } from "./pickers";
 import { TipField } from "../components/TipField";
 import { EnumSelect } from "../components/EnumSelect";
 import { LEGACY_DEAL_TYPES } from "../api/vocabulary";
-import { negotiationLog, proposalContext, type ProposalContext } from "./approvalContext";
+import {
+  explainWarning,
+  mergeNegotiation,
+  negotiationLog,
+  proposalContext,
+  type NegotiationLog,
+  type ProposalContext,
+} from "./approvalContext";
 import { NegotiationChat } from "./NegotiationChat";
 import { palette } from "../theme/palette";
 
@@ -117,7 +125,7 @@ function DecisionControls({
   const [name, setName] = useState("");
   const [terms, setTerms] = useState<TermsDraft>(() => baselineTerms(proposal));
   const base = baselineTerms(proposal);
-  const [pendingDecision, setPendingDecision] = useState<"approve" | "reject" | undefined>();
+  const [pendingDecision, setPendingDecision] = useState<"approve" | "reject" | "counter" | undefined>();
 
   const decide = useMutation<{ id: string; body: ApprovalDecisionInput }, unknown>(
     (c, args) => decideApproval(c, args.id, args.body),
@@ -148,7 +156,7 @@ function DecisionControls({
       </Typography>
       <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
         Starts from the terms on the table. Change only what should differ; these are sent together with your decision when you
-        click Approve or Reject below.
+        click Approve, Counter or Reject below.
       </Typography>
       <FormRow>
         <EnumSelect
@@ -237,6 +245,17 @@ function DecisionControls({
           Approve
         </Button>
         </Hint>
+        <Hint hint="Answer with your changed terms as a counter-proposal instead of accepting or declining. Needs at least one changed term. You confirm first; when you later resume, the flow emits proposal.countered.">
+        <Button
+          size="small"
+          variant="outlined"
+          data-action="counter"
+          disabled={blocked || busy || pendingTerms === undefined}
+          onClick={() => setPendingDecision("counter")}
+        >
+          Counter
+        </Button>
+        </Hint>
         <Hint hint="Reject this approval. You confirm first; the decision is recorded but the proposal flow is not resumed until you do that separately.">
         <Button
           size="small"
@@ -252,8 +271,9 @@ function DecisionControls({
       <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75, mb: 1.5 }}>
         {/* Sent because the agent's own default is the literal "anonymous",
             which is a worse record than a name nobody checked. */}
-        Approve or Reject records your decision together with any terms you changed above. It
-        does not restart the proposal flow. After you decide, a "Resume the flow" section appears
+        Approve accepts the proposal, with your changed terms if you made any. Counter answers
+        with your changed terms instead. Reject declines it. The decision is recorded together with
+        any changed terms; it does not restart the proposal flow. After you decide, a "Resume the flow" section appears
         in this panel with a Resume flow button; that hands the decision back to the flow. Your name is saved as typed and is not verified.
       </Typography>
 
@@ -271,15 +291,23 @@ function DecisionControls({
 
       <ConfirmAction
         open={pendingDecision !== undefined}
-        title={pendingDecision === "reject" ? "Reject this approval?" : "Approve this approval?"}
-        confirmLabel={pendingDecision === "reject" ? "Reject" : "Approve"}
+        title={
+          pendingDecision === "reject"
+            ? "Reject this approval?"
+            : pendingDecision === "counter"
+              ? "Counter this proposal?"
+              : "Approve this approval?"
+        }
+        confirmLabel={
+          pendingDecision === "reject" ? "Reject" : pendingDecision === "counter" ? "Counter" : "Approve"
+        }
         pending={decide.pending}
         onCancel={() => setPendingDecision(undefined)}
         consequence={
           <>
             {pendingTerms && (
               <>
-                This also sends the changed terms:{" "}
+                {pendingDecision === "counter" ? "The counter-proposal is" : "This also sends the changed terms"}:{" "}
                 <strong>
                   {Object.entries(pendingTerms)
                     .map(([key, value]) => `${key.replace(/_/g, " ")} ${String(value)}`)
@@ -391,28 +419,47 @@ function ResumeControls({
   );
 }
 
-const yesNo = (value: boolean | undefined) => (value === undefined ? "—" : value ? "yes" : "no");
+/** A check that passed, failed or was not reported — in words and a mark, never colour alone. */
+function Check({ ok, label, children }: { ok: boolean | undefined; label: string; children?: React.ReactNode }) {
+  return (
+    <Box component="li" sx={{ display: "flex", gap: 1 }}>
+      <Box component="span" aria-hidden sx={{ width: 16 }}>
+        {ok === undefined ? "–" : ok ? "✓" : "✗"}
+      </Box>
+      <Box>
+        <strong>{label}:</strong> {ok === undefined ? "not reported" : ok ? "yes" : "no"}
+        {children ? <> — {children}</> : null}
+      </Box>
+    </Box>
+  );
+}
 
 /**
  * What a decider needs to see before approving: what the buyer asked for,
  * what the agent proposes back, and whether its own checks passed. Internal
- * ids and the flow snapshot are deliberately left out.
+ * ids and the flow snapshot are deliberately left out. `inChat` means the
+ * negotiation chat below already says what was asked and proposed, so only
+ * what the chat cannot (the rate card and the checks) is listed here.
  */
-function ProposalSummary({ p }: { p: ProposalContext }) {
+function ProposalSummary({ p, inChat }: { p: ProposalContext; inChat: boolean }) {
   const money = (value: number | undefined) =>
     value === undefined ? "—" : `${p.currency ?? ""} ${value.toLocaleString()} CPM`.trim();
   const volume = (value: number | undefined) =>
     value === undefined ? "—" : `${value.toLocaleString()} impressions`;
   return (
     <Box sx={{ mt: 2 }} data-block="proposal-summary">
-      <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 0.5 }}>Proposal under review</Typography>
-      {p.reason && (
+      <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 0.5 }}>
+        {inChat ? "Rate card and checks" : "Proposal under review"}
+      </Typography>
+      {!inChat && p.reason && (
         <Typography variant="body2" sx={{ mb: 1 }}>
           {p.recommendation ? <strong>{p.recommendation}: </strong> : null}
           {p.reason}
         </Typography>
       )}
       <FieldGrid min={200}>
+        {!inChat && (
+          <>
         <Field label="Product">
           {p.productName ?? p.productId ?? "—"}
           {p.productName && p.productId ? (
@@ -436,30 +483,140 @@ function ProposalSummary({ p }: { p: ProposalContext }) {
           <br />
           {p.counterImpressions === undefined ? "—" : `up to ${volume(p.counterImpressions)}`}
         </Field>
+          </>
+        )}
         <Field label="Rate card">
           Floor {money(p.floorPrice)}
           <br />
           Base {money(p.basePrice)}
         </Field>
-        <Field label="Checks">
-          Price acceptable: {yesNo(p.priceAcceptable)}
-          <br />
-          Pricing verified: {yesNo(p.pricingVerified)}
-          <br />
-          Audience validated: {yesNo(p.audienceValidated)}
-        </Field>
       </FieldGrid>
-      {p.pricingVerified === false && p.pricingVerificationReason && (
-        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
-          Pricing not verified: {p.pricingVerificationReason}
+      <Box sx={{ mt: 1.5 }} data-block="proposal-checks">
+        <Typography sx={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.8, color: palette.textSecondary, textTransform: "uppercase" }}>
+          Agent's checks
         </Typography>
-      )}
+        <Box component="ul" sx={{ m: 0, mt: 0.5, p: 0, listStyle: "none", fontSize: 14 }}>
+          <Check ok={p.priceAcceptable} label="Price acceptable">
+            {p.priceAcceptable === false &&
+              p.requestedPrice !== undefined &&
+              p.floorPrice !== undefined &&
+              p.requestedPrice < p.floorPrice &&
+              `The buyer offered ${money(p.requestedPrice)}, below the floor of ${money(p.floorPrice)}.`}
+          </Check>
+          <Check ok={p.pricingVerified} label="Pricing verified">
+            {p.pricingVerified === false && p.pricingVerificationReason}
+          </Check>
+          <Check ok={p.audienceValidated} label="Audience validated" />
+        </Box>
+      </Box>
       {p.problems.length + p.warnings.length > 0 && (
-        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
-          Notes: {[...p.problems, ...p.warnings].join("; ")}
-        </Typography>
+        <Box sx={{ mt: 1.5 }} data-block="proposal-warnings">
+          <Typography sx={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.8, color: palette.textSecondary, textTransform: "uppercase" }}>
+            Warnings from the agent
+          </Typography>
+          <Box component="ul" sx={{ m: 0, mt: 0.5, pl: 2.5, fontSize: 14 }}>
+            {p.problems.map((text) => (
+              <li key={text}>{text}</li>
+            ))}
+            {p.warnings.map((text) => (
+              <li key={text}>
+                {explainWarning(text, (code) => LEGACY_DEAL_TYPES.find((t) => t.value === code)?.label ?? code)}
+              </li>
+            ))}
+          </Box>
+        </Box>
       )}
     </Box>
+  );
+}
+
+type PanelProps = {
+  request: Record<string, unknown> & { proposal_id: string };
+  proposal: ProposalContext | undefined;
+  awaitingDecision: boolean;
+};
+
+/**
+ * The proposal summary and the negotiation chat. An approval raised outside a
+ * proposal flow has no proposal id (the schema reads a missing one as ""), so
+ * only the approval's snapshot is shown: asking for its negotiation would send
+ * `GET /proposals//negotiation`, and every such gate would share the one cache
+ * key `negotiation:`.
+ */
+function ProposalPanel(props: PanelProps) {
+  if (!props.request.proposal_id) {
+    return (
+      <ProposalView
+        proposal={props.proposal}
+        chat={negotiationLog(props.request)}
+        awaitingDecision={props.awaitingDecision}
+      />
+    );
+  }
+  return <LiveProposalPanel {...props} />;
+}
+
+/**
+ * With a proposal id, the live negotiation is read as well, because the
+ * snapshot stops at the round the gate was raised in. The snapshot is the
+ * fallback when that read fails or finds no rounds (the agent answers 404 for
+ * a proposal nobody countered) — and the note under the chat says which of
+ * the two is on screen, so a snapshot never passes for the live record.
+ */
+function LiveProposalPanel({ request, proposal, awaitingDecision }: PanelProps) {
+  const live = useResource(`negotiation:${request.proposal_id}`, (c, signal) =>
+    negotiationStatus(c, request.proposal_id, signal),
+  );
+  const snapshot = negotiationLog(request);
+  const chat = mergeNegotiation(snapshot, live.data);
+  const lastRound = snapshot?.turns[snapshot.turns.length - 1]?.round;
+  const fallback = `showing the snapshot from when the approval was raised${
+    lastRound === undefined ? "" : ` (round ${lastRound})`
+  }`;
+  const at = live.asOf === undefined ? "" : stamp(new Date(live.asOf).toISOString());
+  return (
+    <ProposalView proposal={proposal} chat={chat} awaitingDecision={awaitingDecision}>
+      <FreshnessNote freshness={live.freshness}>
+        <span data-note="negotiation-source">
+          {live.freshness === "live" &&
+            (live.data && live.data.rounds.length > 0
+              ? `Live negotiation, as of ${at}.`
+              : `The agent records no rounds beyond the snapshot, as of ${at}.`)}
+          {live.freshness === "stale" &&
+            `Couldn't refresh the live negotiation — showing what was read at ${at}.`}
+          {live.freshness === "blocked" && `This key can't read the live negotiation — ${fallback}.`}
+          {live.freshness === "empty" &&
+            (live.loading
+              ? "Reading the live negotiation…"
+              : live.result?.kind === "unavailable" && live.result.status === 404
+                ? `The agent has no negotiation record for this proposal — ${fallback}.`
+                : `Couldn't read the live negotiation${
+                    live.result ? ` (${describe(live.result)})` : ""
+                  } — ${fallback}.`)}
+        </span>
+      </FreshnessNote>
+    </ProposalView>
+  );
+}
+
+function ProposalView({
+  proposal,
+  chat,
+  awaitingDecision,
+  children,
+}: {
+  proposal: ProposalContext | undefined;
+  chat: NegotiationLog | undefined;
+  awaitingDecision: boolean;
+  /** Said under the chat, and only when there is one. */
+  children?: React.ReactNode;
+}) {
+  return (
+    <>
+      {proposal && <ProposalSummary p={proposal} inChat={chat !== undefined} />}
+      {chat && <NegotiationChat log={chat} proposal={proposal} awaitingDecision={awaitingDecision} />}
+      {chat && children}
+    </>
   );
 }
 
@@ -490,7 +647,6 @@ function Decision({
 
   const request = detail.data?.request;
   const proposal = request ? proposalContext(request) : undefined;
-  const chat = request ? negotiationLog(request) : undefined;
   const response = detail.data?.response ?? null;
   const decided = response !== null || locked;
 
@@ -514,12 +670,11 @@ function Decision({
         <Field label="Expires">{stamp(request.expires_at)}</Field>
       </FieldGrid>
       )}
-      {proposal && <ProposalSummary p={proposal} />}
-      {chat && (
-        <NegotiationChat
-          log={chat}
+      {request && (
+        <ProposalPanel
+          request={request}
           proposal={proposal}
-          awaitingDecision={!decided && (request?.status ?? "pending") === "pending"}
+          awaitingDecision={!decided && request.status === "pending"}
         />
       )}
 

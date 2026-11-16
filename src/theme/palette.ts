@@ -86,6 +86,7 @@ export const CONTRAST_CONTRACT: ReadonlyArray<{
   { name: "brand mark on paper", fg: palette.brandRed, bg: palette.paper, min: "ui" },
   { name: "active nav rule on paper", fg: palette.brandRed, bg: palette.paper, min: "ui" },
   { name: "tooltip text", fg: palette.paper, bg: palette.brandBlack, min: "body" },
+  { name: "changed term in a chat bubble", fg: palette.brandBlack, bg: palette.attention, min: "body" },
   { name: "json key on ground", fg: palette.jsonKey, bg: palette.ground, min: "body" },
   { name: "json string on ground", fg: palette.jsonString, bg: palette.ground, min: "body" },
   { name: "json number on ground", fg: palette.jsonNumber, bg: palette.ground, min: "body" },

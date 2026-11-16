@@ -195,7 +195,10 @@ describe("deciding an approval", () => {
           },
         ],
       },
-      warnings: ["Requested deal type preferreddeal not supported for product"],
+      warnings: [
+        "Requested deal type preferreddeal not supported for product",
+        "Crew evaluation skipped: 20s time budget is below the 120s minimum for the proposal-review crew",
+      ],
       proposal_data: {
         price: 1,
         deal_type: "preferreddeal",
@@ -216,10 +219,38 @@ describe("deciding an approval", () => {
     );
   }
 
-  it("summarises the proposal and leaves internal ids out", async () => {
+  it("lists only the rate card and checks above the chat, not what the chat says", async () => {
     await connect(true);
     const user = userEvent.setup();
     serveContext();
+
+    renderScreen();
+    await openGate(user);
+    const block = (await screen.findByText("Rate card and checks")).closest(
+      '[data-block="proposal-summary"]',
+    ) as HTMLElement;
+    expect(block.textContent).toContain("Floor USD 7.5 CPM");
+    expect(block.textContent).toContain("Base USD 12 CPM");
+    expect(block.textContent).toContain("Price acceptable: no");
+    expect(block.textContent).toContain("below the floor of USD 7.5 CPM");
+    expect(block.textContent).toContain("Pricing verified: no — No matching quote found");
+    // Warnings are put in plain words, not shown as log lines.
+    expect(block.textContent).toContain("The buyer asked for a preferred deal, which this product does not list as supported.");
+    expect(block.textContent).not.toContain("Crew evaluation skipped");
+    expect(block.textContent).not.toContain("We cannot accept $1.00 CPM.");
+    expect(block.textContent).not.toContain("Buyer asked");
+    expect(block.textContent).not.toContain("snap-1");
+  });
+
+  it("states the proposal in full when there is no negotiation to show", async () => {
+    await connect(true);
+    const user = userEvent.setup();
+    const bare = structuredClone(WITH_CONTEXT);
+    delete (bare.flow_state_snapshot as Record<string, unknown>).negotiation_history;
+    server.use(
+      http.get(`${API}/approvals`, () => HttpResponse.json({ approvals: [bare] })),
+      http.get(`${API}/approvals/appr-1`, () => HttpResponse.json({ request: bare, response: null })),
+    );
 
     renderScreen();
     await openGate(user);
@@ -228,13 +259,9 @@ describe("deciding an approval", () => {
     ) as HTMLElement;
     expect(block.textContent).toContain("We cannot accept $1.00 CPM.");
     expect(block.textContent).toContain("Leaderboard");
-    expect(block.textContent).toContain("USD 8 CPM");
-    expect(block.textContent).toContain("10,000,000 impressions");
-    expect(block.textContent).toContain("No matching quote found");
+    expect(block.textContent).toContain("Buyer asked");
     expect(block.textContent).toContain("preferred deal");
     expect(block.textContent).toContain("2026-10-01 → 2026-10-30");
-    expect(block.textContent).toContain("not supported for product");
-    expect(block.textContent).not.toContain("snap-1");
   });
 
   it("shows the negotiation as a conversation, buyer then seller", async () => {
@@ -254,11 +281,117 @@ describe("deciding an approval", () => {
     expect(bubbles[0]!.textContent).toContain("10,000,000 impressions");
     expect(bubbles[0]!.textContent).toContain("preferred deal");
     expect(bubbles[0]!.textContent).toContain("2026-10-01 → 2026-10-30");
-    expect(bubbles[1]!.textContent).toContain("for up to 10,000,000 impressions");
+    // Every message states the full terms, and a changed one says what it was.
+    expect(bubbles[1]!.textContent).toContain("10,000,000 impressions");
+    expect(bubbles[1]!.textContent).toContain("preferred deal");
+    expect(bubbles[1]!.textContent).toContain("(was USD 1 CPM)");
+    expect(bubbles[1]!.querySelectorAll('[data-changed="true"]')).toHaveLength(1);
+    expect(bubbles[0]!.querySelectorAll('[data-changed="true"]')).toHaveLength(0);
     expect(bubbles[1]!.textContent).toContain("Counters at USD 8 CPM");
     expect(bubbles[1]!.textContent).toContain("We cannot accept $1.00 CPM.");
     expect(bubbles[1]!.textContent).toContain("Agent's reasoning: Buyer offer is below our floor.");
     expect(chat.textContent).toContain("Waiting for your decision");
+  });
+
+  it("adds rounds made after the approval was raised, from the live negotiation", async () => {
+    await connect(true);
+    const user = userEvent.setup();
+    serveContext();
+    server.use(
+      http.get(`${API}/proposals/prop-1/negotiation`, () =>
+        HttpResponse.json({
+          proposal_id: "prop-1",
+          status: "active",
+          max_rounds: 3,
+          rounds: [
+            { round_number: 1, action: "counter", buyer_price: 1, seller_price: 8, rationale: null, timestamp: "2026-10-02T14:11:01" },
+            { round_number: 2, action: "counter", buyer_price: 6, seller_price: 7.5, rationale: null, timestamp: "2026-10-02T15:00:00" },
+          ],
+        }),
+      ),
+    );
+
+    renderScreen();
+    await openGate(user);
+    const chat = (await screen.findByText(/Negotiation so far/)).closest(
+      '[data-block="negotiation-chat"]',
+    ) as HTMLElement;
+    await waitFor(() => expect(chat.querySelectorAll("[data-side]")).toHaveLength(4));
+    const bubbles = [...chat.querySelectorAll("[data-side]")];
+    expect(bubbles[2]!.textContent).toContain("Offers USD 6 CPM");
+    expect(bubbles[2]!.textContent).toContain("(was USD 8 CPM)");
+    expect(bubbles[2]!.textContent).toContain("2026-10-01 → 2026-10-30");
+    expect(bubbles[3]!.textContent).toContain("Counters at USD 7.5 CPM");
+    // Round 1 keeps what only the snapshot knew: the message to the buyer.
+    expect(bubbles[1]!.textContent).toContain("We cannot accept $1.00 CPM.");
+    expect(document.querySelector('[data-note="negotiation-source"]')?.textContent).toMatch(
+      /^Live negotiation, as of /,
+    );
+  });
+
+  it("says the chat is the snapshot when the live negotiation cannot be read", async () => {
+    await connect(true);
+    const user = userEvent.setup();
+    serveContext();
+    server.use(
+      http.get(`${API}/proposals/prop-1/negotiation`, () =>
+        HttpResponse.json({ detail: "boom" }, { status: 500 }),
+      ),
+    );
+
+    renderScreen();
+    await openGate(user);
+    await waitFor(() =>
+      expect(document.querySelector('[data-note="negotiation-source"]')?.textContent).toMatch(
+        /^Couldn't read the live negotiation .* showing the snapshot from when the approval was raised \(round 1\)\.$/,
+      ),
+    );
+    // The snapshot's round is still drawn; only its source is disclosed.
+    const chat = screen.getByText(/Negotiation so far/).closest('[data-block="negotiation-chat"]') as HTMLElement;
+    expect(chat.querySelectorAll("[data-side]")).toHaveLength(2);
+  });
+
+  it("says when the agent keeps no negotiation record for the proposal", async () => {
+    await connect(true);
+    const user = userEvent.setup();
+    serveContext();
+    server.use(
+      http.get(`${API}/proposals/prop-1/negotiation`, () =>
+        HttpResponse.json({ detail: "Negotiation not found" }, { status: 404 }),
+      ),
+    );
+
+    renderScreen();
+    await openGate(user);
+    await waitFor(() =>
+      expect(document.querySelector('[data-note="negotiation-source"]')?.textContent).toBe(
+        "The agent has no negotiation record for this proposal — showing the snapshot from when the approval was raised (round 1).",
+      ),
+    );
+  });
+
+  it("does not ask for a negotiation when the approval names no proposal", async () => {
+    await connect(true);
+    const user = userEvent.setup();
+    // Anything not answered below is recorded, which is where a
+    // GET /proposals//negotiation would land.
+    const recorder = recordRequests();
+    const noProposal = { ...WITH_CONTEXT, proposal_id: "" };
+    server.use(
+      http.get(`${API}/approvals`, () => HttpResponse.json({ approvals: [noProposal] })),
+      http.get(`${API}/approvals/appr-1`, () =>
+        HttpResponse.json({ request: noProposal, response: null }),
+      ),
+    );
+
+    renderScreen();
+    await openGate(user);
+    const chat = (await screen.findByText(/Negotiation so far/)).closest(
+      '[data-block="negotiation-chat"]',
+    ) as HTMLElement;
+    expect(chat.querySelectorAll("[data-side]")).toHaveLength(2);
+    expect(recorder.seen.filter((line) => line.includes("/proposals"))).toEqual([]);
+    expect(document.querySelector('[data-note="negotiation-source"]')).toBeNull();
   });
 
   it("starts the terms from the agent's counter and sends only what changed", async () => {
@@ -288,6 +421,39 @@ describe("deciding an approval", () => {
     await user.click(confirm());
     await waitFor(() => expect(bodies).toHaveLength(1));
     expect(bodies[0]).toEqual({ decision: "approve" });
+  });
+
+  it("counters with the changed terms, and only once something has changed", async () => {
+    await connect(true);
+    const user = userEvent.setup();
+    const bodies: unknown[] = [];
+    serveContext();
+    server.use(
+      http.post(`${API}/approvals/appr-1/decide`, async ({ request }) => {
+        bodies.push(await request.json());
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+
+    renderScreen();
+    await openGate(user);
+    const counter = (await waitFor(() => {
+      const el = document.querySelector('[data-action="counter"]');
+      if (!el) throw new Error("no counter button");
+      return el;
+    })) as HTMLButtonElement;
+    expect(counter).toBeDisabled();
+
+    const price = screen.getByLabelText("Price");
+    await user.clear(price);
+    await user.type(price, "10");
+    expect(counter).toBeEnabled();
+    await user.click(counter);
+    await screen.findByText("Counter this proposal?");
+    await user.click(document.querySelector('[data-action="confirm-mutation"]') as HTMLElement);
+
+    await waitFor(() => expect(bodies).toHaveLength(1));
+    expect(bodies[0]).toEqual({ decision: "counter", modifications: { price: 10 } });
   });
 
   it("sends a changed flight end and leaves the rest of the prefill out", async () => {
