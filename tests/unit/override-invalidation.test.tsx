@@ -96,8 +96,12 @@ function editor() {
   return within(el as HTMLElement);
 }
 
+const productReads = { list: 0, detail: 0 };
+
 describe("inventory type override writes", () => {
   beforeEach(async () => {
+    productReads.list = 0;
+    productReads.detail = 0;
     resetReachability();
     await clearCredential();
     resetWritePolicy();
@@ -110,10 +114,14 @@ describe("inventory type override writes", () => {
       writesEnabled: true,
     });
     server.use(
-      http.get(`${API}/products`, () =>
-        HttpResponse.json({ products: [PRODUCT], total_count: 1, limit: 200, offset: 0 }),
-      ),
-      http.get(`${API}/products/prod-1`, () => HttpResponse.json(PRODUCT)),
+      http.get(`${API}/products`, () => {
+        productReads.list += 1;
+        return HttpResponse.json({ products: [PRODUCT], total_count: 1, limit: 200, offset: 0 });
+      }),
+      http.get(`${API}/products/prod-1`, () => {
+        productReads.detail += 1;
+        return HttpResponse.json(PRODUCT);
+      }),
       http.get(`${API}/api/v1/rate-card`, () =>
         HttpResponse.json({ entries: [], updated_at: "2026-09-01T00:00:00Z", source: "stored" }),
       ),
@@ -162,5 +170,28 @@ describe("inventory type override writes", () => {
 
     await waitFor(() => expect(route.reads).toBeGreaterThan(before));
     await waitFor(() => expect(document.querySelector('[data-state="no-override"]')).toBeTruthy());
+  });
+
+  it("re-reads the product list and detail after an override write", async () => {
+    overrideRoute(undefined);
+    const user = userEvent.setup();
+    mount();
+    await openDetail(user);
+    await waitFor(() => expect(document.querySelector('[data-state="no-override"]')).toBeTruthy());
+    const before = { ...productReads };
+
+    await user.click(
+      await waitFor(() => {
+        const el = editor().getByRole("button", { name: "Set override" });
+        expect(el).toBeEnabled();
+        return el;
+      }),
+    );
+    await user.click(editor().getByLabelText("Inventory type"));
+    await user.click(await screen.findByRole("option", { name: "mobile app" }));
+    await confirm(user, "set-override", "Set override");
+
+    await waitFor(() => expect(productReads.detail).toBeGreaterThan(before.detail));
+    await waitFor(() => expect(productReads.list).toBeGreaterThan(before.list));
   });
 });
